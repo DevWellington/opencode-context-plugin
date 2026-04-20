@@ -1,5 +1,5 @@
 {
-  "name": "@wellingtonribeiro/opencode-context-plugin",
+  "name": "@devwellington/opencode-context-plugin",
   "version": "1.0.0",
   "description": "OpenCode plugin that saves session context to .opencode/contextos/ after compaction and session end",
   "main": "index.js",
@@ -17,7 +17,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/wellingtonribeiro/opencode-context-plugin.git"
+    "url": "https://github.com/DevWellington/opencode-context-plugin.git"
   },
   "peerDependencies": {
     "@opencode-ai/plugin": ">=1.4.0"
