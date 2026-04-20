@@ -1,0 +1,13 @@
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+.DS_Store
+*.log
+.opencode/contextos/*.md
+.env
+.env.local
+*.db
+*.db-wal
+*.db-shm
