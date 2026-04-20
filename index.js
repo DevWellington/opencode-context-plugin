@@ -12,6 +12,19 @@ interface SessionContext {
   projectPath: string;
 }
 
+// Security: Sensitive data patterns to filter
+const SENSITIVE_PATTERNS: Array<{ name: string; pattern: RegExp; replacement: string }> = [
+  { name: 'AWS Access Key', pattern: /AKIA[0-9A-Z]{16}/g, replacement: '[REDACTED_AWS_KEY]' },
+  { name: 'GitHub Token', pattern: /ghp_[a-zA-Z0-9]{36}/g, replacement: '[REDACTED_GITHUB_TOKEN]' },
+  { name: 'Stripe Key', pattern: /sk_live_[a-zA-Z0-9]{24}/g, replacement: '[REDACTED_STRIPE_KEY]' },
+  { name: 'Generic API Key', pattern: /api[_-]?key["']?\s*[:=]\s*["'][a-zA-Z0-9]{16,}["']/gi, replacement: '[REDACTED_API_KEY]' },
+  { name: 'Private Tag', pattern: /<private>[\s\S]*?<\/private>/gi, replacement: '[REDACTED_PRIVATE_CONTENT]' }
+];
+
+// Security: Maximum context files to retain
+const MAX_CONTEXT_FILES = 30;
+const RETENTION_DAYS = 30;
+
 function formatTimestamp(date: Date): string {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -36,9 +49,25 @@ function getContextosDir(projectDir: string): string {
   return path.join(projectDir, ".opencode", "contextos");
 }
 
+// Security: Validate path is within allowed bounds
+function validatePath(baseDir: string, targetPath: string): boolean {
+  const resolved = path.resolve(targetPath);
+  const resolvedBase = path.resolve(baseDir);
+  return resolved.startsWith(resolvedBase + path.sep) || resolved === resolvedBase;
+}
+
+// Security: Filter sensitive data from content
+function filterSensitiveData(content: string): string {
+  let filtered = content;
+  for (const { pattern, replacement } of SENSITIVE_PATTERNS) {
+    filtered = filtered.replace(pattern, replacement);
+  }
+  return filtered;
+}
+
 function ensureDirectoryExists(dirPath: string): void {
   if (!fs.existsSync(dirPath)) {
-    fs.mkdirSync(dirPath, { recursive: true });
+    fs.mkdirSync(dirPath, { recursive: true, mode: 0o700 });
   }
 }
 
@@ -82,11 +111,62 @@ function readPreviousContexts(contextosDir: string): string[] {
   return contexts;
 }
 
+// Security: Cleanup old context files based on retention policy
+function cleanupOldContexts(contextosDir: string): void {
+  if (!fs.existsSync(contextosDir)) {
+    return;
+  }
+
+  try {
+    const allFiles = fs.readdirSync(contextosDir)
+      .filter(f => f.endsWith(".md"))
+      .filter(f => f.startsWith("compact-") || f.startsWith("saida-") || f.startsWith("auto-"))
+      .sort();
+
+    const now = new Date();
+    const filesToDelete: string[] = [];
+
+    // Delete files older than retention period
+    for (const file of allFiles) {
+      const filepath = path.join(contextosDir, file);
+      const stats = fs.statSync(filepath);
+      const ageInDays = (now.getTime() - stats.mtime.getTime()) / (1000 * 60 * 60 * 24);
+      
+      if (ageInDays > RETENTION_DAYS) {
+        filesToDelete.push(filepath);
+      }
+    }
+
+    // If still over limit, delete oldest files
+    const remainingFiles = allFiles.filter(f => !filesToDelete.includes(path.join(contextosDir, f)));
+    if (remainingFiles.length > MAX_CONTEXT_FILES) {
+      const toDelete = remainingFiles.slice(0, remainingFiles.length - MAX_CONTEXT_FILES);
+      for (const file of toDelete) {
+        filesToDelete.push(path.join(contextosDir, file));
+      }
+    }
+
+    // Delete the files
+    for (const filepath of filesToDelete) {
+      fs.unlinkSync(filepath);
+      console.log(`[context-plugin] Cleaned up old context: ${filepath}`);
+    }
+  } catch (error) {
+    console.error(`[context-plugin] Error during cleanup:`, error);
+  }
+}
+
 function saveContextToFile(contextosDir: string, sessionID: string, messages: Array<{ info: { role: string }; parts: Array<{ type: string; text?: string }> }>, type: ContextType = "auto"): string | null {
   try {
     const timestamp = formatTimestamp(new Date());
     const filename = formatFilename(timestamp, type);
     const filepath = path.join(contextosDir, filename);
+
+    // Security: Validate path is within allowed directory
+    if (!validatePath(contextosDir, filepath)) {
+      console.error(`[context-plugin] Path traversal attempt detected: ${filepath}`);
+      return null;
+    }
 
     // Filter: Only save user messages and significant assistant responses
     // Skip tool outputs, system messages, and verbose intermediate content
@@ -131,8 +211,10 @@ function saveContextToFile(contextosDir: string, sessionID: string, messages: Ar
 
       for (const part of msg.parts) {
         if (part.type === "text" && part.text) {
+          // Security: Filter sensitive data before saving
+          let textContent = filterSensitiveData(part.text);
           // Truncate very long messages to save space (keep first 2000 chars)
-          content += part.text.length > 2000 ? part.text.substring(0, 2000) + "\n\n[...truncado...]" : part.text;
+          content += textContent.length > 2000 ? textContent.substring(0, 2000) + "\n\n[...truncado...]" : textContent;
         }
       }
 
@@ -153,7 +235,8 @@ function saveContextToFile(contextosDir: string, sessionID: string, messages: Ar
     const fileContent = lines.join("\n");
 
     ensureDirectoryExists(contextosDir);
-    fs.writeFileSync(filepath, fileContent, "utf-8");
+    // Security: Write with restrictive permissions (owner read/write only)
+    fs.writeFileSync(filepath, fileContent, { encoding: "utf-8", mode: 0o600 });
 
     console.log(`[context-plugin] ${typeLabels[type]} salvo: ${filepath} (${significantMessages.length}/${messages.length} msgs)`);
     return filepath;
@@ -281,6 +364,9 @@ ${currentContent}`;
             console.log(`[context-plugin] Session end context saved: ${savedPath}`);
           }
         }
+        
+        // Security: Cleanup old contexts based on retention policy
+        cleanupOldContexts(contextosDir);
       } catch (error) {
         console.error(`[context-plugin] Error saving context on session end:`, error);
       }

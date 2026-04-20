@@ -33,7 +33,7 @@ fi
 
 # Clonar repositório
 echo "📦 Clonando repositório..."
-git clone https://github.com/wellingtonribeiro/opencode-context-plugin.git "$PLUGIN_DIR"
+git clone https://github.com/DevWellington/opencode-context-plugin.git "$PLUGIN_DIR"
 
 # Verificar se o config do opencode existe
 CONFIG_FILE="$HOME/.config/opencode/opencode.json"
