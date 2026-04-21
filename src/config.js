@@ -15,6 +15,22 @@ export const defaultConfig = {
     enabled: true,
     maxSizeBytes: 10 * 1024 * 1024, // 10MB
     maxFiles: 5
+  },
+  injection: {
+    enabled: false,
+    autoInject: false,
+    maxContexts: 5,
+    maxTokens: 8000,
+    relevanceScoring: {
+      provider: 'openai',
+      model: 'gpt-4o-mini',
+      apiKeyEnv: 'OPENAI_API_KEY'
+    },
+    cache: {
+      enabled: true,
+      ttlHours: 24,
+      maxSizeMB: 50
+    }
   }
 };
 
