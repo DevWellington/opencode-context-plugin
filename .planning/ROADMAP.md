@@ -84,13 +84,12 @@ Plans:
   2. Search can be filtered by date range, type (compact/exit), and keywords
   3. CLI tool allows searching contexts from terminal
   4. Weekly/monthly reports can be generated automatically
-**Plans**: 3-4 plans (TBD during planning)
+**Plans**: 3 plans
 
 Plans:
-- [ ] 04-01: Implement full-text search across sessions
-- [ ] 04-02: Add filter support (date, type, keywords)
-- [ ] 04-03: Create CLI search tool
-- [ ] 04-04: Implement report generation
+- [x] 04-01: Full-text search infrastructure (searchIndexer + searchQuery modules)
+- [x] 04-02: CLI search tool with filter support (type, date, keywords)
+- [x] 04-03: Report generation (weekly/monthly reports)
 
 #### Phase 5: Multi-Project Support
 **Goal**: Share learnings and contexts across projects
@@ -147,8 +146,8 @@ Phases execute in numeric order: 1 → 1.1 → 1.2 → 1.3 → 1.4 → 2 → 3 �
 |-------|-----------|----------------|--------|-----------|
 | 1. Context Session Restructuring | v1.0 | 4/4 | Complete | 2026-04-21 |
 | 2. Code Quality & Performance | v1.1 | 3/3 | Complete | 2026-04-21 |
-| 3. Context Injection Optimization | v1.2 | 0/3 | Planned    |  |
-| 4. Advanced Search & Retrieval | v2.0 | 0/4 | Not started | - |
+| 3. Context Injection Optimization | v1.2 | 3/3 | Complete | 2026-04-21 |
+| 4. Advanced Search & Retrieval | v2.0 | 1/3 | In Progress|  |
 | 5. Multi-Project Support | v2.0 | 0/4 | Not started | - |
 | 6. Dashboard & UI | Future | 0/TBD | Not started | - |
 | 7. AI-Powered Insights | Future | 0/TBD | Not started | - |
