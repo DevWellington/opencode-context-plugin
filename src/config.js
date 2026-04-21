@@ -31,6 +31,12 @@ export const defaultConfig = {
       ttlHours: 24,
       maxSizeMB: 50
     }
+  },
+  search: {
+    enabled: true,
+    indexOnStartup: false,
+    maxResults: 20,
+    snippetLength: 200
   }
 };
 
