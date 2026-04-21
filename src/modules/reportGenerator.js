@@ -69,6 +69,40 @@ function extractText(content) {
 }
 
 /**
+ * Extract structured content from session file body
+ */
+function extractSessionContent(content) {
+  // Extract message count from body (NOT in frontmatter)
+  const msgCountMatch = content.match(/\*\*Message Count:\*\*\s*(\d+)/);
+  const messageCount = msgCountMatch ? parseInt(msgCountMatch[1], 10) : 0;
+
+  // Extract first user message
+  const firstUserMatch = content.match(/### Message \d+ \[user\]\n\n(.+?)(?=\n###|\n\n##|$)/s);
+  const firstUserMessage = firstUserMatch ? firstUserMatch[1].trim().slice(0, 150) : '';
+
+  // Extract structured summary from compact sessions
+  const goalMatch = content.match(/\*\*Goal:\*\*\s*(.+?)(?=\n\n|\*\*|$)/s);
+  const accomplishedMatch = content.match(/\*\*Accomplished:\*\*\s*(.+?)(?=\n\n|\*\*|$)/s);
+  const discoveriesMatch = content.match(/\*\*Discoveries:\*\*\s*(.+?)(?=\n\n|\*\*|$)/s);
+
+  let summary = '';
+  if (goalMatch) {
+    summary = goalMatch[1].trim();
+  } else if (accomplishedMatch) {
+    summary = accomplishedMatch[1].trim();
+  }
+
+  const discoveries = discoveriesMatch ? discoveriesMatch[1].trim() : '';
+
+  return {
+    messageCount,
+    firstUserMessage,
+    summary,
+    discoveries
+  };
+}
+
+/**
  * Parse session file metadata
  */
 async function parseSessionFile(filePath) {
@@ -85,32 +119,18 @@ async function parseSessionFile(filePath) {
     const dateMatch = filename.match(/(\d{4}-\d{2}-\d{2})/);
     const date = dateMatch ? dateMatch[1] : null;
 
-    // Count messages from frontmatter
-    const messageCount = parsed.data?.messageCount || 0;
-    const tokenCount = parsed.data?.tokenCount || 0;
-
-    // Extract keywords from content
-    const text = extractText(content);
-    const words = text.toLowerCase().split(/\s+/).filter(w => w.length > 3);
-    const wordFreq = {};
-    for (const word of words) {
-      wordFreq[word] = (wordFreq[word] || 0) + 1;
-    }
-
-    // Get top keywords
-    const topKeywords = Object.entries(wordFreq)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 20)
-      .map(([word]) => word);
+    // Extract structured content from body
+    const { messageCount, firstUserMessage, summary, discoveries } = extractSessionContent(content);
 
     return {
       filename,
       type,
       date,
-      messageCount,
-      tokenCount,
       title: parsed.data?.title || filename,
-      topKeywords
+      messageCount,
+      firstUserMessage,
+      summary,
+      discoveries
     };
   } catch (error) {
     return null;
@@ -157,27 +177,6 @@ export async function scanSessionsInRange(directory, startDate, endDate) {
 }
 
 /**
- * Generate keyword frequency analysis
- */
-function analyzeKeywords(sessions, topN = 10) {
-  const wordFreq = {};
-  const stopWords = new Set(['the', 'and', 'for', 'are', 'but', 'not', 'you', 'all', 'can', 'had', 'her', 'was', 'one', 'our', 'out', 'has', 'have', 'been', 'were', 'they', 'this', 'that', 'with', 'would', 'there', 'from', 'which', 'into', 'only', 'other', 'some', 'could', 'what', 'when', 'where', 'who', 'will', 'with', 'your']);
-
-  for (const session of sessions) {
-    for (const keyword of session.topKeywords || []) {
-      if (!stopWords.has(keyword)) {
-        wordFreq[keyword] = (wordFreq[keyword] || 0) + 1;
-      }
-    }
-  }
-
-  return Object.entries(wordFreq)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, topN)
-    .map(([word, count]) => ({ word, count }));
-}
-
-/**
  * Group sessions by day
  */
 function groupByDay(sessions) {
@@ -202,7 +201,7 @@ function getDayName(dateStr) {
 }
 
 /**
- * Generate weekly activity report
+ * Generate weekly activity report with tree content structure
  */
 export async function generateWeeklyReport(directory, weekStart) {
   const date = weekStart ? new Date(weekStart) : new Date();
@@ -211,60 +210,60 @@ export async function generateWeeklyReport(directory, weekStart) {
   const { start, end } = getWeekRange(year, week);
 
   const sessions = await scanSessionsInRange(directory, start, end);
-  const stats = await getIndexStats(directory);
 
   // Calculate totals
   const totalSessions = sessions.length;
   const exitSessions = sessions.filter(s => s.type === 'exit').length;
   const compactSessions = sessions.filter(s => s.type === 'compact').length;
   const totalMessages = sessions.reduce((sum, s) => sum + (s.messageCount || 0), 0);
-  const totalTokens = sessions.reduce((sum, s) => sum + (s.tokenCount || 0), 0);
 
-  // Daily breakdown
+  // Group by day
   const byDay = groupByDay(sessions);
-  const dailyLines = [];
-  for (const [day, daySessions] of Object.entries(byDay).sort()) {
-    const exits = daySessions.filter(s => s.type === 'exit').length;
-    const compacts = daySessions.filter(s => s.type === 'compact').length;
-    const highlights = daySessions.slice(0, 2).map(s => s.title || s.filename).join(', ');
-    dailyLines.push(`| ${getDayName(day)} | ${daySessions.length} | ${exits} exit, ${compacts} compact | ${highlights} |`);
-  }
 
-  // Top keywords
-  const topKeywords = analyzeKeywords(sessions, 10);
-  const keywordLines = topKeywords.map(k => `- ${k.word} (${k.count} sessions)`);
-
-  // Build markdown report
+  // Build tree report
   let report = `# Weekly Activity Report - Week ${week}, ${year}\n\n`;
   report += `**Period:** ${start} to ${end}\n\n`;
-  report += `## Summary Statistics\n\n`;
-  report += `- **Total Sessions:** ${totalSessions}\n`;
-  report += `- **Exit Sessions:** ${exitSessions}\n`;
-  report += `- **Compact Sessions:** ${compactSessions}\n`;
+  report += `## Summary\n\n`;
+  report += `- **Total Sessions:** ${totalSessions} (${exitSessions} exit, ${compactSessions} compact)\n`;
   report += `- **Total Messages:** ${totalMessages}\n`;
-  report += `- **Total Tokens:** ~${totalTokens.toLocaleString()}\n\n`;
+  report += `- **Average Messages/Session:** ${totalSessions > 0 ? Math.round(totalMessages / totalSessions) : 0}\n\n`;
 
-  report += `## Daily Breakdown\n\n`;
-  report += `| Day | Sessions | Type | Highlights |\n`;
-  report += `|-----|----------|------|------------|\n`;
-  report += dailyLines.join('\n') + '\n\n';
-
-  report += `## Top Topics Discussed\n\n`;
-  report += keywordLines.join('\n') + '\n\n';
-
-  report += `## Session List\n\n`;
-  for (const session of sessions) {
-    const typeIcon = session.type === 'exit' ? '🚪' : '📦';
-    report += `- ${typeIcon} **${session.title || session.filename}** (${session.date}) - ${session.messageCount || 0} messages\n`;
+  // Key Work Areas - extract from session content
+  const workKeywords = sessions
+    .flatMap(s => (s.summary || s.firstUserMessage || '').split(/[\s,]+/)
+      .filter(w => w.length > 5 && !/^\d+$/.test(w)))
+    .slice(0, 8);
+  const uniqueKeywords = [...new Set(workKeywords)];
+  if (uniqueKeywords.length > 0) {
+    report += `## Key Work Areas\n\n`;
+    report += uniqueKeywords.map(k => `- ${k}`).join('\n') + '\n\n';
   }
 
-  report += `\n---\n*Report generated on ${new Date().toISOString()}*\n`;
+  // Daily breakdown with actual content
+  report += `## Daily Breakdown\n\n`;
+  for (const [day, daySessions] of Object.entries(byDay).sort()) {
+    const dayName = getDayName(day);
+    report += `### ${day} (${dayName})\n\n`;
+    for (const session of daySessions) {
+      const icon = session.type === 'exit' ? '🚪' : '📦';
+      report += `${icon} **${session.title || session.filename}**\n`;
+      if (session.firstUserMessage) {
+        report += `   → "${session.firstUserMessage}"\n`;
+      }
+      if (session.summary) {
+        report += `   ✓ ${session.summary.slice(0, 100)}${session.summary.length > 100 ? '...' : ''}\n`;
+      }
+    }
+    report += '\n';
+  }
+
+  report += `---\n*Report generated on ${new Date().toISOString()}*\n`;
 
   return report;
 }
 
 /**
- * Generate monthly activity report
+ * Generate monthly activity report with tree content structure
  */
 export async function generateMonthlyReport(directory, monthYear) {
   // Parse monthYear (format: '2026-04' or just use current month)
@@ -279,64 +278,64 @@ export async function generateMonthlyReport(directory, monthYear) {
 
   const { start, end } = getMonthRange(year, month);
   const sessions = await scanSessionsInRange(directory, start, end);
-  const stats = await getIndexStats(directory);
 
   // Calculate totals
   const totalSessions = sessions.length;
   const exitSessions = sessions.filter(s => s.type === 'exit').length;
   const compactSessions = sessions.filter(s => s.type === 'compact').length;
   const totalMessages = sessions.reduce((sum, s) => sum + (s.messageCount || 0), 0);
-  const totalTokens = sessions.reduce((sum, s) => sum + (s.tokenCount || 0), 0);
 
-  // Weekly breakdown
+  // Group by Week > Day
   const byWeek = {};
   for (const session of sessions) {
     const sessionWeek = getWeekNumber(new Date(session.date));
-    if (!byWeek[sessionWeek]) {
-      byWeek[sessionWeek] = [];
-    }
-    byWeek[sessionWeek].push(session);
+    const day = session.date;
+    if (!byWeek[sessionWeek]) byWeek[sessionWeek] = {};
+    if (!byWeek[sessionWeek][day]) byWeek[sessionWeek][day] = [];
+    byWeek[sessionWeek][day].push(session);
   }
 
-  const weeklyLines = [];
-  for (const [week, weekSessions] of Object.entries(byWeek).sort((a, b) => Number(a[0]) - Number(b[0]))) {
-    const exits = weekSessions.filter(s => s.type === 'exit').length;
-    const compacts = weekSessions.filter(s => s.type === 'compact').length;
-    weeklyLines.push(`| Week ${week} | ${weekSessions.length} | ${exits} exit, ${compacts} compact |`);
-  }
-
-  // Top keywords
-  const topKeywords = analyzeKeywords(sessions, 15);
-  const keywordLines = topKeywords.map(k => `- ${k.word} (${k.count} sessions)`);
-
-  // Build markdown report
+  // Build tree report
   const monthName = new Date(year, month - 1).toLocaleString('default', { month: 'long' });
   let report = `# Monthly Activity Report - ${monthName} ${year}\n\n`;
   report += `**Period:** ${start} to ${end}\n\n`;
-  report += `## Summary Statistics\n\n`;
-  report += `- **Total Sessions:** ${totalSessions}\n`;
-  report += `- **Exit Sessions:** ${exitSessions}\n`;
-  report += `- **Compact Sessions:** ${compactSessions}\n`;
+  report += `## Summary\n\n`;
+  report += `- **Total Sessions:** ${totalSessions} (${exitSessions} exit, ${compactSessions} compact)\n`;
   report += `- **Total Messages:** ${totalMessages}\n`;
-  report += `- **Total Tokens:** ~${totalTokens.toLocaleString()}\n`;
   report += `- **Average Messages/Session:** ${totalSessions > 0 ? Math.round(totalMessages / totalSessions) : 0}\n\n`;
 
-  report += `## Weekly Breakdown\n\n`;
-  report += `| Week | Sessions | Type |\n`;
-  report += `|------|----------|------|\n`;
-  report += weeklyLines.join('\n') + '\n\n';
-
-  report += `## Top Topics Discussed\n\n`;
-  report += keywordLines.join('\n') + '\n\n';
-
-  report += `## All Sessions\n\n`;
-  for (const session of sessions) {
-    const typeIcon = session.type === 'exit' ? '🚪' : '📦';
-    const week = getWeekNumber(new Date(session.date));
-    report += `- ${typeIcon} **${session.title || session.filename}** (${session.date}, Week ${week}) - ${session.messageCount || 0} messages\n`;
+  // Key Work Areas - extract from session content
+  const workKeywords = sessions
+    .flatMap(s => (s.summary || s.firstUserMessage || '').split(/[\s,]+/)
+      .filter(w => w.length > 5 && !/^\d+$/.test(w)))
+    .slice(0, 10);
+  const uniqueKeywords = [...new Set(workKeywords)];
+  if (uniqueKeywords.length > 0) {
+    report += `## Key Work Areas\n\n`;
+    report += uniqueKeywords.map(k => `- ${k}`).join('\n') + '\n\n';
   }
 
-  report += `\n---\n*Report generated on ${new Date().toISOString()}*\n`;
+  // Tree: Month > Week > Day > Session
+  for (const [week, days] of Object.entries(byWeek).sort((a, b) => Number(a[0]) - Number(b[0]))) {
+    report += `## Week ${week}\n\n`;
+    for (const [day, daySessions] of Object.entries(days).sort()) {
+      const dayName = getDayName(day);
+      report += `### ${day} (${dayName})\n\n`;
+      for (const session of daySessions) {
+        const icon = session.type === 'exit' ? '🚪' : '📦';
+        report += `${icon} **${session.title || session.filename}**\n`;
+        if (session.firstUserMessage) {
+          report += `   → "${session.firstUserMessage}"\n`;
+        }
+        if (session.summary) {
+          report += `   ✓ ${session.summary.slice(0, 100)}${session.summary.length > 100 ? '...' : ''}\n`;
+        }
+      }
+      report += '\n';
+    }
+  }
+
+  report += `---\n*Report generated on ${new Date().toISOString()}*\n`;
 
   return report;
 }

@@ -15,20 +15,38 @@ import { generateMonthlyReport } from '../modules/reportGenerator.js';
 import { buildKeywords, addRelatedLinks, extractKeywordsFromContent, REPORTS_DIR } from './utils/linkBuilder.js';
 
 export async function generateMonthlySummary(directory, monthDate) {
-  const date = monthDate ? new Date(monthDate) : new Date();
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
+  let year, month;
+  
+  if (monthDate) {
+    // Handle "2026-04" format or full date
+    const parts = monthDate.split('-');
+    if (parts.length >= 2) {
+      year = parseInt(parts[0], 10);
+      month = parts[1].padStart(2, '0');
+    } else {
+      const date = new Date(monthDate);
+      year = date.getFullYear();
+      month = String(date.getMonth() + 1).padStart(2, '0');
+    }
+  } else {
+    const now = new Date();
+    year = now.getFullYear();
+    month = String(now.getMonth() + 1).padStart(2, '0');
+  }
 
   // DELEGATE to existing function
   const report = await generateMonthlyReport(directory, monthDate);
 
-  // Extract keywords from report content
+  // Extract keywords from report content - filter generic terms
   const contentKeywords = extractKeywordsFromContent(report, 15);
+  const filteredKeywords = contentKeywords.filter(k =>
+    !['session', 'week', 'message', 'total', 'compact', 'exit', 'sessões', 'mensagens'].includes(k.toLowerCase())
+  );
 
   const keywords = buildKeywords({
     projectName: 'opencode-context-plugin',
     module: 'generateMonthly',
-    keywords: contentKeywords
+    keywords: filteredKeywords
   });
 
   const header = `---
