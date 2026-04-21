@@ -10,7 +10,12 @@ export const defaultConfig = {
   enableLearning: true,
   logLevel: 'info',
   debug: false,
-  debounceMs: 500
+  debounceMs: 500,
+  logRotation: {
+    enabled: true,
+    maxSizeBytes: 10 * 1024 * 1024, // 10MB
+    maxFiles: 5
+  }
 };
 
 // Internal config storage
