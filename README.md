@@ -52,7 +52,7 @@ git clone https://github.com/DevWellington/opencode-context-plugin.git \
 
 # Adicione ao ~/.config/opencode/opencode.json:
 {
-  "plugins": ["opencode-context-plugin"]
+  "plugin": ["opencode-context-plugin"]
 }
 ```
 
@@ -69,11 +69,11 @@ git clone https://github.com/DevWellington/opencode-context-plugin.git \
 
 ### No `config.json` do projeto ou global:
 
-Adicione o plugin ao array de plugins:
+Adicione o plugin ao array de plugin:
 
 ```json
 {
-  "plugins": [
+  "plugin": [
     "opencode-context-plugin"
   ]
 }
@@ -83,7 +83,7 @@ Ou com opções:
 
 ```json
 {
-  "plugins": [
+  "plugin": [
     ["opencode-context-plugin", { /* opções futuras */ }]
   ]
 }

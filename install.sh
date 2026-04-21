@@ -51,24 +51,24 @@ cp "$CONFIG_FILE" "$BACKUP_FILE"
 # Adicionar plugin ao config (usando jq se disponível, senão fallback)
 if command -v jq &> /dev/null; then
   # Usar jq para manipulação JSON segura
-  if jq -e '.plugins' "$CONFIG_FILE" > /dev/null 2>&1; then
-    # Array plugins já existe, adicionar se não existir
-    if ! jq -e '.plugins | index("opencode-context-plugin")' "$CONFIG_FILE" > /dev/null 2>&1; then
-      jq '.plugins += ["opencode-context-plugin"]' "$CONFIG_FILE" > "${CONFIG_FILE}.tmp" && mv "${CONFIG_FILE}.tmp" "$CONFIG_FILE"
+  if jq -e '.plugin' "$CONFIG_FILE" > /dev/null 2>&1; then
+    # Array plugin já existe, adicionar se não existir
+    if ! jq -e '.plugin | index("opencode-context-plugin")' "$CONFIG_FILE" > /dev/null 2>&1; then
+      jq '.plugin += ["opencode-context-plugin"]' "$CONFIG_FILE" > "${CONFIG_FILE}.tmp" && mv "${CONFIG_FILE}.tmp" "$CONFIG_FILE"
       echo "✅ Plugin adicionado ao config"
     else
       echo "⚠️  Plugin já está no config"
     fi
   else
-    # Array plugins não existe, criar
-    jq '. + {plugins: ["opencode-context-plugin"]}' "$CONFIG_FILE" > "${CONFIG_FILE}.tmp" && mv "${CONFIG_FILE}.tmp" "$CONFIG_FILE"
+    # Array plugin não existe, criar
+    jq '. + {plugin: ["opencode-context-plugin"]}' "$CONFIG_FILE" > "${CONFIG_FILE}.tmp" && mv "${CONFIG_FILE}.tmp" "$CONFIG_FILE"
     echo "✅ Plugin adicionado ao config"
   fi
 else
   # Fallback sem jq - instrução manual
   echo "⚠️  jq não encontrado. Adicione manualmente ao $CONFIG_FILE:"
   echo ""
-  echo '  "plugins": ["opencode-context-plugin"]'
+  echo '  "plugin": ["opencode-context-plugin"]'
   echo ""
 fi
 
