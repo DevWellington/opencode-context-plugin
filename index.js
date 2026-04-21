@@ -1,6 +1,6 @@
 import fs from "fs";
 import path from "path";
-import { Plugin } from "@opencode-ai/plugin";
+// Plugin export is the function itself;
 
 // Debug logging
 const LOG_FILE = path.join(process.env.HOME || '', '.opencode-context-plugin.log');
@@ -249,7 +249,7 @@ function loadPreviousContextsAsText(contextosDir) {
   return header.join("\n") + contexts.join("\n\n") + footer.join("\n");
 }
 
-export const ContextPlugin = async (input) => {
+export default async (input) => {
   const { directory, client } = input;
   const contextosDir = getContextosDir(directory);
 
