@@ -378,6 +378,26 @@ export { executeSearch, parseSearchQuery } from './src/modules/searchQuery.js';
 // Report generation exports
 export { generateWeeklyReport, generateMonthlyReport, generateActivityReport, saveReport } from './src/modules/reportGenerator.js';
 
+// Agent system exports
+export { showHelp } from './src/agents/ocpHelp.js';
+export {
+  // Generate agents
+  generateTodaySummary,
+  generateWeeklySummary,
+  generateMonthlySummary,
+  generateAnnualSummary,
+  updateIntelligenceLearning,
+  // Read agents
+  readTodaySummary,
+  readWeeklySummary,
+  readMonthlySummary,
+  readAnnualSummary,
+  readIntelligenceLearning,
+  // Constants
+  REPORTS_DIR,
+  REPORT_PATHS
+} from './src/agents/index.js';
+
 // V2 Export format - { id, server } - server must be instantiable with `new`
 export default {
   id: "@devwellington/opencode-context-plugin",
