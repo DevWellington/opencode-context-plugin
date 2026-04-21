@@ -7,10 +7,10 @@ echo "🚀 Instalando opencode-context-plugin..."
 # Detectar sistema operacional
 if [[ "$OSTYPE" == "darwin"* ]]; then
   # macOS
-  PLUGIN_DIR="$HOME/.config/opencode/plugins/context-plugin"
+  PLUGIN_DIR="$HOME/.config/opencode/plugins/opencode-context-plugin"
 elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
   # Linux
-  PLUGIN_DIR="$HOME/.config/opencode/plugins/context-plugin"
+  PLUGIN_DIR="$HOME/.config/opencode/plugins/opencode-context-plugin"
 else
   echo "❌ Sistema operacional não suportado: $OSTYPE"
   exit 1
@@ -53,22 +53,22 @@ if command -v jq &> /dev/null; then
   # Usar jq para manipulação JSON segura
   if jq -e '.plugins' "$CONFIG_FILE" > /dev/null 2>&1; then
     # Array plugins já existe, adicionar se não existir
-    if ! jq -e '.plugins | index("context-plugin")' "$CONFIG_FILE" > /dev/null 2>&1; then
-      jq '.plugins += ["context-plugin"]' "$CONFIG_FILE" > "${CONFIG_FILE}.tmp" && mv "${CONFIG_FILE}.tmp" "$CONFIG_FILE"
+    if ! jq -e '.plugins | index("opencode-context-plugin")' "$CONFIG_FILE" > /dev/null 2>&1; then
+      jq '.plugins += ["opencode-context-plugin"]' "$CONFIG_FILE" > "${CONFIG_FILE}.tmp" && mv "${CONFIG_FILE}.tmp" "$CONFIG_FILE"
       echo "✅ Plugin adicionado ao config"
     else
       echo "⚠️  Plugin já está no config"
     fi
   else
     # Array plugins não existe, criar
-    jq '. + {plugins: ["context-plugin"]}' "$CONFIG_FILE" > "${CONFIG_FILE}.tmp" && mv "${CONFIG_FILE}.tmp" "$CONFIG_FILE"
+    jq '. + {plugins: ["opencode-context-plugin"]}' "$CONFIG_FILE" > "${CONFIG_FILE}.tmp" && mv "${CONFIG_FILE}.tmp" "$CONFIG_FILE"
     echo "✅ Plugin adicionado ao config"
   fi
 else
   # Fallback sem jq - instrução manual
   echo "⚠️  jq não encontrado. Adicione manualmente ao $CONFIG_FILE:"
   echo ""
-  echo '  "plugins": ["context-plugin"]'
+  echo '  "plugins": ["opencode-context-plugin"]'
   echo ""
 fi
 

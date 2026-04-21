@@ -47,12 +47,12 @@ opencode plugin @wellingtonribeiro/opencode-context-plugin@latest --global
 
 ```bash
 # Clone para a pasta de plugins
-git clone https://github.com/wellingtonribeiro/opencode-context-plugin.git \
-  ~/.config/opencode/plugins/context-plugin
+git clone https://github.com/DevWellington/opencode-context-plugin.git \
+  ~/.config/opencode/plugins/opencode-context-plugin
 
 # Adicione ao ~/.config/opencode/opencode.json:
 {
-  "plugins": ["context-plugin"]
+  "plugins": ["opencode-context-plugin"]
 }
 ```
 
@@ -61,8 +61,8 @@ git clone https://github.com/wellingtonribeiro/opencode-context-plugin.git \
 ```bash
 # Dentro do diretório do projeto
 mkdir -p .opencode/plugins
-git clone https://github.com/wellingtonribeiro/opencode-context-plugin.git \
-  .opencode/plugins/context-plugin
+git clone https://github.com/DevWellington/opencode-context-plugin.git \
+  .opencode/plugins/opencode-context-plugin
 ```
 
 ## Configuração
@@ -74,7 +74,7 @@ Adicione o plugin ao array de plugins:
 ```json
 {
   "plugins": [
-    "context-plugin"
+    "opencode-context-plugin"
   ]
 }
 ```
@@ -84,7 +84,7 @@ Ou com opções:
 ```json
 {
   "plugins": [
-    ["context-plugin", { /* opções futuras */ }]
+    ["opencode-context-plugin", { /* opções futuras */ }]
   ]
 }
 ```
@@ -127,15 +127,15 @@ O plugin utiliza os seguintes hooks:
 ### Verificar instalação
 
 ```bash
-ls -la ~/.config/opencode/plugins/
-ls -la .opencode/plugins/  # se instalado por projeto
+ls -la ~/.config/opencode/plugins/opencode-context-plugin/
+ls -la .opencode/plugins/opencode-context-plugin/  # se instalado por projeto
 ```
 
 ## Desenvolvimento
 
 ```bash
 # Navegue até o diretório do plugin
-cd /Users/wellingtonribeiro/opencode-context-plugin
+cd /path/to/opencode-context-plugin
 
 # Adicione como dependência de desenvolvimento (opcional)
 npm link
