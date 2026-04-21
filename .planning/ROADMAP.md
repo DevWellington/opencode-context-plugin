@@ -110,13 +110,34 @@ Plans:
 
 ---
 
-### 📋 v2.1 Multi-Project (Phase 6)
+### 📋 v1.5 OpenCode Internal AI (Phase 6)
+
+**Milestone Goal:** Replace external OpenAI API calls with OpenCode's internal AI inference
+
+**Why:** User requested "rodar internamente" (run internally) - use OpenCode's built-in AI instead of external OpenAI API calls
+
+**Depends on**: Phase 05 (Content-Focused Reports)
+**Requirements**: AI-01, AI-02
+
+**Success Criteria (what must be TRUE):**
+1. contentExtractor.js uses OpenCode AI via client.sessions.prompt()
+2. No external API calls (no fetch to api.openai.com)
+3. inferMissingFields accepts optional opencodeClient parameter
+4. Tests mock OpenCode client, not global.fetch
+
+**Plans:** 2 plans (created)
+- [ ] 06-01-PLAN.md: Replace callOpenAI with callOpenCodeAI using client.sessions.prompt()
+- [ ] 06-02-PLAN.md: Update callers to pass OpenCode client through the module chain
+
+---
+
+### 📋 v2.1 Multi-Project (Phase 7)
 
 **Milestone Goal:** Enable finding specific sessions and sharing learnings across projects.
 
-#### Phase 6: Multi-Project Support
+#### Phase 7: Multi-Project Support
 **Goal**: Share learnings and contexts across projects
-**Depends on**: Phase 5
+**Depends on**: Phase 6
 **Requirements**: MULTI-01, MULTI-02, MULTI-03, MULTI-04
 **Success Criteria** (what must be TRUE):
   1. Global intelligence learning file aggregates patterns across all projects
@@ -125,19 +146,19 @@ Plans:
   4. Contexts can optionally sync to remote storage
 
 Plans:
-- [ ] 06-01: Create global intelligence learning file
-- [ ] 06-02: Implement cross-project context linking
-- [ ] 06-03: Add project templates from learnings
-- [ ] 06-04: Add remote storage sync (optional)
+- [ ] 07-01: Create global intelligence learning file
+- [ ] 07-02: Implement cross-project context linking
+- [ ] 07-03: Add project templates from learnings
+- [ ] 07-04: Add remote storage sync (optional)
 
 ---
 
-### 📋 Future Vision (Phases 7-8)
+### 📋 Future Vision (Phases 8-9)
 
-#### Phase 7: Dashboard & UI
+#### Phase 8: Dashboard & UI
 **Goal**: Visual interface for browsing and managing sessions
 
-#### Phase 8: AI-Powered Insights
+#### Phase 9: AI-Powered Insights
 **Goal**: Automatic pattern detection and recommendations
 
 ## Progress
@@ -152,10 +173,11 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 3. Context Injection Optimization | v1.2 | 3/3 | Complete | 2026-04-21 |
 | 4. Advanced Search & Retrieval | v2.0 | 3/3 | Complete | 2026-04-21 |
 | 5. Agent System & Obsidian Integration | v1.3 | 6/6 | Complete | 2026-04-21 |
-| 5. Content-Focused Reports | v1.4 | 1/4 | Planning | - |
-| 6. Multi-Project Support | v2.1 | 0/4 | Not started | - |
-| 7. Dashboard & UI | Future | 0/TBD | Not started | - |
-| 8. AI-Powered Insights | Future | 0/TBD | Not started | - |
+| 5. Content-Focused Reports | v1.4 | 4/4 | Complete | 2026-04-21 |
+| 6. OpenCode Internal AI | v1.5 | 0/2 | Planning | - |
+| 7. Multi-Project Support | v2.1 | 0/4 | Not started | - |
+| 8. Dashboard & UI | Future | 0/TBD | Not started | - |
+| 9. AI-Powered Insights | Future | 0/TBD | Not started | - |
 
 ## Design Principles
 

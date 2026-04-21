@@ -253,48 +253,33 @@ The system was slow.
   });
 
   describe('inferMissingFields', () => {
-    it('should return partial extraction when OPENAI_API_KEY is not set', async () => {
-      // Save original env var
-      const originalKey = process.env.OPENAI_API_KEY;
-      delete process.env.OPENAI_API_KEY;
-
+    it('should return partial extraction when no OpenCode client is provided', async () => {
       const content = `## Goal
 Implement authentication system with JWT tokens
 
 This is some content without full structure.
 `;
 
-      const result = await inferMissingFields(content);
+      const result = await inferMissingFields(content, null);
 
       expect(result.goal).toContain('Implement authentication');
       expect(result.confidence.goal).toBe(0.9);
-
-      // Restore env var
-      process.env.OPENAI_API_KEY = originalKey;
     });
 
-    it('should use LLM when structured data is missing', async () => {
-      // Set mock API key
-      const originalKey = process.env.OPENAI_API_KEY;
-      process.env.OPENAI_API_KEY = 'test-key';
-
-      // Mock global fetch
-      const mockFetch = jest.fn().mockResolvedValue({
-        ok: true,
-        json: async () => ({
-          choices: [{
-            message: {
-              content: JSON.stringify({
-                goal: 'Test goal from LLM',
-                accomplished: 'Test accomplished from LLM',
-                discoveries: 'Test discoveries from LLM',
-                confidence: { goal: 0.8, accomplished: 0.7, discoveries: 0.9 }
-              })
-            }
-          }]
-        })
-      });
-      global.fetch = mockFetch;
+    it('should use OpenCode AI when client is provided', async () => {
+      // Mock OpenCode client with sessions.prompt
+      const mockClient = {
+        sessions: {
+          prompt: jest.fn().mockResolvedValue({
+            content: JSON.stringify({
+              goal: 'Test goal from LLM',
+              accomplished: 'Test accomplished from LLM',
+              discoveries: 'Test discoveries from LLM',
+              confidence: { goal: 0.8, accomplished: 0.7, discoveries: 0.9 }
+            })
+          })
+        }
+      };
 
       // Content with no structured sections
       const content = `User: I want to build a REST API
@@ -302,21 +287,21 @@ Assistant: I'll help you build that API
 We created endpoints for users, products, and orders.
 `;
 
-      const result = await inferMissingFields(content);
+      const result = await inferMissingFields(content, mockClient);
 
       expect(result.goal).toBe('Test goal from LLM');
       expect(result.accomplished).toBe('Test accomplished from LLM');
-      expect(mockFetch).toHaveBeenCalled();
-
-      // Restore
-      process.env.OPENAI_API_KEY = originalKey;
-      delete global.fetch;
+      expect(mockClient.sessions.prompt).toHaveBeenCalled();
+      expect(mockClient.sessions.prompt).toHaveBeenCalledWith('context-plugin-inference', expect.any(Object));
     });
 
     it('should skip LLM when most fields are already present', async () => {
-      // Mock global fetch to fail if called (shouldn't be called)
-      const mockFetch = jest.fn();
-      global.fetch = mockFetch;
+      // Mock client should NOT be called
+      const mockClient = {
+        sessions: {
+          prompt: jest.fn()
+        }
+      };
 
       const content = `## Goal
 Existing goal
@@ -328,38 +313,60 @@ Existing accomplishment
 Existing discoveries
 `;
 
-      const result = await inferMissingFields(content);
+      const result = await inferMissingFields(content, mockClient);
 
       expect(result.goal).toBe('Existing goal');
-      expect(mockFetch).not.toHaveBeenCalled();
-
-      delete global.fetch;
+      expect(mockClient.sessions.prompt).not.toHaveBeenCalled();
     });
 
     it('should handle invalid content gracefully', async () => {
-      const result = await inferMissingFields('');
+      const result = await inferMissingFields('', null);
       
       expect(result.goal).toBeNull();
       expect(result.confidence.goal).toBe(0);
     });
 
     it('should return confidence scores', async () => {
-      const originalKey = process.env.OPENAI_API_KEY;
-      delete process.env.OPENAI_API_KEY;
-
       const content = `## Goal
 Test goal
 
 Some content.
 `;
 
-      const result = await inferMissingFields(content);
+      const result = await inferMissingFields(content, null);
 
       expect(result.confidence).toBeDefined();
       expect(result.confidence.goal).toBe(0.9);
       expect(typeof result.confidence.goal).toBe('number');
+    });
 
-      process.env.OPENAI_API_KEY = originalKey;
+    it('should return null fields when no client provided and no structured data', async () => {
+      const content = `Random unstructured content without any headers.
+`;
+
+      const result = await inferMissingFields(content, null);
+
+      // Since content has no ## Goal/etc headers and no client, it returns partial extraction
+      // but goal/accomplished/discoveries would be null since no structured data exists
+      expect(result.goal).toBeNull();
+    });
+
+    it('should handle OpenCode AI errors gracefully', async () => {
+      const mockClient = {
+        sessions: {
+          prompt: jest.fn().mockRejectedValue(new Error('AI unavailable'))
+        }
+      };
+
+      const content = `User: I want to build a REST API
+Assistant: I'll help you build that API
+`;
+
+      const result = await inferMissingFields(content, mockClient);
+
+      // Should return partial extraction without crashing
+      expect(result).toBeDefined();
+      expect(result.goal).toBeNull();
     });
   });
 

@@ -11,47 +11,43 @@ const logger = createDebugLogger('content-extractor');
  */
 
 /**
- * Call OpenAI API using native fetch
+ * Call OpenCode internal AI using sessions.prompt()
+ * @param {Object} client - OpenCode client instance
+ * @param {string} sessionContent - Session content to analyze
+ * @param {string} prompt - Additional prompt context
+ * @returns {Promise<string|null>} JSON response content or null on failure
  */
-async function callOpenAI(sessionContent, prompt) {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) {
-    throw new Error('OPENAI_API_KEY not configured');
+async function callOpenCodeAI(client, sessionContent, prompt) {
+  if (!client?.sessions?.prompt) {
+    logger('[infer] No OpenCode client available, skipping LLM inference');
+    return null;
   }
 
-  const response = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiKey}`
-    },
-    body: JSON.stringify({
-      model: 'gpt-4o-mini',
+  try {
+    const response = await client.sessions.prompt('context-plugin-inference', {
       messages: [
         {
-          role: 'system',
-          content: `You are a session analyzer. Extract structured information from session content.
-Return a JSON object with these fields: goal, accomplished, discoveries.
-Each field should be a concise summary (1-3 sentences).
-If a field cannot be determined, use null.
-Include a confidence score (0-1) for each field.`
-        },
-        {
           role: 'user',
-          content: prompt
+          content: `Analyze this session content and extract structured information.
+Return a JSON object with these fields: goal, accomplished, discoveries, confidence.
+Each confidence should be 0-1.
+
+Session content:
+${sessionContent.slice(0, 2000)}
+
+${prompt}
+
+Return only valid JSON, no markdown formatting.`
         }
       ],
-      temperature: 0.3,
-      max_tokens: 500
-    })
-  });
+      model: 'auto'
+    });
 
-  if (!response.ok) {
-    throw new Error(`OpenAI API error: ${response.status}`);
+    return response.content;
+  } catch (error) {
+    logger(`[infer] OpenCode AI inference failed: ${error.message}`);
+    return null;
   }
-
-  const data = await response.json();
-  return data.choices[0]?.message?.content;
 }
 
 /**
@@ -376,9 +372,10 @@ function extractBugField(content, fieldNames) {
  * Only call when structured fields are absent
  * 
  * @param {string} sessionContent - Raw session content
- * @returns {Object} { goal, accomplished, discoveries } with confidence scores
+ * @param {Object} opencodeClient - OpenCode client instance (optional)
+ * @returns {Promise<Object>} { goal, accomplished, discoveries } with confidence scores
  */
-export async function inferMissingFields(sessionContent) {
+export async function inferMissingFields(sessionContent, opencodeClient = null) {
   // Only infer if we have content
   if (!sessionContent || typeof sessionContent !== 'string') {
     return { goal: null, accomplished: null, discoveries: null, confidence: { goal: 0, accomplished: 0, discoveries: 0 } };
@@ -407,10 +404,9 @@ export async function inferMissingFields(sessionContent) {
     };
   }
 
-  // Need LLM inference - check for API key
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) {
-    logger('[infer] No OPENAI_API_KEY, returning partial extraction');
+  // Need LLM inference - check for OpenCode client
+  if (!opencodeClient?.sessions?.prompt) {
+    logger('[infer] No OpenCode client available, returning partial extraction');
     return {
       goal: extracted.goal,
       accomplished: extracted.accomplished,
@@ -427,10 +423,10 @@ export async function inferMissingFields(sessionContent) {
     // Build prompt for inference
     const prompt = buildInferencePrompt(sessionContent, extracted);
     
-    const content = await callOpenAI(sessionContent, prompt);
+    const content = await callOpenCodeAI(opencodeClient, sessionContent, prompt);
     
     if (!content) {
-      throw new Error('Empty response from OpenAI');
+      throw new Error('Empty response from OpenCode AI');
     }
 
     // Parse JSON response
