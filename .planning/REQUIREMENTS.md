@@ -26,7 +26,7 @@ Requirements for initial release. Each maps to roadmap phases.
 - [x] **MODULAR-02**: Extract summary generation into separate module
 - [x] **MODULAR-03**: Extract intelligence learning into separate module
 - [ ] **PERF-01**: Implement debouncing for summary updates
-- [ ] **PERF-02**: Add log rotation or debug flag
+- [x] **PERF-02**: Add log rotation or debug flag
 - [x] **CONFIG-01**: Allow configuration via opencode.json (maxSessions, enableLearning, logLevel)
 - [x] **TEST-01**: Mock client API for integration tests
 
@@ -94,7 +94,7 @@ Which phases cover which requirements.
 | MODULAR-02 | Phase 2 | Complete |
 | MODULAR-03 | Phase 2 | Complete |
 | PERF-01 | Phase 2 | Pending |
-| PERF-02 | Phase 2 | Pending |
+| PERF-02 | Phase 2 | Complete |
 | CONFIG-01 | Phase 2 | Complete |
 | TEST-01 | Phase 2 | Complete |
 | INJECT-01 | Phase 3 | Pending |
