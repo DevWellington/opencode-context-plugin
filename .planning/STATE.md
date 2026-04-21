@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: Agent System
-status: verifying
-stopped_at: Completed review-fix-01 plan
-last_updated: "2026-04-21T20:50:33.877Z"
+status: planning
+stopped_at: Created remediation plan for Phase 5
+last_updated: "2026-04-21T21:20:43.358Z"
 last_activity: 2026-04-21
 progress:
-  total_phases: 1
-  completed_phases: 1
-  total_plans: 5
-  completed_plans: 5
+  total_phases: 8
+  completed_phases: 5
+  total_plans: 23
+  completed_plans: 18
   percent: 50
 ---
 
@@ -19,16 +19,71 @@ progress:
 ## Project Reference
 
 **Core value:** OpenCode plugin that saves session context to .opencode/context-session/ after compaction and session end
-**Current focus:** Phase 05 — agent-system-obsidian-integration
+**Current focus:** Phase 05 — Content-Focused Reports (Remediation)
 
 ## Current Position
 
-Phase: 05
+Phase: 05 (Remediation)
 Plan: Not started
-Status: Phase complete — ready for verification
+Status: Remediation planning complete — awaiting user validation
 Last activity: 2026-04-21
 
 Progress: [▓▓▓▓▓▓░░░░] 50% (4 of 8 phases)
+
+## Critical Finding
+
+**Phase 5 (Agent System) completed but flawed.** Research revealed:
+
+- 7/7 must-haves verified ✓
+- BUT reports generate wrong output (counts, not content)
+
+| File | Problem |
+|------|---------|
+| monthly-YYYY-MM.md | "12 sessions, 847 messages" instead of accomplishments |
+| annual-YYYY.md | Just a statistics table, no actual content |
+| intelligence-learning.md | Fake bug tracking (keyword detection) |
+
+See `.planning/research/REMEDIATION.md` for full analysis.
+
+## Research Evidence
+
+Created `.planning/research/` with:
+
+- `SUMMARY.md` - Gap analysis (design vs implementation)
+- `STACK.md` - Report generation architecture
+- `FEATURES.md` - What reports SHOULD contain
+- `ARCHITECTURE.md` - Current problems and redesign
+- `PITFALLS.md` - 7 critical pitfalls identified
+- `REMEDIATION.md` - Complete remediation plan
+
+## Remediation Plan
+
+New phase structure (4 plans, pending user validation):
+
+```
+Wave 1 (Foundation - no dependencies):
+  Plan 05-01: contentExtractor.js module
+
+    - Extract Goal, Accomplished, Discoveries, Relevant Files
+    - Bug extraction with context
+    - Cross-session pattern detection
+
+Wave 2 (depends on 05-01):
+  Plan 05-02: Redesign reportGenerator for content distillation
+
+Wave 3 (depends on 05-02):
+  Plan 05-03: Redesign intelligence learning
+
+Wave 4 (depends on 05-03):
+  Plan 05-04: Update agents to use new content extraction
+```
+
+## Open Questions for User
+
+1. **Audience:** AI context vs human review - which priority?
+2. **Bug scope:** Explicit only, or include implicit detection?
+3. **Fallback:** How to handle sessions without structured fields?
+4. **Migration:** What to do with existing files in old format?
 
 ## Performance Metrics
 
@@ -46,16 +101,15 @@ Progress: [▓▓▓▓▓▓░░░░] 50% (4 of 8 phases)
 | 2 | 3 | ~20min |
 | 3 | 3 | ~15min |
 | 4 | 3 | ~20min |
+| 5 | 0 (remediation) | - |
 
 **Recent Trend:**
 
 - Last 10 plans: Stable (all completed successfully)
 - Trend: Stable
 
-| Phase 05-agent-system-obsidian-integration P01 | 5 | 5 tasks | 5 files |
-| Phase 05-agent-system-obsidian-integration P03 | 180 | 2 tasks | 3 files |
-| Phase 05-agent-system-obsidian-integration P04 | 3 | 3 tasks | 3 files |
-| Phase review-fix P01 | 180 | 4 tasks | 3 files |
+| Phase 05 P01 | 180 | 2 tasks | 2 files |
+| Phase 05 P02 | 180 | 3 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -71,51 +125,59 @@ Progress: [▓▓▓▓▓▓░░░░] 50% (4 of 8 phases)
 | 1 | Use Promise-based lock for concurrent writes | Race condition prevention |
 | 1 | Queue-based serialization for intelligence updates | Non-blocking writes |
 | 2 | Use ~/.opencode-context-plugin/logs/ as log directory | Organized log storage |
-| 2 | Use ISO timestamp format (debug-YYYY-MM-DD-HH-mm-ss.log) for archives | Consistent naming |
+| 2 | Use ISO timestamp format for archives | Consistent naming |
 | 2 | Modular structure: config, utils, modules directories | Code organization |
 | 3 | Use OpenAI gpt-4o-mini as default scoring provider | Cost-effective, fast |
 | 3 | Return 0.5 default score when no API key configured | Graceful degradation |
-| 3 | TTL-based cache invalidation with 24h default | Configurable via injection.cache.ttlHours |
-| 3 | Cache stored at .opencode/context-session/cache/index.json | Follows existing hierarchy |
-| 3 | Use Math.ceil(content.length / 4) for token estimation | chars/4 approximation |
+| 3 | TTL-based cache invalidation with 24h default | Configurable |
 | 3 | Reserve 20% token budget for current session | Token budget distribution |
-| 3 | Use OpenCode plugin API pattern for hook registration | Standard plugin pattern |
-| 3 | Auto-inject returns null when disabled | Graceful no-op pattern |
 | 4 | Search index stored at .opencode/context-session/.index/ | Follows existing hierarchy |
+| 5 | Used REPORTS_DIR constant for consistent file paths | Standardization |
 
-- [Phase 05]: Used REPORTS_DIR constant for consistent file paths across all agents
-- [Phase 05]: Dynamic keyword extraction via extractKeywordsFromContent (not hardcoded values)
+- [Phase 05]: Used contentExtractor functions instead of internal parsing for report content
+- [Phase 05]: Monthly report has Executive Summary, Major Accomplishments, Issues Resolved, Decisions Made sections
+- [Phase 05]: Annual report has Annual Theme, Quarterly Themes (Q1-Q4), Project Evolution, Bug History
 
 ### Pending Todos
 
-- Plan Phase 5: Agent System
-- Create Phase 5 directory and plans
+- [x] Research Phase 5 for content issues - DONE
+- [ ] Create remediation plan - DONE
+- [ ] Validate remediation direction with user
+- [ ] Answer 4 design decisions
+- [ ] Create Phase 05 plans
 
 ### Blockers/Concerns
 
-None currently.
+**REMEDIATION BLOCKER:** Need user validation before creating plans:
+
+1. Report audience priority (AI vs human)
+2. Bug tracking scope (explicit vs implicit)
+3. Session fallback handling (require vs graceful)
+4. Existing file migration (auto vs on-read vs none)
 
 ## Session Continuity
 
 Last session: 2026-04-21T20:50:33.875Z
-Stopped at: Completed review-fix-01 plan
+Stopped at: Created remediation plan for Phase 5
 Resume file: None
 
-## Notes for Phase 5
+## Notes for Remediation Phase
 
-Phase 5 focuses on creating an agent system for file generation and reading with Obsidian-style linking.
+Phase 05 (Content-Focused Reports) fixes the fundamental purpose of reports:
 
-Key areas:
+**Problem:** Current reports generate what was EASY (counts, word frequency)
+**Solution:** Generate what USERS NEED (accomplishments, bugs, decisions)
 
-- Create @ocp-generate-* agents (today, weekly, monthly, annual)
-- Create @ocp-read-* agents with --summary/--all parameters
-- Implement @ocp-generate-intelligence-learning with historical tracking
-- Implement @ocp-read-intelligence-learning agent
-- Add @ocp-help agent with full documentation
+**Key changes:**
 
-Rules:
+1. Extract structured fields (Goal, Accomplished, Discoveries) from sessions
+2. Track bugs with full context (symptom, cause, solution, prevention)
+3. Cross-session pattern detection for intelligence learning
+4. Make annual reports show quarterly themes, not just statistics
 
-- Use Obsidian-style keyword linking for cross-files
-- Generate only summary content to avoid information overload
-- Update intelligence-learning on every file generation
-- Follow SOLID principles for all operations
+**Rules:**
+
+- Content over counts
+- Human-readable summaries over AI-metadata
+- Structured extraction over word frequency
+- Real bug tracking over keyword detection
