@@ -2,7 +2,7 @@ import fs from "fs/promises";
 import path from "path";
 import { createDebugLogger } from '../utils/debug.js';
 import { atomicWrite } from '../utils/fileUtils.js';
-import { extractSessionContent, extractBugs } from './contentExtractor.js';
+import { extractSessionContent, extractBugs, findPatterns } from './contentExtractor.js';
 
 const logger = createDebugLogger('intelligence');
 
@@ -80,6 +80,15 @@ export async function initializeIntelligenceLearning(baseDir) {
     
     content += `### Common Commands\n`;
     content += `- [Auto-populated from session analysis]\n\n`;
+    
+    content += `### Recurring Themes\n`;
+    content += `- [Auto-populated from cross-session analysis]\n\n`;
+    
+    content += `### Related Files\n`;
+    content += `- [Auto-populated from cross-session analysis]\n\n`;
+    
+    content += `### Bug-Prone Areas\n`;
+    content += `- [Auto-populated from cross-session analysis]\n\n`;
     
     content += `## Key Learnings from Latest Sessions\n\n`;
     content += `[Appended on each trigger execution]\n\n`;
@@ -160,6 +169,19 @@ export async function updateIntelligenceLearning(baseDir, sessionInfo) {
           const match = line.match(/Sessions Analyzed:\s*(\d+)/);
           sessionsAnalyzed = match ? parseInt(match[1], 10) + 1 : 1;
           updatedLines.push(`- **Sessions Analyzed:** ${sessionsAnalyzed}`);
+          
+          // Trigger pattern analysis periodically (every 5 sessions)
+          if (sessionsAnalyzed > 0 && sessionsAnalyzed % 5 === 0) {
+            logger(`[Intelligence] Triggering pattern analysis at session ${sessionsAnalyzed}`);
+            // Fire and forget - analysis runs in background
+            analyzeCrossSessionPatterns(baseDir).then(patterns => {
+              if (patterns.totalSessions >= 2) {
+                updatePatternInsights(baseDir, patterns);
+              }
+            }).catch(err => {
+              logger(`[Intelligence] Pattern analysis error: ${err.message}`);
+            });
+          }
           continue;
         }
         
@@ -288,6 +310,223 @@ export async function updateIntelligenceLearning(baseDir, sessionInfo) {
       logger(`[Intelligence] Error updating learning file: ${error.message}`);
       console.error(`[context-plugin] Intelligence learning update failed: ${error.message}`);
       // Don't throw - fail gracefully to not break session saving
+    }
+  });
+  
+  await learningWriteQueue;
+}
+
+/**
+ * Analyze cross-session patterns from all existing session files
+ * Uses findPatterns() from contentExtractor to detect recurring themes,
+ * related files, and bug patterns across sessions.
+ * 
+ * @param {string} baseDir - Base directory of the project
+ * @returns {Promise<Object>} { recurringThemes, relatedFiles, bugPatterns }
+ */
+export async function analyzeCrossSessionPatterns(baseDir) {
+  const ctxDir = path.join(baseDir, CONTEXT_SESSION_DIR);
+  
+  try {
+    // Scan for all session files
+    const sessionFiles = await scanSessionFiles(ctxDir);
+    
+    if (sessionFiles.length < 2) {
+      logger(`[Intelligence] Not enough sessions (${sessionFiles.length}) for pattern analysis`);
+      return { recurringThemes: [], relatedFiles: [], bugPatterns: [], totalSessions: sessionFiles.length };
+    }
+    
+    // Read session contents
+    const sessions = [];
+    for (const file of sessionFiles) {
+      try {
+        const content = await fs.readFile(file.path, 'utf-8');
+        sessions.push({
+          sessionId: file.name,
+          content: content
+        });
+      } catch (error) {
+        logger(`[Intelligence] Could not read session file ${file.path}: ${error.message}`);
+      }
+    }
+    
+    if (sessions.length < 2) {
+      return { recurringThemes: [], relatedFiles: [], bugPatterns: [], totalSessions: sessions.length };
+    }
+    
+    // Use findPatterns from contentExtractor
+    const patterns = findPatterns(sessions);
+    
+    // Categorize patterns
+    const recurringThemes = patterns.filter(p => 
+      p.pattern.startsWith('goal theme:') || 
+      p.pattern.startsWith('accomplishment theme:')
+    );
+    
+    const relatedFiles = patterns.filter(p => 
+      p.pattern.startsWith('File pattern:')
+    );
+    
+    const bugPatterns = patterns.filter(p => 
+      p.pattern.startsWith('Bug pattern:')
+    );
+    
+    logger(`[Intelligence] Cross-session analysis: ${sessions.length} sessions, ${recurringThemes.length} themes, ${relatedFiles.length} file patterns, ${bugPatterns.length} bug patterns`);
+    
+    return {
+      recurringThemes,
+      relatedFiles,
+      bugPatterns,
+      totalSessions: sessions.length
+    };
+  } catch (error) {
+    logger(`[Intelligence] Error in cross-session analysis: ${error.message}`);
+    return { recurringThemes: [], relatedFiles: [], bugPatterns: [], totalSessions: 0 };
+  }
+}
+
+/**
+ * Scan directory for session files
+ * @param {string} dir - Directory to scan
+ * @returns {Promise<Array>} Array of { path, name } objects
+ */
+async function scanSessionFiles(dir) {
+  const files = [];
+  
+  try {
+    const entries = await fs.readdir(dir, { withFileTypes: true });
+    
+    for (const entry of entries) {
+      const fullPath = path.join(dir, entry.name);
+      
+      if (entry.isFile() && (entry.name.startsWith('compact-') || entry.name.startsWith('exit-'))) {
+        files.push({ path: fullPath, name: entry.name });
+      } else if (entry.isDirectory()) {
+        // Recursively scan subdirectories
+        const subFiles = await scanSessionFiles(fullPath);
+        files.push(...subFiles);
+      }
+    }
+  } catch (error) {
+    logger(`[Intelligence] Error scanning directory ${dir}: ${error.message}`);
+  }
+  
+  return files;
+}
+
+/**
+ * Update intelligence learning with pattern analysis results
+ * Called periodically to refresh cross-session insights
+ * 
+ * @param {string} baseDir - Base directory of the project
+ * @param {Object} patterns - Result from analyzeCrossSessionPatterns
+ */
+export async function updatePatternInsights(baseDir, patterns) {
+  if (!patterns || patterns.totalSessions < 2) {
+    return;
+  }
+  
+  const ctxDir = path.join(baseDir, CONTEXT_SESSION_DIR);
+  const filePath = path.join(ctxDir, 'intelligence-learning.md');
+  
+  learningWriteQueue = learningWriteQueue.then(async () => {
+    try {
+      let content;
+      try {
+        content = await fs.readFile(filePath, 'utf-8');
+      } catch (error) {
+        logger(`[Intelligence] Cannot read learning file for pattern update: ${error.message}`);
+        return;
+      }
+      
+      // Find or create Session Patterns section
+      const patternsSection = '## Session Patterns\n';
+      const patternsMarker = '### Typical Session Duration';
+      const patternsIndex = content.indexOf(patternsMarker);
+      
+      if (patternsIndex === -1) {
+        // Section doesn't exist, find where to insert (after Architectural Decisions)
+        const archSectionEnd = content.indexOf('## Bug Fix Guidance');
+        if (archSectionEnd !== -1) {
+          const insertPos = archSectionEnd;
+          let patternContent = '\n' + patternsSection;
+          patternContent += `### Typical Session Duration\n`;
+          patternContent += `- [Auto-populated from session analysis]\n\n`;
+          patternContent += `### Common Commands\n`;
+          patternContent += `- [Auto-populated from session analysis]\n\n`;
+          patternContent += `### Recurring Themes\n`;
+          patternContent += `- [Auto-populated from cross-session analysis]\n\n`;
+          patternContent += `### Related Files\n`;
+          patternContent += `- [Auto-populated from cross-session analysis]\n\n`;
+          patternContent += `### Bug-Prone Areas\n`;
+          patternContent += `- [Auto-populated from cross-session analysis]\n`;
+          
+          content = content.slice(0, insertPos) + patternContent + content.slice(insertPos);
+        }
+      } else {
+        // Update existing section with pattern insights
+        const sectionStart = patternsIndex;
+        
+        // Find the end of this section (next ## or footer)
+        let sectionEnd = content.indexOf('\n## ', sectionStart + 1);
+        if (sectionEnd === -1) sectionEnd = content.indexOf('\n---\n', sectionStart);
+        if (sectionEnd === -1) sectionEnd = content.length;
+        
+        const oldSection = content.slice(sectionStart, sectionEnd);
+        
+        // Build new section with pattern insights
+        let newSection = `### Typical Session Duration\n`;
+        newSection += `- [Auto-populated from session analysis]\n\n`;
+        newSection += `### Common Commands\n`;
+        
+        // Extract common commands from recurring themes
+        const commandThemes = patterns.recurringThemes.filter(t => 
+          t.pattern.includes('test') || t.pattern.includes('deploy') || 
+          t.pattern.includes('config') || t.pattern.includes('api')
+        );
+        if (commandThemes.length > 0) {
+          for (const theme of commandThemes.slice(0, 3)) {
+            const cmd = theme.pattern.split(': ')[1];
+            newSection += `- **${cmd}:** seen in ${theme.frequency} sessions\n`;
+          }
+        } else {
+          newSection += `- [Auto-populated from session analysis]\n`;
+        }
+        
+        newSection += `\n### Recurring Themes\n`;
+        if (patterns.recurringThemes.length > 0) {
+          for (const theme of patterns.recurringThemes.slice(0, 5)) {
+            newSection += `- **${theme.pattern}:** ${theme.frequency} sessions\n`;
+          }
+        } else {
+          newSection += `- [Auto-populated from cross-session analysis]\n`;
+        }
+        
+        newSection += `\n### Related Files\n`;
+        if (patterns.relatedFiles.length > 0) {
+          for (const file of patterns.relatedFiles.slice(0, 5)) {
+            newSection += `- **${file.pattern}:** ${file.frequency} sessions\n`;
+          }
+        } else {
+          newSection += `- [Auto-populated from cross-session analysis]\n`;
+        }
+        
+        newSection += `\n### Bug-Prone Areas\n`;
+        if (patterns.bugPatterns.length > 0) {
+          for (const bug of patterns.bugPatterns.slice(0, 5)) {
+            newSection += `- **${bug.pattern}:** ${bug.frequency} occurrences\n`;
+          }
+        } else {
+          newSection += `- [Auto-populated from cross-session analysis]\n`;
+        }
+        
+        content = content.slice(0, sectionStart) + newSection + content.slice(sectionEnd);
+      }
+      
+      await atomicWrite(filePath, content);
+      logger(`[Intelligence] Updated pattern insights: ${patterns.recurringThemes.length} themes, ${patterns.bugPatterns.length} bug patterns`);
+    } catch (error) {
+      logger(`[Intelligence] Error updating pattern insights: ${error.message}`);
     }
   });
   

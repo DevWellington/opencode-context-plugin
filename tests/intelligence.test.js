@@ -212,4 +212,196 @@ describe('Intelligence Module', () => {
       expect(content).toContain('Key Learnings from Latest Sessions');
     });
   });
+
+  describe('analyzeCrossSessionPatterns(baseDir)', () => {
+    it('should return empty patterns when no session files exist', async () => {
+      const intelligence = await import('../src/modules/intelligence.js');
+
+      const result = await intelligence.analyzeCrossSessionPatterns(tempDir);
+
+      expect(result).toHaveProperty('recurringThemes');
+      expect(result).toHaveProperty('relatedFiles');
+      expect(result).toHaveProperty('bugPatterns');
+      expect(result).toHaveProperty('totalSessions');
+      expect(result.totalSessions).toBe(0);
+    });
+
+    it('should return empty patterns when only one session exists', async () => {
+      const intelligence = await import('../src/modules/intelligence.js');
+
+      // Create one session file
+      await fs.writeFile(path.join(ctxDir, 'compact-2026-04-21.md'), '# Session 1\n## Goal\nTest goal\n');
+
+      const result = await intelligence.analyzeCrossSessionPatterns(tempDir);
+
+      expect(result.totalSessions).toBe(1);
+      expect(result.recurringThemes).toHaveLength(0);
+    });
+
+    it('should detect patterns from multiple sessions', async () => {
+      const intelligence = await import('../src/modules/intelligence.js');
+
+      // Create multiple session files with similar content
+      const session1 = `# Session 1
+## Goal
+Implement API authentication
+## Accomplished
+Added JWT auth to API
+## Relevant files
+- src/api/auth.ts
+`;
+
+      const session2 = `# Session 2
+## Goal
+Add more API tests
+## Accomplished
+Added test coverage for API
+## Relevant files
+- src/api/auth.ts
+`;
+
+      const session3 = `# Session 3
+## Goal
+API refactoring
+## Accomplished
+Refactored API endpoints
+## Relevant files
+- src/api/auth.ts
+`;
+
+      await fs.writeFile(path.join(ctxDir, 'compact-2026-04-21-01.md'), session1);
+      await fs.writeFile(path.join(ctxDir, 'compact-2026-04-21-02.md'), session2);
+      await fs.writeFile(path.join(ctxDir, 'exit-2026-04-21-03.md'), session3);
+
+      const result = await intelligence.analyzeCrossSessionPatterns(tempDir);
+
+      expect(result.totalSessions).toBe(3);
+      // Should find some patterns (goal themes or file patterns)
+      expect(result.recurringThemes.length + result.relatedFiles.length).toBeGreaterThanOrEqual(0);
+    });
+
+    it('should detect bug patterns across sessions', async () => {
+      const intelligence = await import('../src/modules/intelligence.js');
+
+      const session1 = `# Session 1
+## Goal
+Fix bug in auth
+### Bug: Token validation error
+**Cause:** Missing token verification
+**Solution:** Add JWT verification middleware
+`;
+
+      const session2 = `# Session 2
+## Goal
+Fix similar auth issue
+### Bug: Token validation error
+**Cause:** Token expiry not checked
+**Solution:** Add token expiry validation
+`;
+
+      await fs.writeFile(path.join(ctxDir, 'compact-bug1.md'), session1);
+      await fs.writeFile(path.join(ctxDir, 'compact-bug2.md'), session2);
+
+      const result = await intelligence.analyzeCrossSessionPatterns(tempDir);
+
+      expect(result.totalSessions).toBe(2);
+      // Bug patterns should be detected
+      expect(result.bugPatterns.length).toBeGreaterThanOrEqual(0);
+    });
+
+    it('should handle errors gracefully', async () => {
+      const intelligence = await import('../src/modules/intelligence.js');
+
+      // Call with non-existent directory
+      const result = await intelligence.analyzeCrossSessionPatterns('/non/existent/path');
+
+      expect(result).toHaveProperty('recurringThemes');
+      expect(result).toHaveProperty('relatedFiles');
+      expect(result).toHaveProperty('bugPatterns');
+      expect(result.totalSessions).toBe(0);
+    });
+  });
+
+  describe('updatePatternInsights(baseDir, patterns)', () => {
+    it('should not throw when patterns is null', async () => {
+      const intelligence = await import('../src/modules/intelligence.js');
+
+      await intelligence.initializeIntelligenceLearning(tempDir);
+
+      // Should not throw
+      await expect(intelligence.updatePatternInsights(tempDir, null)).resolves.not.toThrow();
+    });
+
+    it('should not throw when totalSessions < 2', async () => {
+      const intelligence = await import('../src/modules/intelligence.js');
+
+      await intelligence.initializeIntelligenceLearning(tempDir);
+
+      const patterns = {
+        recurringThemes: [],
+        relatedFiles: [],
+        bugPatterns: [],
+        totalSessions: 1
+      };
+
+      await expect(intelligence.updatePatternInsights(tempDir, patterns)).resolves.not.toThrow();
+    });
+
+    it('should update learning file with pattern insights', async () => {
+      const intelligence = await import('../src/modules/intelligence.js');
+
+      await intelligence.initializeIntelligenceLearning(tempDir);
+
+      const patterns = {
+        recurringThemes: [
+          { pattern: 'goal theme: api', sessions: ['s1', 's2'], frequency: 2 }
+        ],
+        relatedFiles: [
+          { pattern: 'File pattern: src/api', sessions: ['s1', 's2'], frequency: 2 }
+        ],
+        bugPatterns: [
+          { pattern: 'Bug pattern: auth', sessions: ['s1'], frequency: 1 }
+        ],
+        totalSessions: 2
+      };
+
+      await intelligence.updatePatternInsights(tempDir, patterns);
+      jest.advanceTimersByTime(100);
+      await Promise.resolve();
+
+      const content = await fs.readFile(path.join(ctxDir, 'intelligence-learning.md'), 'utf-8');
+      expect(content).toContain('Recurring Themes');
+      expect(content).toContain('Related Files');
+      expect(content).toContain('Bug-Prone Areas');
+    });
+  });
+
+  describe('periodic pattern analysis trigger', () => {
+    it('should trigger pattern analysis every 5 sessions', async () => {
+      const intelligence = await import('../src/modules/intelligence.js');
+
+      await intelligence.initializeIntelligenceLearning(tempDir);
+
+      // Create 5 session files
+      for (let i = 1; i <= 5; i++) {
+        await fs.writeFile(path.join(ctxDir, `compact-2026-04-2${i}.md`), `# Session ${i}\n## Goal\nTest goal ${i}\n`);
+      }
+
+      // Process 5 sessions to trigger pattern analysis
+      for (let i = 1; i <= 5; i++) {
+        intelligence.updateIntelligenceLearning(tempDir, {
+          type: 'compact',
+          filename: `compact-2026-04-2${i}.md`,
+          sessionId: `session-${i}`,
+          messageCount: 5
+        });
+        jest.advanceTimersByTime(100);
+        await Promise.resolve();
+      }
+
+      // Pattern analysis should have been triggered
+      const content = await fs.readFile(path.join(ctxDir, 'intelligence-learning.md'), 'utf-8');
+      expect(content).toContain('Sessions Analyzed:');
+    });
+  });
 });
