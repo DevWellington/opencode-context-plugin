@@ -126,8 +126,8 @@ Plans:
 4. Tests mock OpenCode client, not global.fetch
 
 **Plans:** 2 plans (created)
-- [ ] 06-01-PLAN.md: Replace callOpenAI with callOpenCodeAI using client.sessions.prompt()
-- [ ] 06-02-PLAN.md: Update callers to pass OpenCode client through the module chain
+- [x] 06-01-PLAN.md: Replace callOpenAI with callOpenCodeAI using client.sessions.prompt()
+- [x] 06-02-PLAN.md: Update callers to pass OpenCode client through the module chain
 
 ---
 
