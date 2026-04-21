@@ -70,51 +70,43 @@ Plans:
 
 </details>
 
-### 🚧 v1.3 Agent System (Phase 5)
+### 🚧 v1.3 Agent System (Phase 5) - COMPLETED but FLAWED
+⚠️ **REMEDIATION IN PROGRESS** - Implementation verified but produces wrong output (counts instead of content)
 
-**Milestone Goal:** Create an agent system for file generation and reading with Obsidian-style linking. Enable intelligent context aggregation across time periods and maintain project intelligence through historical bug tracking.
+**Original Goal:** Create agents for reading and generating contextual files with Obsidian-style linking
 
-#### Phase 5: Agent System & Obsidian Integration
-**Goal**: Create agents for reading and generating contextual files with Obsidian-style linking
-**Depends on**: Phase 4
-**Requirements**: AGENT-01, AGENT-02, AGENT-03, AGENT-04, AGENT-05, INTEL-01, INTEL-02
-**Success Criteria** (what must be TRUE):
-  1. Agents generate files using Obsidian-style keywords for cross-linking
-  2. Agents can read generated files with customizable output (summary/all)
-  3. Intelligence-learning file updates automatically on context generation
-  4. All file operations follow SOLID principles
-  5. @ocp-help provides comprehensive agent documentation
+**Problem Found:** Phase 5 was completed and verified (7/7 must-haves), but research revealed reports generate:
+- ❌ Counts ("12 sessions, 847 messages") instead of accomplishments
+- ❌ Word frequency ("context, plugin, session") instead of actual topics
+- ❌ Fake bug tracking (keyword detection) instead of real bug history
 
-**Plans:**
-6/6 plans complete
-- [x] 05-01: Create @ocp-generate-* agents (today, weekly, monthly)
-- [x] 05-02: Create @ocp-read-* agents with --summary/--all parameters
-- [x] 05-03: Implement @ocp-generate-intelligence-learning with historical tracking
-- [x] 05-04: Implement @ocp-read-intelligence-learning agent
-- [x] 05-05: Add @ocp-help agent with full documentation
-- [x] 05-06: Auto-generate reports on /exit or /compact
+**Remediation:** New phase 05 (Content-Focused Reports) will fix content extraction and output formats
 
-**Agent Commands:**
-| Agent | Description |
-|-------|-------------|
-| `@ocp-generate-today` | Generate today's context summary |
-| `@ocp-read-today [--summary\|--all]` | Read today's summary (default: --summary) |
-| `@ocp-generate-weekly` | Generate weekly summary |
-| `@ocp-read-weekly [--summary\|--all]` | Read weekly summary |
-| `@ocp-generate-monthly` | Generate monthly summary |
-| `@ocp-read-monthly [--summary\|--all]` | Read monthly summary |
-| `@ocp-generate-annual` | Generate annual summary |
-| `@ocp-read-annual [--summary\|--all]` | Read annual summary |
-| `@ocp-generate-intelligence-learning` | Update intelligence-learning with new context |
-| `@ocp-read-intelligence-learning [--summary\|--all]` | Read intelligence learning file |
-| `@ocp-help` | Display help for all agents and functionalities |
+---
 
-**Intelligence Learning Rules:**
-- Read all reference files (today, weekly, etc.) before generating updates
-- Generate only summary content to avoid information overload
-- Update intelligence-learning on every file generation
-- Track historical bugs and patterns to prevent recurring failures
-- Use keywords: project name, methods, variables, environment variables
+### 📋 v1.4 Content-Focused Reports (Phase 05) - REMEDIATION
+
+**Milestone Goal:** Generate meaningful reports that extract structured content from sessions
+
+**Why:** Current Phase 5 produces technically correct but practically useless output
+
+**Depends on:** Phase 5 (original)
+**Requirements:** CONTENT-01, CONTENT-02, CONTENT-03, CONTENT-04, CONTENT-05
+
+**Success Criteria (what must be TRUE):**
+  1. Monthly reports show Major Accomplishments, not counts
+  2. Annual reports show Quarterly Themes, not just statistics table
+  3. Intelligence learning tracks bugs with symptom/cause/solution/prevention
+  4. Reports extract structured fields (Goal, Accomplished, Discoveries)
+  5. Cross-session pattern detection works
+
+**Plans:** 4 plans (created)
+- [x] 05-01-PLAN.md: Create contentExtractor.js module
+- [x] 05-02-PLAN.md: Redesign reportGenerator for content distillation
+- [x] 05-03-PLAN.md: Redesign intelligence learning
+- [x] 05-04-PLAN.md: Update agents to use new content extraction
+
+**Research:** See `.planning/research/REMEDIATION.md` for full remediation plan
 
 ---
 
@@ -160,6 +152,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 3. Context Injection Optimization | v1.2 | 3/3 | Complete | 2026-04-21 |
 | 4. Advanced Search & Retrieval | v2.0 | 3/3 | Complete | 2026-04-21 |
 | 5. Agent System & Obsidian Integration | v1.3 | 6/6 | Complete | 2026-04-21 |
+| 5. Content-Focused Reports | v1.4 | 1/4 | Planning | - |
 | 6. Multi-Project Support | v2.1 | 0/4 | Not started | - |
 | 7. Dashboard & UI | Future | 0/TBD | Not started | - |
 | 8. AI-Powered Insights | Future | 0/TBD | Not started | - |

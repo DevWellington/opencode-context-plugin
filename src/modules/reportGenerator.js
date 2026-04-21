@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 /**
  * Report generator module
- * Generates weekly, monthly, and custom activity reports from session data
+ * Generates content-focused reports from session data using contentExtractor
  */
 
 import fs from 'fs/promises';
 import path from 'path';
 import matter from 'gray-matter';
-import { searchSessions, getIndexStats } from './searchIndexer.js';
+import { extractSessionContent, extractBugs, findPatterns } from './contentExtractor.js';
 
 const CONTEXT_SESSION_DIR = '.opencode/context-session';
 const REPORTS_DIR = '.opencode/context-session/reports';
@@ -27,7 +27,6 @@ function getWeekNumber(date) {
  * Get start and end dates for a week
  */
 function getWeekRange(year, week) {
-  // ISO week starts on Monday
   const simple = new Date(year, 0, 1 + (week - 1) * 7);
   const dow = simple.getDay();
   const isoWeekStart = simple;
@@ -55,55 +54,27 @@ function getMonthRange(year, month) {
 }
 
 /**
- * Extract text content from context file (same as searchIndexer)
+ * Get start and end dates for a year (full year)
  */
-function extractText(content) {
-  const withoutFrontmatter = content.replace(/^---[\s\S]*?---\n?/m, '');
-  return withoutFrontmatter
-    .replace(/#{1,6}\s/g, '')
-    .replace(/\*\*(.+?)\*\*/g, '$1')
-    .replace(/\*(.+?)\*/g, '$1')
-    .replace(/`(.+?)`/g, '$1')
-    .replace(/\[(.+?)\]\(.+?\)/g, '$1')
-    .trim();
-}
-
-/**
- * Extract structured content from session file body
- */
-function extractSessionContent(content) {
-  // Extract message count from body (NOT in frontmatter)
-  const msgCountMatch = content.match(/\*\*Message Count:\*\*\s*(\d+)/);
-  const messageCount = msgCountMatch ? parseInt(msgCountMatch[1], 10) : 0;
-
-  // Extract first user message
-  const firstUserMatch = content.match(/### Message \d+ \[user\]\n\n(.+?)(?=\n###|\n\n##|$)/s);
-  const firstUserMessage = firstUserMatch ? firstUserMatch[1].trim().slice(0, 150) : '';
-
-  // Extract structured summary from compact sessions
-  const goalMatch = content.match(/\*\*Goal:\*\*\s*(.+?)(?=\n\n|\*\*|$)/s);
-  const accomplishedMatch = content.match(/\*\*Accomplished:\*\*\s*(.+?)(?=\n\n|\*\*|$)/s);
-  const discoveriesMatch = content.match(/\*\*Discoveries:\*\*\s*(.+?)(?=\n\n|\*\*|$)/s);
-
-  let summary = '';
-  if (goalMatch) {
-    summary = goalMatch[1].trim();
-  } else if (accomplishedMatch) {
-    summary = accomplishedMatch[1].trim();
-  }
-
-  const discoveries = discoveriesMatch ? discoveriesMatch[1].trim() : '';
-
+function getYearRange(year) {
   return {
-    messageCount,
-    firstUserMessage,
-    summary,
-    discoveries
+    start: `${year}-01-01`,
+    end: `${year}-12-31`
   };
 }
 
 /**
- * Parse session file metadata
+ * Get quarter from month number (1-12)
+ */
+function getQuarter(month) {
+  if (month >= 1 && month <= 3) return 'Q1';
+  if (month >= 4 && month <= 6) return 'Q2';
+  if (month >= 7 && month <= 9) return 'Q3';
+  return 'Q4';
+}
+
+/**
+ * Parse session file and enrich with contentExtractor data
  */
 async function parseSessionFile(filePath) {
   try {
@@ -119,18 +90,21 @@ async function parseSessionFile(filePath) {
     const dateMatch = filename.match(/(\d{4}-\d{2}-\d{2})/);
     const date = dateMatch ? dateMatch[1] : null;
 
-    // Extract structured content from body
-    const { messageCount, firstUserMessage, summary, discoveries } = extractSessionContent(content);
+    // Extract structured content using contentExtractor
+    const extracted = extractSessionContent(content);
+    const bugs = extractBugs(content);
 
     return {
       filename,
       type,
       date,
       title: parsed.data?.title || filename,
-      messageCount,
-      firstUserMessage,
-      summary,
-      discoveries
+      goal: extracted.goal,
+      accomplished: extracted.accomplished,
+      discoveries: extracted.discoveries,
+      relevantFiles: extracted.relevantFiles,
+      bugs,
+      patterns: []
     };
   } catch (error) {
     return null;
@@ -138,7 +112,7 @@ async function parseSessionFile(filePath) {
 }
 
 /**
- * Scan for session files in date range
+ * Scan for session files in date range - returns enriched session objects
  */
 export async function scanSessionsInRange(directory, startDate, endDate) {
   const sessions = [];
@@ -154,7 +128,6 @@ export async function scanSessionsInRange(directory, startDate, endDate) {
         if (entry.isDirectory()) {
           await scanDir(fullPath);
         } else if ((entry.name.startsWith('exit-') || entry.name.startsWith('compact-')) && entry.name.endsWith('.md')) {
-          // Check if file date is in range
           const dateMatch = entry.name.match(/(\d{4}-\d{2}-\d{2})/);
           if (dateMatch) {
             const fileDate = dateMatch[1];
@@ -173,22 +146,47 @@ export async function scanSessionsInRange(directory, startDate, endDate) {
   }
 
   await scanDir(baseDir);
+
+  // Find patterns across sessions
+  if (sessions.length >= 2) {
+    const patterns = findPatterns(sessions.map(s => ({
+      sessionId: s.filename,
+      content: s.goal || s.accomplished || s.discoveries || ''
+    })));
+    sessions.forEach(s => {
+      s.patterns = patterns.filter(p => p.sessions.includes(s.filename));
+    });
+  }
+
   return sessions.sort((a, b) => (a.date || '').localeCompare(b.date || ''));
 }
 
 /**
- * Group sessions by day
+ * Group sessions by week number
  */
-function groupByDay(sessions) {
-  const byDay = {};
+function groupByWeek(sessions) {
+  const byWeek = {};
   for (const session of sessions) {
-    const day = session.date || 'unknown';
-    if (!byDay[day]) {
-      byDay[day] = [];
-    }
-    byDay[day].push(session);
+    if (!session.date) continue;
+    const week = getWeekNumber(new Date(session.date));
+    if (!byWeek[week]) byWeek[week] = [];
+    byWeek[week].push(session);
   }
-  return byDay;
+  return byWeek;
+}
+
+/**
+ * Group sessions by quarter
+ */
+function groupByQuarter(sessions) {
+  const byQuarter = { Q1: [], Q2: [], Q3: [], Q4: [] };
+  for (const session of sessions) {
+    if (!session.date) continue;
+    const month = parseInt(session.date.split('-')[1], 10);
+    const quarter = getQuarter(month);
+    byQuarter[quarter].push(session);
+  }
+  return byQuarter;
 }
 
 /**
@@ -201,72 +199,135 @@ function getDayName(dateStr) {
 }
 
 /**
- * Generate weekly activity report with tree content structure
+ * Aggregate accomplishments across sessions - deduplicate similar items
  */
-export async function generateWeeklyReport(directory, weekStart) {
-  const date = weekStart ? new Date(weekStart) : new Date();
-  const year = date.getFullYear();
-  const week = getWeekNumber(date);
-  const { start, end } = getWeekRange(year, week);
+function aggregateAccomplishments(sessions) {
+  const accomplishments = [];
 
-  const sessions = await scanSessionsInRange(directory, start, end);
-
-  // Calculate totals
-  const totalSessions = sessions.length;
-  const exitSessions = sessions.filter(s => s.type === 'exit').length;
-  const compactSessions = sessions.filter(s => s.type === 'compact').length;
-  const totalMessages = sessions.reduce((sum, s) => sum + (s.messageCount || 0), 0);
-
-  // Group by day
-  const byDay = groupByDay(sessions);
-
-  // Build tree report
-  let report = `# Weekly Activity Report - Week ${week}, ${year}\n\n`;
-  report += `**Period:** ${start} to ${end}\n\n`;
-  report += `## Summary\n\n`;
-  report += `- **Total Sessions:** ${totalSessions} (${exitSessions} exit, ${compactSessions} compact)\n`;
-  report += `- **Total Messages:** ${totalMessages}\n`;
-  report += `- **Average Messages/Session:** ${totalSessions > 0 ? Math.round(totalMessages / totalSessions) : 0}\n\n`;
-
-  // Key Work Areas - extract from session content
-  const workKeywords = sessions
-    .flatMap(s => (s.summary || s.firstUserMessage || '').split(/[\s,]+/)
-      .filter(w => w.length > 5 && !/^\d+$/.test(w)))
-    .slice(0, 8);
-  const uniqueKeywords = [...new Set(workKeywords)];
-  if (uniqueKeywords.length > 0) {
-    report += `## Key Work Areas\n\n`;
-    report += uniqueKeywords.map(k => `- ${k}`).join('\n') + '\n\n';
-  }
-
-  // Daily breakdown with actual content
-  report += `## Daily Breakdown\n\n`;
-  for (const [day, daySessions] of Object.entries(byDay).sort()) {
-    const dayName = getDayName(day);
-    report += `### ${day} (${dayName})\n\n`;
-    for (const session of daySessions) {
-      const icon = session.type === 'exit' ? '🚪' : '📦';
-      report += `${icon} **${session.title || session.filename}**\n`;
-      if (session.firstUserMessage) {
-        report += `   → "${session.firstUserMessage}"\n`;
-      }
-      if (session.summary) {
-        report += `   ✓ ${session.summary.slice(0, 100)}${session.summary.length > 100 ? '...' : ''}\n`;
-      }
+  for (const session of sessions) {
+    if (session.accomplished) {
+      accomplishments.push({
+        text: session.accomplished,
+        date: session.date,
+        source: session.filename
+      });
     }
-    report += '\n';
   }
 
-  report += `---\n*Report generated on ${new Date().toISOString()}*\n`;
+  // Deduplicate similar accomplishments (simple check for now)
+  const unique = [];
+  const seen = new Set();
 
-  return report;
+  for (const acc of accomplishments) {
+    // Use first 50 chars as key for deduplication
+    const key = acc.text.slice(0, 50).toLowerCase().trim();
+    if (!seen.has(key) && key.length > 5) {
+      seen.add(key);
+      unique.push(acc);
+    }
+  }
+
+  return unique;
 }
 
 /**
- * Generate monthly activity report with tree content structure
+ * Aggregate bugs across sessions
+ */
+function aggregateBugs(sessions) {
+  const allBugs = [];
+
+  for (const session of sessions) {
+    for (const bug of session.bugs) {
+      allBugs.push({
+        ...bug,
+        date: session.date,
+        source: session.filename
+      });
+    }
+  }
+
+  return allBugs;
+}
+
+/**
+ * Extract decisions mentioned in sessions
+ */
+function extractDecisions(sessions) {
+  const decisions = [];
+
+  for (const session of sessions) {
+    // Look for decision-related keywords in accomplishments or discoveries
+    const content = [session.accomplished, session.discoveries, session.goal]
+      .filter(Boolean)
+      .join(' ');
+
+    // Simple decision detection - look for specific patterns
+    const decisionPatterns = [
+      /decided to ([\w\s]+)/i,
+      /chose to ([\w\s]+)/i,
+      /using ([\w\s]+) for/i,
+      /went with ([\w\s]+)/i,
+      /opted for ([\w\s]+)/i
+    ];
+
+    for (const pattern of decisionPatterns) {
+      const match = content.match(pattern);
+      if (match) {
+        decisions.push({
+          text: match[0],
+          date: session.date,
+          source: session.filename
+        });
+      }
+    }
+  }
+
+  // Also include any session that has structured content as potential decision context
+  for (const session of sessions) {
+    if (session.goal && !decisions.some(d => d.source === session.filename)) {
+      decisions.push({
+        text: `Goal: ${session.goal.slice(0, 100)}`,
+        date: session.date,
+        source: session.filename
+      });
+    }
+  }
+
+  return decisions;
+}
+
+/**
+ * Generate executive summary for monthly report
+ */
+function generateExecutiveSummary(sessions, monthName, year) {
+  const totalSessions = sessions.length;
+
+  if (totalSessions === 0) {
+    return `No sessions recorded during ${monthName} ${year}.`;
+  }
+
+  // Build summary from top accomplishments
+  const accomplishments = aggregateAccomplishments(sessions);
+  const bugs = aggregateBugs(sessions);
+
+  let summary = `${totalSessions} session${totalSessions !== 1 ? 's' : ''} worked on this month.`;
+
+  if (accomplishments.length > 0) {
+    const topAccomplishment = accomplishments[0].text;
+    summary += ` Key work included: ${topAccomplishment.slice(0, 100)}.`;
+  }
+
+  if (bugs.length > 0) {
+    summary += ` ${bugs.length} issue${bugs.length !== 1 ? 's' : ''} were resolved.`;
+  }
+
+  return summary;
+}
+
+/**
+ * Generate monthly content-focused report
  */
 export async function generateMonthlyReport(directory, monthYear) {
-  // Parse monthYear (format: '2026-04' or just use current month)
   let year, month;
   if (monthYear && monthYear.includes('-')) {
     [year, month] = monthYear.split('-').map(Number);
@@ -279,60 +340,117 @@ export async function generateMonthlyReport(directory, monthYear) {
   const { start, end } = getMonthRange(year, month);
   const sessions = await scanSessionsInRange(directory, start, end);
 
-  // Calculate totals
-  const totalSessions = sessions.length;
-  const exitSessions = sessions.filter(s => s.type === 'exit').length;
-  const compactSessions = sessions.filter(s => s.type === 'compact').length;
-  const totalMessages = sessions.reduce((sum, s) => sum + (s.messageCount || 0), 0);
-
-  // Group by Week > Day
-  const byWeek = {};
-  for (const session of sessions) {
-    const sessionWeek = getWeekNumber(new Date(session.date));
-    const day = session.date;
-    if (!byWeek[sessionWeek]) byWeek[sessionWeek] = {};
-    if (!byWeek[sessionWeek][day]) byWeek[sessionWeek][day] = [];
-    byWeek[sessionWeek][day].push(session);
-  }
-
-  // Build tree report
   const monthName = new Date(year, month - 1).toLocaleString('default', { month: 'long' });
-  let report = `# Monthly Activity Report - ${monthName} ${year}\n\n`;
-  report += `**Period:** ${start} to ${end}\n\n`;
-  report += `## Summary\n\n`;
-  report += `- **Total Sessions:** ${totalSessions} (${exitSessions} exit, ${compactSessions} compact)\n`;
-  report += `- **Total Messages:** ${totalMessages}\n`;
-  report += `- **Average Messages/Session:** ${totalSessions > 0 ? Math.round(totalMessages / totalSessions) : 0}\n\n`;
+  const byWeek = groupByWeek(sessions);
 
-  // Key Work Areas - extract from session content
-  const workKeywords = sessions
-    .flatMap(s => (s.summary || s.firstUserMessage || '').split(/[\s,]+/)
-      .filter(w => w.length > 5 && !/^\d+$/.test(w)))
-    .slice(0, 10);
-  const uniqueKeywords = [...new Set(workKeywords)];
-  if (uniqueKeywords.length > 0) {
-    report += `## Key Work Areas\n\n`;
-    report += uniqueKeywords.map(k => `- ${k}`).join('\n') + '\n\n';
-  }
+  // Gather all data
+  const accomplishments = aggregateAccomplishments(sessions);
+  const bugs = aggregateBugs(sessions);
+  const decisions = extractDecisions(sessions);
+  const allFiles = sessions.flatMap(s => s.relevantFiles || []).filter(Boolean);
+  const uniqueFiles = [...new Set(allFiles)];
 
-  // Tree: Month > Week > Day > Session
-  for (const [week, days] of Object.entries(byWeek).sort((a, b) => Number(a[0]) - Number(b[0]))) {
-    report += `## Week ${week}\n\n`;
-    for (const [day, daySessions] of Object.entries(days).sort()) {
-      const dayName = getDayName(day);
-      report += `### ${day} (${dayName})\n\n`;
-      for (const session of daySessions) {
-        const icon = session.type === 'exit' ? '🚪' : '📦';
-        report += `${icon} **${session.title || session.filename}**\n`;
-        if (session.firstUserMessage) {
-          report += `   → "${session.firstUserMessage}"\n`;
-        }
-        if (session.summary) {
-          report += `   ✓ ${session.summary.slice(0, 100)}${session.summary.length > 100 ? '...' : ''}\n`;
-        }
+  // Build report with frontmatter
+  let report = '---\n';
+  report += `title: "${monthName} ${year} Monthly Report"\n`;
+  report += `created: "${new Date().toISOString()}"\n`;
+  report += `period: "${start} to ${end}"\n`;
+  report += `keywords: [monthly-report, ${monthName.toLowerCase()}, ${year}]\n`;
+  report += '---\n\n';
+
+  report += `# Monthly Report - ${monthName} ${year}\n\n`;
+  report += `**Period:** ${start} to ${end}\n`;
+  report += `**Sessions:** ${sessions.length}\n\n`;
+
+  // Executive Summary
+  report += `## Executive Summary\n\n`;
+  report += `${generateExecutiveSummary(sessions, monthName, year)}\n\n`;
+
+  // Major Accomplishments
+  report += `## Major Accomplishments\n\n`;
+  if (accomplishments.length > 0) {
+    for (const acc of accomplishments.slice(0, 10)) {
+      report += `- ${acc.text}`;
+      if (acc.date) {
+        report += ` (${acc.date})`;
       }
       report += '\n';
     }
+  } else {
+    report += `- No specific accomplishments recorded\n`;
+  }
+  report += '\n';
+
+  // Issues Resolved
+  report += `## Issues Resolved\n\n`;
+  if (bugs.length > 0) {
+    for (const bug of bugs) {
+      report += `### ${bug.symptom || 'Issue'}\n\n`;
+      if (bug.solution) {
+        report += `**Solution:** ${bug.solution}\n\n`;
+      }
+      if (bug.cause) {
+        report += `**Cause:** ${bug.cause}\n\n`;
+      }
+      if (bug.prevention) {
+        report += `**Prevention:** ${bug.prevention}\n\n`;
+      }
+      report += `*Resolved: ${bug.date || 'unknown'}*\n\n`;
+    }
+  } else {
+    report += `No issues requiring resolution were recorded this month.\n\n`;
+  }
+
+  // Decisions Made
+  report += `## Decisions Made\n\n`;
+  if (decisions.length > 0) {
+    for (const decision of decisions.slice(0, 5)) {
+      report += `- ${decision.text}`;
+      if (decision.date) {
+        report += ` (${decision.date})`;
+      }
+      report += '\n';
+    }
+  } else {
+    report += `No explicit decisions recorded.\n\n`;
+  }
+  report += '\n';
+
+  // Week-by-Week Breakdown
+  report += `## Week-by-Week Breakdown\n\n`;
+  const sortedWeeks = Object.keys(byWeek).sort((a, b) => Number(a) - Number(b));
+  for (const week of sortedWeeks) {
+    const weekSessions = byWeek[week];
+    const weekAccomplishments = aggregateAccomplishments(weekSessions);
+    const weekBugs = aggregateBugs(weekSessions);
+
+    report += `### Week ${week}\n\n`;
+    report += `- **Sessions:** ${weekSessions.length}\n`;
+
+    if (weekAccomplishments.length > 0) {
+      report += `- **Top Accomplishments:**\n`;
+      for (const acc of weekAccomplishments.slice(0, 3)) {
+        report += `  - ${acc.text.slice(0, 80)}${acc.text.length > 80 ? '...' : ''}\n`;
+      }
+    }
+
+    if (weekBugs.length > 0) {
+      report += `- **Issues Resolved:** ${weekBugs.length}\n`;
+      for (const bug of weekBugs.slice(0, 2)) {
+        report += `  - ${bug.symptom}: ${bug.solution ? bug.solution.slice(0, 50) : 'Resolved'}\n`;
+      }
+    }
+
+    report += '\n';
+  }
+
+  // Files Modified
+  if (uniqueFiles.length > 0) {
+    report += `## Files Modified\n\n`;
+    for (const file of uniqueFiles.slice(0, 20)) {
+      report += `- ${file}\n`;
+    }
+    report += '\n';
   }
 
   report += `---\n*Report generated on ${new Date().toISOString()}*\n`;
@@ -341,54 +459,172 @@ export async function generateMonthlyReport(directory, monthYear) {
 }
 
 /**
- * Generate activity report for custom date range
+ * Generate annual content-focused report with quarterly themes
  */
-export async function generateActivityReport(directory, options = {}) {
-  const { startDate, endDate } = options;
+export async function generateAnnualReport(directory, year) {
+  const { start, end } = getYearRange(year);
+  const sessions = await scanSessionsInRange(directory, start, end);
+  const byQuarter = groupByQuarter(sessions);
 
-  if (!startDate || !endDate) {
-    throw new Error('startDate and endDate are required for activity reports');
+  // Gather all data
+  const bugs = aggregateBugs(sessions);
+  const allFiles = sessions.flatMap(s => s.relevantFiles || []).filter(Boolean);
+  const uniqueFiles = [...new Set(allFiles)];
+
+  // Determine annual theme from top accomplishments
+  const allAccomplishments = aggregateAccomplishments(sessions);
+  const topAccomplishments = allAccomplishments.slice(0, 5);
+
+  // Build report with frontmatter
+  let report = '---\n';
+  report += `title: "${year} Annual Report"\n`;
+  report += `created: "${new Date().toISOString()}"\n`;
+  report += `year: "${year}"\n`;
+  report += `keywords: [annual-report, ${year}, yearly-summary]\n`;
+  report += '---\n\n';
+
+  report += `# Annual Report - ${year}\n\n`;
+  report += `**Total Sessions:** ${sessions.length}\n\n`;
+
+  // Annual Theme
+  report += `## Annual Theme\n\n`;
+  if (topAccomplishments.length > 0) {
+    report += `**Major Accomplishments:**\n\n`;
+    for (const acc of topAccomplishments) {
+      report += `- ${acc.text}`;
+      if (acc.date) {
+        report += ` (${acc.date})`;
+      }
+      report += '\n';
+    }
+    report += '\n';
+  } else {
+    report += `Year focused on continued development and maintenance.\n\n`;
   }
 
-  const sessions = await scanSessionsInRange(directory, startDate, endDate);
+  // Quarterly Themes
+  report += `## Quarterly Themes\n\n`;
+  const quarterNames = ['Q1 (Jan-Mar)', 'Q2 (Apr-Jun)', 'Q3 (Jul-Sep)', 'Q4 (Oct-Dec)'];
+  const quarters = ['Q1', 'Q2', 'Q3', 'Q4'];
 
-  // Calculate totals
-  const totalSessions = sessions.length;
-  const exitSessions = sessions.filter(s => s.type === 'exit').length;
-  const compactSessions = sessions.filter(s => s.type === 'compact').length;
-  const totalMessages = sessions.reduce((sum, s) => sum + (s.messageCount || 0), 0);
-  const totalTokens = sessions.reduce((sum, s) => sum + (s.tokenCount || 0), 0);
+  for (let i = 0; i < quarters.length; i++) {
+    const quarter = quarters[i];
+    const quarterSessions = byQuarter[quarter];
+    const quarterAccomplishments = aggregateAccomplishments(quarterSessions);
+    const quarterBugs = aggregateBugs(quarterSessions);
 
-  // Top keywords
-  const topKeywords = analyzeKeywords(sessions, 20);
-  const keywordLines = topKeywords.map(k => `- ${k.word} (${k.count} sessions)`);
+    report += `### ${quarterNames[i]}\n\n`;
+    report += `- **Sessions:** ${quarterSessions.length}\n`;
 
-  // Build markdown report
-  let report = `# Activity Report\n\n`;
-  report += `**Period:** ${startDate} to ${endDate}\n\n`;
+    if (quarterAccomplishments.length > 0) {
+      report += `- **Top Accomplishments:**\n`;
+      for (const acc of quarterAccomplishments.slice(0, 3)) {
+        report += `  - ${acc.text.slice(0, 80)}${acc.text.length > 80 ? '...' : ''}\n`;
+      }
+    }
+
+    if (quarterBugs.length > 0) {
+      report += `- **Issues Resolved:** ${quarterBugs.length}\n`;
+    }
+
+    report += '\n';
+  }
+
+  // Project Evolution
+  report += `## Project Evolution\n\n`;
+  report += `### Milestone Timeline\n\n`;
+  if (sessions.length > 0) {
+    // Group by month for milestones
+    const byMonth = {};
+    for (const session of sessions) {
+      if (!session.date) continue;
+      const monthKey = session.date.slice(0, 7); // YYYY-MM
+      if (!byMonth[monthKey]) byMonth[monthKey] = [];
+      byMonth[monthKey].push(session);
+    }
+
+    const sortedMonths = Object.keys(byMonth).sort();
+    for (const month of sortedMonths) {
+      const monthSessions = byMonth[month];
+      const monthAccomplishments = aggregateAccomplishments(monthSessions);
+      const monthName = new Date(month + '-01').toLocaleString('default', { month: 'long' });
+
+      report += `- **${monthName}:** ${monthSessions.length} session${monthSessions.length !== 1 ? 's' : ''}`;
+      if (monthAccomplishments.length > 0) {
+        report += ` - ${monthAccomplishments[0].text.slice(0, 60)}${monthAccomplishments[0].text.length > 60 ? '...' : ''}`;
+      }
+      report += '\n';
+    }
+  } else {
+    report += `No sessions recorded for ${year}.\n`;
+  }
+  report += '\n';
+
+  // Bug History
+  report += `## Bug History\n\n`;
+  if (bugs.length > 0) {
+    report += `| Bug | Symptom | Solution | Date |\n`;
+    report += `|-----|---------|----------|------|\n`;
+    for (const bug of bugs.slice(0, 15)) {
+      const symptom = (bug.symptom || 'Unknown').slice(0, 30);
+      const solution = (bug.solution || 'Resolved').slice(0, 30);
+      report += `| ${bug.source || 'unknown'} | ${symptom} | ${solution} | ${bug.date || '-'} |\n`;
+    }
+  } else {
+    report += `No bugs recorded for ${year}.\n\n`;
+  }
+
+  // Summary Statistics (as supplemental)
   report += `## Summary Statistics\n\n`;
-  report += `- **Total Sessions:** ${totalSessions}\n`;
-  report += `- **Exit Sessions:** ${exitSessions}\n`;
-  report += `- **Compact Sessions:** ${compactSessions}\n`;
-  report += `- **Total Messages:** ${totalMessages}\n`;
-  report += `- **Total Tokens:** ~${totalTokens.toLocaleString()}\n\n`;
+  report += `- **Total Sessions:** ${sessions.length}\n`;
+  report += `- **Total Issues Resolved:** ${bugs.length}\n`;
+  report += `- **Unique Files Modified:** ${uniqueFiles.length}\n`;
+  report += `- **Q1 Sessions:** ${byQuarter.Q1.length} | **Q2 Sessions:** ${byQuarter.Q2.length} | **Q3 Sessions:** ${byQuarter.Q3.length} | **Q4 Sessions:** ${byQuarter.Q4.length}\n\n`;
 
-  if (keywordLines.length > 0) {
-    report += `## Top Topics Discussed\n\n`;
-    report += keywordLines.join('\n') + '\n\n';
-  }
+  report += `---\n*Report generated on ${new Date().toISOString()}*\n`;
 
-  report += `## Session Details\n\n`;
+  return report;
+}
+
+/**
+ * Generate weekly activity report (legacy, kept for compatibility)
+ */
+export async function generateWeeklyReport(directory, weekStart) {
+  const date = weekStart ? new Date(weekStart) : new Date();
+  const year = date.getFullYear();
+  const week = getWeekNumber(date);
+  const { start, end } = getWeekRange(year, week);
+
+  const sessions = await scanSessionsInRange(directory, start, end);
+  const byDay = {};
+
   for (const session of sessions) {
-    const typeIcon = session.type === 'exit' ? '🚪' : '📦';
-    report += `### ${typeIcon} ${session.title || session.filename}\n\n`;
-    report += `- **Date:** ${session.date}\n`;
-    report += `- **Type:** ${session.type}\n`;
-    report += `- **Messages:** ${session.messageCount || 0}\n`;
-    report += `- **Tokens:** ~${(session.tokenCount || 0).toLocaleString()}\n\n`;
+    const day = session.date || 'unknown';
+    if (!byDay[day]) byDay[day] = [];
+    byDay[day].push(session);
   }
 
-  report += `\n---\n*Report generated on ${new Date().toISOString()}*\n`;
+  let report = `# Weekly Activity Report - Week ${week}, ${year}\n\n`;
+  report += `**Period:** ${start} to ${end}\n\n`;
+  report += `## Sessions\n\n`;
+
+  for (const [day, daySessions] of Object.entries(byDay).sort()) {
+    const dayName = getDayName(day);
+    report += `### ${day} (${dayName})\n\n`;
+    for (const session of daySessions) {
+      const icon = session.type === 'exit' ? '🚪' : '📦';
+      report += `${icon} **${session.title || session.filename}**\n`;
+      if (session.goal) {
+        report += `   → Goal: ${session.goal.slice(0, 80)}${session.goal.length > 80 ? '...' : ''}\n`;
+      }
+      if (session.accomplished) {
+        report += `   ✓ ${session.accomplished.slice(0, 80)}${session.accomplished.length > 80 ? '...' : ''}\n`;
+      }
+    }
+    report += '\n';
+  }
+
+  report += `---\n*Report generated on ${new Date().toISOString()}*\n`;
 
   return report;
 }
@@ -430,12 +666,10 @@ export async function needsReportGeneration(directory, reportType) {
 
   try {
     const stat = await fs.stat(reportPath);
-    // Report exists and is less than a day old - might need update
     const ageMs = now.getTime() - stat.mtime.getTime();
     const oneDayMs = 24 * 60 * 60 * 1000;
     return ageMs > oneDayMs;
   } catch {
-    // Report doesn't exist
     return true;
   }
 }
