@@ -124,6 +124,16 @@ async function saveContext(directory, session, type = 'compact') {
     // Update week summary (idempotent, safe to call every time)
     await updateWeekSummary(directory, year, month, week);
     
+    // Update intelligence learning file
+    const learningSessionInfo = {
+      type,
+      filename,
+      timestamp: new Date().toISOString(),
+      sessionId: summary.sessionId,
+      messageCount: summary.messageCount
+    };
+    await updateIntelligenceLearning(directory, learningSessionInfo);
+    
     debugLog(`[Daily Summary] Updated with ${filename}`);
     
     return { savedFilePath: filepath, summariesUpdated: true };
@@ -517,7 +527,7 @@ async function updateIntelligenceLearning(baseDir, sessionInfo) {
         // Append before the footer
         const footerIndex = content.indexOf('---\n*Auto-generated');
         if (footerIndex !== -1) {
-          const newEntry = `\n### Session ${sessionsAnalyzed} - ${sessionInfo.type.toUpperCase()}\n`;
+          let newEntry = `\n### Session ${sessionsAnalyzed} - ${sessionInfo.type.toUpperCase()}\n`;
           newEntry += `- **Date:** ${sessionInfo.timestamp || new Date().toISOString()}\n`;
           newEntry += `- **Session ID:** ${sessionInfo.sessionId || 'unknown'}\n`;
           newEntry += `- **Messages:** ${sessionInfo.messageCount || 0} messages\n`;
@@ -540,7 +550,7 @@ async function updateIntelligenceLearning(baseDir, sessionInfo) {
         }
         
         // Add new entry
-        const newEntry = `\n### Session ${sessionsAnalyzed} - ${sessionInfo.type.toUpperCase()}\n`;
+        let newEntry = `\n### Session ${sessionsAnalyzed} - ${sessionInfo.type.toUpperCase()}\n`;
         newEntry += `- **Date:** ${sessionInfo.timestamp || new Date().toISOString()}\n`;
         newEntry += `- **Session ID:** ${sessionInfo.sessionId || 'unknown'}\n`;
         newEntry += `- **Messages:** ${sessionInfo.messageCount || 0} messages\n`;
