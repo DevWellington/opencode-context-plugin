@@ -146,19 +146,40 @@ Plans:
   4. Contexts can optionally sync to remote storage
 
 Plans:
-- [x] 07-01-PLAN.md: Create global intelligence learning file (planned)
-- [x] 07-02-PLAN.md: Implement cross-project context linking (planned)
-- [x] 07-03-PLAN.md: Add project templates from learnings (planned)
+- [x] 07-01-PLAN.md: Create global intelligence learning file (completed)
+- [x] 07-02-PLAN.md: Implement cross-project context linking (completed)
+- [ ] 07-03-PLAN.md: Add project templates from learnings (planned)
 - [x] 07-04-PLAN.md: Add remote storage sync (optional) (planned)
 
 ---
 
-### 📋 Future Vision (Phases 8-9)
+### 📋 v1.2.1 Manual Context Injection (Phase 8)
 
-#### Phase 8: Dashboard & UI
+**Milestone Goal:** Add user-triggered manual context injection via /inject command and @ocp-inject agent
+
+**Why:** Currently context injection only happens automatically on session start. Users need a way to manually request context injection at any time during a session.
+
+**Depends on**: Phase 3 (Context Injection)
+**Requirements**: INJECT-03
+
+**Success Criteria** (what must be TRUE):
+1. User can type /inject in OpenCode to see available contexts with scores
+2. User can type /inject N to inject specific context
+3. @ocp-inject agent is installed and functional
+4. Existing auto-injection on session start is not broken
+5. Manual injection works at any point during session
+
+Plans:
+- [ ] 08-01-PLAN.md: Add /inject command and @ocp-inject agent for manual injection
+
+---
+
+### 📋 Future Vision (Phases 9-10)
+
+#### Phase 9: Dashboard & UI
 **Goal**: Visual interface for browsing and managing sessions
 
-#### Phase 9: AI-Powered Insights
+#### Phase 10: AI-Powered Insights
 **Goal**: Automatic pattern detection and recommendations
 
 ## Progress
@@ -175,9 +196,10 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 5. Agent System & Obsidian Integration | v1.3 | 6/6 | Complete | 2026-04-21 |
 | 5. Content-Focused Reports | v1.4 | 4/4 | Complete | 2026-04-21 |
 | 6. OpenCode Internal AI | v1.5 | 2/2 | Complete | 2026-04-21 |
-| 7. Multi-Project Support | v2.1 | 1/4 | Planning | 2026-04-21 |
-| 8. Dashboard & UI | Future | 0/TBD | Not started | - |
-| 9. AI-Powered Insights | Future | 0/TBD | Not started | - |
+| 7. Multi-Project Support | v2.1 | 2/4 | In Progress | 2026-04-21 |
+| 8. Manual Context Injection | v1.2.1 | 0/1 | Planned | - |
+| 9. Dashboard & UI | Future | 0/TBD | Not started | - |
+| 10. AI-Powered Insights | Future | 0/TBD | Not started | - |
 
 ## Design Principles
 

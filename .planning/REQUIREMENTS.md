@@ -49,7 +49,7 @@ Requirements for initial release. Each maps to roadmap phases.
 - [ ] **MULTI-01**: Global intelligence learning file
 - [x] **MULTI-02**: Cross-project context linking
 - [ ] **MULTI-03**: Project templates based on learnings
-- [ ] **MULTI-04**: Sync contexts to remote storage (optional)
+- [x] **MULTI-04**: Sync contexts to remote storage (optional)
 
 ## v2 Requirements (Future)
 
@@ -108,7 +108,7 @@ Which phases cover which requirements.
 | MULTI-01 | Phase 5 | Pending |
 | MULTI-02 | Phase 5 | Complete |
 | MULTI-03 | Phase 5 | Pending |
-| MULTI-04 | Phase 5 | Pending |
+| MULTI-04 | Phase 5 | Complete |
 | UI-01 | Phase 6 | Future |
 | UI-02 | Phase 6 | Future |
 | AI-01 | Phase 7 | Future |

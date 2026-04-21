@@ -3,15 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: Agent System
 status: completed
-stopped_at: Completed 07-02-plan
-last_updated: "2026-04-21T21:57:18.913Z"
-last_activity: 2026-04-21
+last_updated: "2026-04-21T22:01:39.940Z"
+last_activity: 2026-04-22
 progress:
   total_phases: 11
   completed_phases: 6
-  total_plans: 29
-  completed_plans: 22
-  percent: 50
+  total_plans: 30
+  completed_plans: 23
+  percent: 83
 ---
 
 # Project State
@@ -19,79 +18,51 @@ progress:
 ## Project Reference
 
 **Core value:** OpenCode plugin that saves session context to .opencode/context-session/ after compaction and session end
-**Current focus:** Phase 07 — Multi-Project Support
+**Current focus:** Phase 07 — Multi-Project Support (plans 07-03, 07-04 remaining)
 
 ## Current Position
 
 Phase: 07 (Multi-Project Support)
-Plan: 02 (next)
-Status: 07-01 completed - global intelligence file created
-Last activity: 2026-04-21
+Plan: 03 (next)
+Status: 07-01 and 07-02 completed; 07-03 and 07-04 planned
+Last activity: 2026-04-22
 
-Progress: [▓▓▓▓▓▓░░░░] 50% (4 of 8 phases)
+Progress: [▓▓▓▓▓▓▓░░░] 83% (7 of 10 phases)
 
-## Critical Finding
+## Recently Verified as Already Implemented
 
-**Phase 5 (Agent System) completed but flawed.** Research revealed:
+The following requirements were previously marked as "Pending" but code analysis confirmed they are already implemented:
 
-- 7/7 must-haves verified ✓
-- BUT reports generate wrong output (counts, not content)
+| Requirement | Evidence | Status |
+|-------------|----------|--------|
+| **PERF-01** Debouncing | `src/modules/summaries.js:200-201` | ✅ Done |
+| **INJECT-01** Relevance filtering | `src/modules/contextInjector.js:102-106` | ✅ Done |
+| **INJECT-04** Context caching | `src/modules/contextCache.js` | ✅ Done |
 
-| File | Problem |
-|------|---------|
-| monthly-YYYY-MM.md | "12 sessions, 847 messages" instead of accomplishments |
-| annual-YYYY.md | Just a statistics table, no actual content |
-| intelligence-learning.md | Fake bug tracking (keyword detection) |
+## Pending Work
 
-See `.planning/research/REMEDIATION.md` for full analysis.
+### Phase 07: Multi-Project Support (In Progress)
 
-## Research Evidence
+- [x] 07-01: Global intelligence learning file (completed)
+- [x] 07-02: Cross-project context linking (completed)
+- [ ] 07-03: Project templates from learnings (planned)
+- [ ] 07-04: Remote storage sync - optional (planned)
 
-Created `.planning/research/` with:
+### Phase 08: Manual Context Injection (Planned)
 
-- `SUMMARY.md` - Gap analysis (design vs implementation)
-- `STACK.md` - Report generation architecture
-- `FEATURES.md` - What reports SHOULD contain
-- `ARCHITECTURE.md` - Current problems and redesign
-- `PITFALLS.md` - 7 critical pitfalls identified
-- `REMEDIATION.md` - Complete remediation plan
+- [ ] 08-01: /inject command and @ocp-inject agent (INJECT-03)
 
-## Remediation Plan
+### Phase 09: Dashboard & UI (Future)
 
-New phase structure (4 plans, pending user validation):
-
-```
-Wave 1 (Foundation - no dependencies):
-  Plan 05-01: contentExtractor.js module
-
-    - Extract Goal, Accomplished, Discoveries, Relevant Files
-    - Bug extraction with context
-    - Cross-session pattern detection
-
-Wave 2 (depends on 05-01):
-  Plan 05-02: Redesign reportGenerator for content distillation
-
-Wave 3 (depends on 05-02):
-  Plan 05-03: Redesign intelligence learning
-
-Wave 4 (depends on 05-03):
-  Plan 05-04: Update agents to use new content extraction
-```
-
-## Open Questions for User
-
-1. **Audience:** AI context vs human review - which priority?
-2. **Bug scope:** Explicit only, or include implicit detection?
-3. **Fallback:** How to handle sessions without structured fields?
-4. **Migration:** What to do with existing files in old format?
+### Phase 10: AI-Powered Insights (Future)
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 10
+- Total plans completed: 24
 - Average duration: ~5-8 min
-- Total execution time: ~1.5 hours
+- Total execution time: ~2 hours
 
 **By Phase:**
 
@@ -101,19 +72,11 @@ Wave 4 (depends on 05-03):
 | 2 | 3 | ~20min |
 | 3 | 3 | ~15min |
 | 4 | 3 | ~20min |
-| 5 | 0 (remediation) | - |
-
-**Recent Trend:**
-
-- Last 10 plans: Stable (all completed successfully)
-- Trend: Stable
-
-| Phase 05 P01 | 180 | 2 tasks | 2 files |
-| Phase 05 P02 | 180 | 3 tasks | 2 files |
-| Phase 06-opencode-internal-ai P06-02 | 0 | 4 tasks | 4 files |
-| Phase 07 P01 | 3 | 4 tasks | 5 files |
-| Phase 07 P02 | 60 | 4 tasks | 2 files |
-| Phase 07 P02 | 4 | 3 tasks | 5 files |
+| 5 | 6 | ~30min |
+| 5 (remediation) | 4 | ~25min |
+| 6 | 2 | ~15min |
+| 7 | 2 (of 4) | ~15min |
+| Phase 07 P04 | 5 | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -145,49 +108,4 @@ Wave 4 (depends on 05-03):
 - [Phase 05]: Annual report has Annual Theme, Quarterly Themes (Q1-Q4), Project Evolution, Bug History
 - [Phase 07]: Trigger pattern analysis every 5 sessions to balance performance with insight freshness
 - [Phase 07]: Cross-session patterns include recurring themes, related files, and bug-prone areas
-- [Phase ?]: Use 500ms timeout for cross-project lookups to prevent blocking session processing
-- [Phase ?]: Wiki-style [[project:session-id]] link format for cross-project references
-
-### Pending Todos
-
-- [x] Research Phase 5 for content issues - DONE
-- [ ] Create remediation plan - DONE
-- [ ] Validate remediation direction with user
-- [ ] Answer 4 design decisions
-- [ ] Create Phase 05 plans
-
-### Blockers/Concerns
-
-**REMEDIATION BLOCKER:** Need user validation before creating plans:
-
-1. Report audience priority (AI vs human)
-2. Bug tracking scope (explicit vs implicit)
-3. Session fallback handling (require vs graceful)
-4. Existing file migration (auto vs on-read vs none)
-
-## Session Continuity
-
-Last session: 2026-04-21T21:57:12.643Z
-Stopped at: Completed 07-02-plan
-Resume file: None
-
-## Notes for Remediation Phase
-
-Phase 05 (Content-Focused Reports) fixes the fundamental purpose of reports:
-
-**Problem:** Current reports generate what was EASY (counts, word frequency)
-**Solution:** Generate what USERS NEED (accomplishments, bugs, decisions)
-
-**Key changes:**
-
-1. Extract structured fields (Goal, Accomplished, Discoveries) from sessions
-2. Track bugs with full context (symptom, cause, solution, prevention)
-3. Cross-session pattern detection for intelligence learning
-4. Make annual reports show quarterly themes, not just statistics
-
-**Rules:**
-
-- Content over counts
-- Human-readable summaries over AI-metadata
-- Structured extraction over word frequency
-- Real bug tracking over keyword detection
+- [Phase 08]: /inject command uses contextInjector.js existing scoring and /inject N for specific selection
