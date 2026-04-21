@@ -1,23 +1,59 @@
-import fs from "fs";
+import fs from "fs/promises";
 import path from "path";
+import { getWeek, getWeekYear } from "date-fns";
 
 const LOG_FILE = path.join(process.env.HOME || '', '.opencode-context-plugin.log');
-const CONTEXTOS_DIR = '.opencode/contextos';
+const CONTEXT_SESSION_DIR = '.opencode/context-session';
+const OLD_CONTEXTOS_DIR = '.opencode/contextos';
 
 function debugLog(message) {
-  try {
-    const timestamp = new Date().toISOString();
-    fs.appendFileSync(LOG_FILE, `[${timestamp}] ${message}\n`);
-  } catch (e) {}
+  // Debug logging is best-effort, don't block on errors
+  const timestamp = new Date().toISOString();
+  fs.appendFile(LOG_FILE, `[${timestamp}] ${message}\n`).catch(() => {});
 }
 
-function ensureContextosDir(directory) {
-  const ctxDir = path.join(directory, CONTEXTOS_DIR);
-  if (!fs.existsSync(ctxDir)) {
-    fs.mkdirSync(ctxDir, { recursive: true });
+async function ensureContextSessionDir(directory) {
+  const ctxDir = path.join(directory, CONTEXT_SESSION_DIR);
+  try {
+    await fs.access(ctxDir);
+  } catch {
+    await fs.mkdir(ctxDir, { recursive: true });
     debugLog(`[context-plugin] Created directory: ${ctxDir}`);
   }
   return ctxDir;
+}
+
+async function ensureHierarchicalDir(baseDir) {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const weekNum = getWeek(now, { weekStartsOn: 1, firstWeekContainsDate: 4 });
+  const week = `W${String(weekNum).padStart(2, '0')}`;
+  const day = String(now.getDate()).padStart(2, '0');
+  
+  const dirPath = path.join(baseDir, CONTEXT_SESSION_DIR, String(year), month, week, day);
+  
+  await fs.mkdir(dirPath, { recursive: true });
+  debugLog(`[context-plugin] Created hierarchical directory: ${dirPath}`);
+  
+  return { dirPath, year, month, week, day };
+}
+
+async function atomicWrite(filePath, content) {
+  const dir = path.dirname(filePath);
+  const tempFile = path.join(dir, `.tmp-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+  
+  try {
+    await fs.writeFile(tempFile, content, 'utf-8');
+    await fs.rename(tempFile, filePath);
+    debugLog(`[context-plugin] Atomic write completed: ${filePath}`);
+  } catch (error) {
+    // Clean up temp file on error
+    try {
+      await fs.unlink(tempFile);
+    } catch {}
+    throw error;
+  }
 }
 
 function getTimestamp() {
@@ -43,16 +79,16 @@ function extractSessionSummary(session) {
   };
 }
 
-function saveContext(directory, session, prefix = 'compact') {
+async function saveContext(directory, session, type = 'compact') {
   try {
-    const ctxDir = ensureContextosDir(directory);
+    const ctxDir = await ensureContextSessionDir(directory);
     const timestamp = getTimestamp();
-    const filename = `${prefix}-${timestamp}.md`;
+    const filename = `${type}-${timestamp}.md`;
     const filepath = path.join(ctxDir, filename);
     
     const summary = extractSessionSummary(session);
     
-    let content = `# Session Context - ${prefix.toUpperCase()}\n\n`;
+    let content = `# Session Context - ${type.toUpperCase()}\n\n`;
     content += `**Session ID:** ${summary.sessionId}\n`;
     content += `**Slug:** ${summary.slug}\n`;
     content += `**Title:** ${summary.title}\n`;
@@ -67,7 +103,7 @@ function saveContext(directory, session, prefix = 'compact') {
       content += `${preview}\n\n`;
     });
     
-    fs.writeFileSync(filepath, content);
+    await atomicWrite(filepath, content);
     debugLog(`[context-plugin] Saved context to: ${filepath}`);
     console.log(`[context-plugin] Context saved: ${filename}`);
     
@@ -79,30 +115,94 @@ function saveContext(directory, session, prefix = 'compact') {
   }
 }
 
-function loadPreviousContexts(directory, limit = 5) {
+async function loadPreviousContexts(directory, limit = 5) {
   try {
-    const ctxDir = path.join(directory, CONTEXTOS_DIR);
-    if (!fs.existsSync(ctxDir)) {
+    const ctxDir = path.join(directory, CONTEXT_SESSION_DIR);
+    try {
+      await fs.access(ctxDir);
+    } catch {
       return [];
     }
     
-    const files = fs.readdirSync(ctxDir)
+    const files = await fs.readdir(ctxDir);
+    const mdFiles = files
       .filter(f => f.endsWith('.md'))
       .sort()
       .reverse()
       .slice(0, limit);
     
-    const contexts = files.map(file => {
-      const filepath = path.join(ctxDir, file);
-      const content = fs.readFileSync(filepath, 'utf-8');
-      return { file, content };
-    });
+    const contexts = await Promise.all(
+      mdFiles.map(async (file) => {
+        const filepath = path.join(ctxDir, file);
+        const content = await fs.readFile(filepath, 'utf-8');
+        return { file, content };
+      })
+    );
     
     debugLog(`[context-plugin] Loaded ${contexts.length} previous contexts`);
     return contexts;
   } catch (error) {
     debugLog(`[context-plugin] Error loading contexts: ${error.message}`);
     return [];
+  }
+}
+
+async function migrateContextFiles(directory) {
+  const oldDir = path.join(directory, OLD_CONTEXTOS_DIR);
+  const newDir = path.join(directory, CONTEXT_SESSION_DIR);
+  
+  try {
+    // Check if old directory exists
+    try {
+      await fs.access(oldDir);
+    } catch {
+      // Old directory doesn't exist, no migration needed
+      return;
+    }
+    
+    // Check if new directory already exists (migration already done)
+    try {
+      await fs.access(newDir);
+      debugLog(`[context-plugin] New directory already exists, skipping migration`);
+      return;
+    } catch {
+      // New directory doesn't exist, proceed with migration
+    }
+    
+    debugLog(`[context-plugin] Starting migration from ${oldDir} to ${newDir}`);
+    
+    // Create new directory
+    await fs.mkdir(newDir, { recursive: true });
+    
+    // Read old directory contents
+    const oldFiles = await fs.readdir(oldDir);
+    const mdFiles = oldFiles.filter(f => f.endsWith('.md'));
+    
+    let migratedCount = 0;
+    for (const file of mdFiles) {
+      const oldPath = path.join(oldDir, file);
+      // Rename saida- to exit-
+      const newFileName = file.replace(/^saida-/, 'exit-');
+      const newPath = path.join(newDir, newFileName);
+      
+      try {
+        await fs.rename(oldPath, newPath);
+        migratedCount++;
+        debugLog(`[context-plugin] Migrated: ${file} → ${newFileName}`);
+      } catch (error) {
+        debugLog(`[context-plugin] Failed to migrate ${file}: ${error.message}`);
+      }
+    }
+    
+    // Rename old directory to .deprecated
+    const deprecatedDir = path.join(directory, '.opencode/.deprecated');
+    await fs.rename(oldDir, deprecatedDir);
+    
+    debugLog(`[context-plugin] Migration complete: ${migratedCount}/${mdFiles.length} files migrated`);
+    console.log(`[context-plugin] Migrated ${migratedCount} context files to new structure`);
+  } catch (error) {
+    debugLog(`[context-plugin] Migration error: ${error.message}`);
+    // Don't block plugin initialization on migration failure
   }
 }
 
@@ -131,7 +231,9 @@ export default async (input) => {
   debugLog(`[context-plugin] Loaded for: ${directory}`);
   console.log(`[context-plugin] Context Plugin loaded`);
   
-  ensureContextosDir(directory);
+  // Perform migration before ensuring new directory exists
+  await migrateContextFiles(directory);
+  await ensureContextSessionDir(directory);
   
   return {
     "event": async (eventInput) => {
@@ -209,7 +311,7 @@ export default async (input) => {
       if (eventType === "session.compacted" || eventType === "experimental.compaction.autocontinue") {
         debugLog('[context-plugin] session.compacted event received - saving context');
         if (lastSession) {
-          saveContext(directory, lastSession, 'compact');
+          await saveContext(directory, lastSession, 'compact');
         } else {
           debugLog('[context-plugin] No lastSession available for compact save');
         }
@@ -218,7 +320,7 @@ export default async (input) => {
       if (eventType === "session.end" || eventType === "server.instance.disposed") {
         debugLog('[context-plugin] Session ending - saving final context');
         if (lastSession) {
-          saveContext(directory, lastSession, 'saida');
+          await saveContext(directory, lastSession, 'exit');
         }
       }
     },
@@ -234,7 +336,7 @@ export default async (input) => {
       
       if (isFirstMessage) {
         debugLog('[context-plugin] First message detected - injecting context');
-        const contexts = loadPreviousContexts(directory, 5);
+        const contexts = await loadPreviousContexts(directory, 5);
         
         if (contexts.length > 0) {
           const injection = buildContextInjection(contexts);
