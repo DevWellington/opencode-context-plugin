@@ -81,7 +81,8 @@ function extractSessionSummary(session) {
 
 async function saveContext(directory, session, type = 'compact') {
   try {
-    const { dirPath } = await ensureHierarchicalDir(directory);
+    const pathComponents = await ensureHierarchicalDir(directory);
+    const { dirPath, year, month, week, day } = pathComponents;
     const timestamp = getTimestamp();
     const filename = `${type}-${timestamp}.md`;
     const filepath = path.join(dirPath, filename);
@@ -107,11 +108,103 @@ async function saveContext(directory, session, type = 'compact') {
     debugLog(`[context-plugin] Saved context to: ${filepath}`);
     console.log(`[context-plugin] Context saved: ${filename}`);
     
+    // Update day summary
+    await updateDaySummary(dirPath, { type, filename, year, month, day });
+    
+    // Update week summary (idempotent, safe to call every time)
+    await updateWeekSummary(directory, year, month, week);
+    
     return filepath;
   } catch (error) {
     debugLog(`[context-plugin] Error saving context: ${error.message}`);
     console.error(`[context-plugin] Error saving context: ${error.message}`);
     return null;
+  }
+}
+
+async function updateDaySummary(dirPath, sessionInfo) {
+  try {
+    const summaryPath = path.join(dirPath, 'day-summary.md');
+    
+    // Read existing summary or create new
+    let content = '';
+    try {
+      content = await fs.readFile(summaryPath, 'utf-8');
+    } catch (e) {
+      // File doesn't exist yet
+      content = `# Day Summary\n\n`;
+      content += `**Date:** ${sessionInfo.year}-${sessionInfo.month}-${sessionInfo.day}\n\n`;
+      content += `## Sessions\n\n`;
+    }
+    
+    // Append new session info
+    const timestamp = new Date().toISOString();
+    const type = sessionInfo.type === 'compact' ? '📦 Compact' : '🚪 Exit';
+    const entry = `- [${timestamp}] ${type}: ${sessionInfo.filename}\n`;
+    
+    // Check if already recorded (idempotency)
+    if (!content.includes(sessionInfo.filename)) {
+      content += entry;
+      await atomicWrite(summaryPath, content);
+      debugLog(`[context-plugin] Updated day summary: ${summaryPath}`);
+    }
+  } catch (error) {
+    debugLog(`[context-plugin] Error updating day summary: ${error.message}`);
+    // Don't fail session save if summary update fails
+  }
+}
+
+async function updateWeekSummary(baseDir, year, month, week) {
+  try {
+    const weekDir = path.join(baseDir, CONTEXT_SESSION_DIR, String(year), month, week);
+    const summaryPath = path.join(weekDir, 'week-summary.md');
+    
+    // Read day directories
+    let dayDirs = [];
+    try {
+      const entries = await fs.readdir(weekDir, { withFileTypes: true });
+      dayDirs = entries
+        .filter(d => d.isDirectory() && /^\d{2}$/.test(d.name))
+        .map(d => d.name)
+        .sort();
+    } catch (e) {
+      debugLog(`[context-plugin] Error reading week directory: ${e.message}`);
+      return;
+    }
+    
+    // Generate week summary from day folders
+    let content = `# Week ${week} Summary\n\n`;
+    content += `**Period:** ${year}-${month}\n`;
+    content += `**Week:** ${week}\n\n`;
+    content += `## Days\n\n`;
+    
+    for (const dayDir of dayDirs) {
+      const dayPath = path.join(weekDir, dayDir);
+      let files = [];
+      try {
+        files = await fs.readdir(dayPath);
+      } catch (e) {
+        continue;
+      }
+      
+      const compacts = files.filter(f => f.startsWith('compact-')).length;
+      const exits = files.filter(f => f.startsWith('exit-')).length;
+      const summaries = files.filter(f => f.endsWith('-summary.md')).length;
+      
+      content += `### Day ${dayDir}\n\n`;
+      content += `- 📦 Compact files: ${compacts}\n`;
+      content += `- 🚪 Exit files: ${exits}\n`;
+      content += `- 📄 Summary files: ${summaries}\n\n`;
+    }
+    
+    content += `## Summary\n\n`;
+    content += `Total days with sessions: ${dayDirs.length}\n`;
+    
+    await atomicWrite(summaryPath, content);
+    debugLog(`[context-plugin] Updated week summary: ${summaryPath}`);
+  } catch (error) {
+    debugLog(`[context-plugin] Error updating week summary: ${error.message}`);
+    // Don't fail session save if summary update fails
   }
 }
 
@@ -356,4 +449,4 @@ export default async (input) => {
 };
 
 // Export helper functions for testing and external use
-export { ensureHierarchicalDir, ensureContextSessionDir, atomicWrite, saveContext, loadPreviousContexts };
+export { ensureHierarchicalDir, ensureContextSessionDir, atomicWrite, saveContext, loadPreviousContexts, updateDaySummary, updateWeekSummary };
