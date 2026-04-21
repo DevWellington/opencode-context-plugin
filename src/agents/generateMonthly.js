@@ -11,7 +11,7 @@
 
 import path from 'path';
 import fs from 'fs/promises';
-import { generateMonthlyReport } from '../../modules/reportGenerator.js';
+import { generateMonthlyReport } from '../modules/reportGenerator.js';
 import { buildKeywords, addRelatedLinks, extractKeywordsFromContent, REPORTS_DIR } from './utils/linkBuilder.js';
 
 export async function generateMonthlySummary(directory, monthDate) {

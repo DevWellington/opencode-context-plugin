@@ -11,7 +11,7 @@
 
 import path from 'path';
 import fs from 'fs/promises';
-import { scanSessionsInRange } from '../../modules/reportGenerator.js';
+import { scanSessionsInRange } from '../modules/reportGenerator.js';
 import { formatFileHeader, addRelatedLinks, buildKeywords, extractKeywordsFromContent, REPORTS_DIR } from './utils/linkBuilder.js';
 
 export async function generateAnnualSummary(directory, year) {

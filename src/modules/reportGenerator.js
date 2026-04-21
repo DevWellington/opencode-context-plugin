@@ -120,7 +120,7 @@ async function parseSessionFile(filePath) {
 /**
  * Scan for session files in date range
  */
-async function scanSessionsInRange(directory, startDate, endDate) {
+export async function scanSessionsInRange(directory, startDate, endDate) {
   const sessions = [];
   const baseDir = path.join(directory, CONTEXT_SESSION_DIR);
 

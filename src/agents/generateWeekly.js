@@ -11,7 +11,7 @@
 
 import path from 'path';
 import fs from 'fs/promises';
-import { generateWeeklyReport } from '../../modules/reportGenerator.js';
+import { generateWeeklyReport } from '../modules/reportGenerator.js';
 import { buildKeywords, addRelatedLinks, extractKeywordsFromContent, REPORT_PATHS, REPORTS_DIR } from './utils/linkBuilder.js';
 
 export async function generateWeeklySummary(directory, weekDate) {

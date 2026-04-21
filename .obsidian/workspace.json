@@ -4,17 +4,21 @@
     "type": "split",
     "children": [
       {
-        "id": "8f08c2f75deb78a4",
+        "id": "3f90a57aee8dd9f9",
         "type": "tabs",
         "children": [
           {
-            "id": "4cafde55264da22f",
+            "id": "ce929405d8a45ca9",
             "type": "leaf",
             "state": {
-              "type": "graph",
-              "state": {},
-              "icon": "lucide-git-fork",
-              "title": "Visualização em gráfico"
+              "type": "markdown",
+              "state": {
+                "file": "docs/examples.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "examples"
             }
           }
         ]
@@ -90,6 +94,7 @@
             "state": {
               "type": "backlink",
               "state": {
+                "file": "docs/examples.md",
                 "collapseAll": false,
                 "extraContext": false,
                 "sortOrder": "alphabetical",
@@ -99,7 +104,7 @@
                 "unlinkedCollapsed": true
               },
               "icon": "links-coming-in",
-              "title": "Links inversos"
+              "title": "Links inversos para examples"
             }
           },
           {
@@ -108,11 +113,12 @@
             "state": {
               "type": "outgoing-link",
               "state": {
+                "file": "docs/examples.md",
                 "linksCollapsed": false,
                 "unlinkedCollapsed": true
               },
               "icon": "links-going-out",
-              "title": "Links de saída"
+              "title": "Links de saída para examples"
             }
           },
           {
@@ -150,12 +156,13 @@
             "state": {
               "type": "outline",
               "state": {
+                "file": "docs/examples.md",
                 "followCursor": false,
                 "showSearch": false,
                 "searchQuery": ""
               },
               "icon": "lucide-list",
-              "title": "Sumário"
+              "title": "Sumário de examples"
             }
           }
         ]
@@ -176,30 +183,30 @@
       "bases:Criar nova base": false
     }
   },
-  "active": "4cafde55264da22f",
+  "active": "b1d19a192ebca643",
   "lastOpenFiles": [
-    "src/cli/report.js",
-    "src/modules/reportGenerator.js",
+    "docs/examples.md",
+    "node_modules/gray-matter/README.md",
+    "Sem título.canvas",
+    "src/agents/index.js",
+    "src/agents/ocpHelp.js",
+    "src/agents/readAnnual.js",
+    "src/agents/readMonthly.js",
+    "src/agents/readWeekly.js",
+    "src/agents/readToday.js",
+    "src/agents/generateAnnual.js",
+    "src/agents/readIntelligenceLearning.js",
+    "src/agents/generateMonthly.js",
+    "src/agents/generateIntelligenceLearning.js",
     "node_modules/section-matter/README.md",
-    "node_modules/section-matter/LICENSE",
-    "node_modules/section-matter/index.js",
-    "node_modules/section-matter/package.json",
     "node_modules/kind-of/README.md",
     "node_modules/kind-of/CHANGELOG.md",
-    "node_modules/kind-of/package.json",
-    "node_modules/kind-of/index.js",
-    "node_modules/kind-of/LICENSE",
-    "node_modules/gray-matter/gray-matter.d.ts",
-    "node_modules/gray-matter/README.md",
     "node_modules/gray-matter/CHANGELOG.md",
-    "node_modules/gray-matter/package.json",
-    "node_modules/gray-matter/index.js",
     "node_modules/extend-shallow/README.md",
     "node_modules/strip-bom-string/README.md",
     "node_modules/is-extendable/README.md",
     "node_modules/fsevents/README.md",
     "node_modules/yargs/README.md",
-    "docs/examples.md",
     "node_modules/ms/license.md"
   ]
 }

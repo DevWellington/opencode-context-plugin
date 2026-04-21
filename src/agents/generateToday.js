@@ -11,7 +11,7 @@
 import path from 'path';
 import fs from 'fs/promises';
 import { formatFileHeader, addRelatedLinks, buildKeywords, extractKeywordsFromContent, REPORT_PATHS } from './utils/linkBuilder.js';
-import { getConfig } from '../../config.js';
+import { getConfig } from '../config.js';
 
 export async function generateTodaySummary(directory) {
   const config = getConfig();
