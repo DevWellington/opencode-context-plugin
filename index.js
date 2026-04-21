@@ -550,7 +550,7 @@ async function updateIntelligenceLearning(baseDir, sessionInfo) {
         }
         
         // Add new entry
-        let newEntry = `\n### Session ${sessionsAnalyzed} - ${sessionInfo.type.toUpperCase()}\n`;
+        let newEntry = `### Session ${sessionsAnalyzed} - ${sessionInfo.type.toUpperCase()}\n`;
         newEntry += `- **Date:** ${sessionInfo.timestamp || new Date().toISOString()}\n`;
         newEntry += `- **Session ID:** ${sessionInfo.sessionId || 'unknown'}\n`;
         newEntry += `- **Messages:** ${sessionInfo.messageCount || 0} messages\n`;
@@ -558,9 +558,9 @@ async function updateIntelligenceLearning(baseDir, sessionInfo) {
         
         entries.push(newEntry);
         
-        // Rebuild section
-        const updatedSection = learningsMarker + entries.join('\n### Session');
-        content = content.slice(0, sectionStart) + updatedSection + content.slice(insertPosition);
+        // Rebuild section - join with \n### Session and prepend the marker
+        const updatedSection = learningsMarker + '\n' + entries.join('\n### Session');
+        content = content.slice(0, learningsIndex) + updatedSection + content.slice(insertPosition);
       }
       
       // Atomic write
