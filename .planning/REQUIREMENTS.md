@@ -25,17 +25,17 @@ Requirements for initial release. Each maps to roadmap phases.
 - [x] **MODULAR-01**: Extract saveContext logic into separate module
 - [x] **MODULAR-02**: Extract summary generation into separate module
 - [x] **MODULAR-03**: Extract intelligence learning into separate module
-- [ ] **PERF-01**: Implement debouncing for summary updates
+- [x] **PERF-01**: Implement debouncing for summary updates ✅ (verified: `src/modules/summaries.js:200-201`)
 - [x] **PERF-02**: Add log rotation or debug flag
 - [x] **CONFIG-01**: Allow configuration via opencode.json (maxSessions, enableLearning, logLevel)
 - [x] **TEST-01**: Mock client API for integration tests
 
 ### Context Injection
 
-- [ ] **INJECT-01**: Filter contexts by relevance score
+- [x] **INJECT-01**: Filter contexts by relevance score ✅ (verified: `src/modules/contextInjector.js:102-106`)
 - [x] **INJECT-02**: Limit injected content by tokens, not just file count
-- [ ] **INJECT-03**: Add user prompt to manually request context injection
-- [ ] **INJECT-04**: Cache injected context to avoid re-reading files
+- [ ] **INJECT-03**: Add user prompt to manually request context injection (basic impl exists, needs OpenCode hook integration)
+- [x] **INJECT-04**: Cache injected context to avoid re-reading files ✅ (verified: `src/modules/contextCache.js`)
 
 ### Search & Retrieval
 
@@ -47,7 +47,7 @@ Requirements for initial release. Each maps to roadmap phases.
 ### Multi-Project
 
 - [ ] **MULTI-01**: Global intelligence learning file
-- [ ] **MULTI-02**: Cross-project context linking
+- [x] **MULTI-02**: Cross-project context linking
 - [ ] **MULTI-03**: Project templates based on learnings
 - [ ] **MULTI-04**: Sync contexts to remote storage (optional)
 
@@ -93,20 +93,20 @@ Which phases cover which requirements.
 | MODULAR-01 | Phase 2 | Complete |
 | MODULAR-02 | Phase 2 | Complete |
 | MODULAR-03 | Phase 2 | Complete |
-| PERF-01 | Phase 2 | Pending |
+| PERF-01 | Phase 2 | Complete | ✅ Verified in summaries.js |
 | PERF-02 | Phase 2 | Complete |
 | CONFIG-01 | Phase 2 | Complete |
 | TEST-01 | Phase 2 | Complete |
-| INJECT-01 | Phase 3 | Pending |
+| INJECT-01 | Phase 3 | Complete | ✅ Verified in contextInjector.js |
 | INJECT-02 | Phase 3 | Complete |
-| INJECT-03 | Phase 3 | Pending |
-| INJECT-04 | Phase 3 | Pending |
+| INJECT-03 | Phase 3 | Partial | ⚠️ Basic impl exists, needs OpenCode hook integration |
+| INJECT-04 | Phase 3 | Complete | ✅ Verified in contextCache.js |
 | SEARCH-01 | Phase 4 | Complete |
 | SEARCH-02 | Phase 4 | Complete |
 | SEARCH-03 | Phase 4 | Complete |
 | SEARCH-04 | Phase 4 | Complete |
 | MULTI-01 | Phase 5 | Pending |
-| MULTI-02 | Phase 5 | Pending |
+| MULTI-02 | Phase 5 | Complete |
 | MULTI-03 | Phase 5 | Pending |
 | MULTI-04 | Phase 5 | Pending |
 | UI-01 | Phase 6 | Future |
@@ -120,8 +120,8 @@ Which phases cover which requirements.
 - v1 requirements: 21 total
 - Mapped to phases: 21
 - Unmapped: 0 ✓
-- Complete: 7 (SESSION-01 through LEARN-01)
-- Pending: 14 (Phases 2-5)
+- Complete: 7 (SESSION-01 through LEARN-01) + 4 (PERF-01, INJECT-01, INJECT-02, INJECT-04)
+- Pending: 9 (INJECT-03, MULTI-01 through MULTI-04, UI-01 through AI-02)
 - Future: 8 (Phases 6-8)
 
 ---
