@@ -37,6 +37,13 @@ export const defaultConfig = {
     indexOnStartup: false,
     maxResults: 20,
     snippetLength: 200
+  },
+  report: {
+    enabled: true,
+    autoGenerate: true,
+    weeklyDay: 0,
+    outputDir: ".opencode/context-session/reports",
+    includeStats: true
   }
 };
 

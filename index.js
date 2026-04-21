@@ -375,6 +375,9 @@ export { getRelevantContexts, formatForInjection, injectContextPrompt } from './
 export { buildSearchIndex, searchSessions, updateSearchIndex } from './src/modules/searchIndexer.js';
 export { executeSearch, parseSearchQuery } from './src/modules/searchQuery.js';
 
+// Report generation exports
+export { generateWeeklyReport, generateMonthlyReport, generateActivityReport, saveReport } from './src/modules/reportGenerator.js';
+
 // V2 Export format - { id, server } - server must be instantiable with `new`
 export default {
   id: "@devwellington/opencode-context-plugin",
