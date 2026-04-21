@@ -1,332 +1,259 @@
-# OpenCode Context Agent — Specification
+# OpenCode Context Plugin — Specification
 
 ## Overview
 
-**Name:** opencode-context-agent
-**Type:** Global autonomous agent (GSD-style)
-**Based on:** gsd-planner template
-**Mode:** `subagent` (spawned by orchestrator, works globally across all projects)
+**Name:** @devwellington/opencode-context-plugin
+**Type:** OpenCode Plugin (npm package)
+**Version:** 1.3.5
+**Published:** https://www.npmjs.com/package/@devwellington/opencode-context-plugin
 
-**Problem being solved:**
-The current `@devwellington/opencode-context-plugin` fails to load in projects outside its development directory due to OpenCode's plugin system limitations/bugs. This agent-based approach bypasses the plugin system entirely by running from `~/.config/opencode/agents/` where GSD agents work universally.
+**Core functionality:**
+Saves session context to `.opencode/context-session/` after compaction and session end. Enables intelligent context organization, retrieval via search, and learning through historical pattern tracking.
 
 ---
 
 ## Architecture
 
-### Files Created
-
-| File | Location | Purpose |
-|------|----------|---------|
-| `opencode-context-agent.md` | `~/.config/opencode/agents/` | Main agent definition |
-| `gsd-context-tools.cjs` | `~/.config/opencode/get-shit-done/bin/` | Context utility functions |
-
-### Directory Structure (per project)
+### Module Structure
 
 ```
-{project}/
-└── .opencode/
-    └── context-session/
-        ├── daily-summary.md          # Aggregated daily sessions
-        ├── intelligence-learning.md  # Pattern learning across sessions
-        └── {year}/
-            └── {month}/
-                └── W{week}/
-                    └── {day}/
-                        ├── compact-{timestamp}.md   # On /compact command
-                        ├── exit-{timestamp}.md       # On session end
-                        ├── day-summary.md            # Day-level summary
-                        └── week-summary.md           # Week-level summary
+src/
+├── config.js              # Configuration loading from opencode.json
+├── index.js               # Main plugin entry ({ id, server })
+├── cli/
+│   ├── inject.js          # Manual context injection CLI
+│   ├── search.js          # Search CLI (--type, --from, --to, --json)
+│   └── report.js          # Report CLI (weekly, monthly, range)
+├── modules/
+│   ├── saveContext.js     # Context saving with atomic writes
+│   ├── summaries.js       # Daily/week/day summary generation
+│   ├── intelligence.js    # Intelligence learning file
+│   ├── relevanceScoring.js # LLM-based relevance scoring
+│   ├── contextCache.js    # Disk-persistent cache (24h TTL)
+│   ├── tokenLimit.js      # Token estimation (chars/4)
+│   ├── contextInjector.js # Context injection orchestration
+│   ├── searchIndexer.js   # Full-text search index
+│   ├── searchQuery.js     # Search query parsing
+│   └── reportGenerator.js # Report generation
+└── utils/
+    ├── debug.js           # Debug logging with rotation
+    └── debounce.js        # Debounce utility (500ms default)
+```
+
+### Configuration Schema (opencode.json)
+
+```json
+{
+  "contextPlugin": {
+    "maxContexts": 5,
+    "enableLearning": true,
+    "logLevel": "info",
+    "debug": false,
+    "debounceMs": 500,
+    "logRotation": {
+      "enabled": true,
+      "maxSizeBytes": 10485760,
+      "maxFiles": 5
+    }
+  },
+  "injection": {
+    "enabled": false,
+    "autoInject": false,
+    "maxContexts": 5,
+    "maxTokens": 8000,
+    "relevanceScoring": {
+      "provider": "openai",
+      "model": "gpt-4o-mini",
+      "apiKeyEnv": "OPENAI_API_KEY"
+    },
+    "cache": {
+      "enabled": true,
+      "ttlHours": 24,
+      "maxSizeMB": 50
+    }
+  },
+  "search": {
+    "enabled": true,
+    "indexOnStartup": false,
+    "maxResults": 20,
+    "snippetLength": 200
+  },
+  "report": {
+    "enabled": true,
+    "autoGenerate": true,
+    "weeklyDay": 0,
+    "outputDir": ".opencode/context-session/reports",
+    "includeStats": true
+  }
+}
 ```
 
 ---
 
-## Agent Interface
+## Context Storage Structure
 
-### Session Events Handled
+```
+{project}/.opencode/context-session/
+├── cache/
+│   └── index.json              # Cache of scored contexts
+├── reports/
+│   ├── weekly-YYYY-WW.md       # Weekly activity report
+│   └── monthly-YYYY-MM.md      # Monthly activity report
+├── .index/
+│   └── .search-index.json      # Full-text search index
+├── daily-summary.md            # All sessions for current day
+├── intelligence-learning.md    # Pattern learning across sessions
+└── {year}/
+    └── {month}/
+        └── W{week}/
+            └── {day}/
+                ├── compact-{timestamp}.md   # On /compact
+                ├── exit-{timestamp}.md       # On session end
+                ├── day-summary.md            # Day-level summary
+                └── week-summary.md           # Week-level summary
+```
 
-| Event | Trigger | Action |
-|-------|---------|--------|
-| `session.created` | New session starts | Reset state, track session ID |
-| `session.updated` | Session metadata changes | Update lastSession metadata |
-| `message.created` | New message sent | Add to messages array |
-| `message.updated` | Message modified | Update existing message |
-| `message.part.delta` | Streaming token received | Append to message content |
-| `command.execute.before` | Command execution | Detect `/compact` command |
-| `session.compacted` | Compaction triggered | Save context as `compact` |
-| `session.idle` | Session idle timeout | Trigger pre-exit compression |
-| `session.deleted` | Session deleted | Trigger pre-exit compression |
-| `session.end` | Session ending | Save final context as `exit` |
+---
+
+## Plugin Interface
+
+### Main Export
+
+```javascript
+export default {
+  id: "@devwellington/opencode-context-plugin",
+  server: (input) => new ContextPlugin(input)
+};
+```
+
+### Event Handlers
+
+| Event | Action |
+|-------|--------|
+| `session.created` | Reset state, track session ID |
+| `session.updated` | Update lastSession metadata |
+| `message.created` | Add to messages array |
+| `message.updated` | Update existing message |
+| `message.part.delta` | Append delta to message content |
+| `session.compacted` | Save context as `compact` |
+| `session.idle` | Trigger pre-exit compression |
+| `session.deleted` | Trigger pre-exit compression |
+| `session.end` | Save final context as `exit` |
 
 ### Context Saving Behavior
 
 | Trigger | Type | Filename Pattern |
 |---------|------|------------------|
-| `/compact` or `session.compacted` event | `compact` | `compact-{timestamp}.md` |
-| `session.end` or `session.idle` or `session.deleted` | `exit` | `exit-{timestamp}.md` |
+| `session.compacted` | `compact` | `compact-{timestamp}.md` |
+| `session.end/idle/deleted` | `exit` | `exit-{timestamp}.md` |
 
 ---
 
 ## Core Features
 
-### 1. saveContext After Each Interaction
+### 1. Context Saving
 
-- Saves session context to hierarchical directory structure
-- Uses atomic writes (temp file + rename) to prevent corruption
-- Creates directory structure automatically
+- Hierarchical storage (YYYY/MM/WW/DD)
+- Atomic writes (temp file + rename)
+- Automatic directory creation
+- Message truncation (>2000 chars)
 
 ### 2. Summaries
 
-| Summary | Location | Update Frequency | Contents |
-|---------|----------|------------------|----------|
-| `daily-summary.md` | `context-session/` root | Every session | All sessions for current day |
-| `day-summary.md` | `YYYY/MM/WW/DD/` | Every session | Sessions for specific day |
-| `week-summary.md` | `YYYY/MM/WW/` | Every session | Aggregated from day folders |
-| `intelligence-learning.md` | `context-session/` root | Every session | Pattern learning, bug fixes |
+| Summary | Location | Update Frequency |
+|---------|----------|------------------|
+| `daily-summary.md` | context-session/ root | Every session |
+| `day-summary.md` | YYYY/MM/WW/DD/ | Every session |
+| `week-summary.md` | YYYY/MM/WW/ | Every session |
+| `intelligence-learning.md` | context-session/ root | Every session |
 
 ### 3. Pre-Exit Compression
 
-- Triggered on `session.idle`, `session.deleted`, or pre-`session.end`
-- Uses client from closure to fetch full session data
-- Saves with type='exit' before data is lost
+- Triggered on `session.idle`, `session.deleted`, `session.end`
+- Uses OpenCode client to fetch full session data
 - Idempotent (safe to call multiple times)
 
----
+### 4. Context Injection
 
-## Context Tools API (gsd-context-tools.cjs)
+- LLM-based relevance scoring (OpenAI/Anthropic)
+- Token budget distribution (80% historical, 20% current)
+- Disk-persistent cache with 24h TTL
+- Manual injection via `injectContextPrompt()`
+- Auto-injection on session start (configurable)
 
-### Commands
+### 5. Search & Retrieval
 
-```bash
-# Context management
-gsd-context-tools.cjs save <directory> <session-json-path> <type>    # Save session context
-gsd-context-tools.cjs load <directory> [limit]                      # Load previous contexts
-gsd-context-tools.cjs daily-summary <directory>                      # Update daily summary
-gsd-context-tools.cjs day-summary <directory>                        # Update day summary
-gsd-context-tools.cjs week-summary <directory>                      # Update week summary
-gsd-context-tools.cjs intelligence-update <directory> <session-info> # Update learning
-
-# Utilities
-gsd-context-tools.cjs timestamp [format]     # Get formatted timestamp
-gsd-context-tools.cjs ensure-dir <path>      # Ensure directory exists
-gsd-context-tools.cjs atomic-write <path> <content>  # Atomic file write
-
-# Migration
-gsd-context-tools.cjs migrate <directory>     # Migrate old contextos to new structure
-```
-
----
-
-## Event Handler Contract
-
-The agent exports a single function that receives `{ directory, client }` and returns an object with event handlers:
-
-```javascript
-export default async (input) => {
-  const { directory, client } = input;
-  return {
-    "event": async (eventInput) => { /* handle events */ },
-    "experimental.chat.messages.transform": async (messages) => { /* transform */ }
-  };
-};
-```
-
----
-
-## Session State Management
-
-### In-Memory State (per agent instance)
-
-```javascript
-let currentSessionId = null;    // Track current session
-let hasInjectedContext = false;  // Prevent double injection
-let lastSession = null;          // Current session data (messages, metadata)
-```
-
-### Session Data Structure
-
-```javascript
-{
-  id: string,           // Session ID
-  slug: string,         // URL-safe session name
-  title: string,       // Session title
-  messages: [
-    {
-      id: string,
-      role: 'user' | 'assistant' | 'system',
-      type: string,
-      content: string
-    }
-  ]
-}
-```
-
----
-
-## Message Tracking
-
-### Events -> Message Updates
-
-| Event | Handler Action |
-|-------|---------------|
-| `message.created` | Add new message to `lastSession.messages` |
-| `message.updated` | Update existing message by ID |
-| `message.part.delta` | Append delta to message content (streaming) |
-| `message.part.updated` | Set message content from text field |
-
-### Content Truncation
-
-Messages exceeding 2000 characters are truncated with `*(truncated)*` suffix in saved contexts.
-
----
-
-## Intelligence Learning
-
-### File Structure
-
-```markdown
-# Intelligence Learning - {project}
-
-## Last Updated
-- **Timestamp:** {ISO date}
-- **Sessions Analyzed:** {count}
-- **Last Session Type:** {compact|exit}
-
-## Project Structure Decisions
-### Folder Hierarchy
-### Naming Conventions
-### Event Handling Pattern
-
-## Bug Fix Guidance
-### Common issues and solutions
-
-## Session Patterns
-### Typical Session Duration
-### Common Commands
-
-## Key Learnings from Latest Sessions
-### Session N - {TYPE}
-- **Date:** {date}
-- **Session ID:** {id}
-- **Messages:** {count}
-- **File:** {filename}
-```
-
-### Deduplication
-
-- Sessions tracked by Session ID in Key Learnings
-- Duplicate session IDs are skipped
-- Maximum 20 session entries (oldest removed when exceeded)
-
----
-
-## Error Handling
-
-### Fail-Safe Operations
-
-All summary updates (`updateDailySummary`, `updateDaySummary`, etc.) use try/catch and never block session saving on failure.
-
-### Atomic Writes
-
-```javascript
-async function atomicWrite(filePath, content) {
-  const tempFile = path.join(dir, `.tmp-${Date.now()}-${random}`);
-  await fs.writeFile(tempFile, content);
-  await fs.rename(tempFile, filePath);  // Atomic on POSIX
-}
-```
-
-### Write Serialization
-
-Queue-based serialization prevents concurrent write conflicts:
-
-```javascript
-let dailySummaryLock = Promise.resolve();
-dailySummaryLock = dailySummaryLock.then(async () => { /* write */ });
-await dailySummaryLock;
-```
-
----
-
-## Migration Support
-
-### Old Structure (contextos)
-```
-{project}/.opencode/contextos/
-```
-
-### New Structure (context-session)
-```
-{project}/.opencode/context-session/
-```
-
-Migration on agent initialization:
-1. Check for old directory
-2. If exists and new doesn't → migrate files
-3. Rename old directory to `.deprecated`
+- Full-text search with inverted index
+- Filter by type (exit/compact), date range, keywords
+- CLI tool: `node src/cli/search.js`
+- Report generation: weekly/monthly/activity
 
 ---
 
 ## Dependencies
 
-None (pure Node.js filesystem operations). Uses only built-in modules:
-- `fs/promises` for async file operations
-- `path` for path manipulation
+| Package | Version | Purpose |
+|---------|---------|---------|
+| date-fns | ^3.6.0 | Date formatting |
 
 ---
 
-## Configuration
+## Testing
 
-### Environment Variables
+**79 tests across 7 test suites:**
+- config.test.js
+- debug.test.js
+- debounce.test.js
+- saveContext.test.js
+- summaries.test.js
+- intelligence.test.js
+- event-handlers.test.js
 
-| Variable | Purpose | Default |
-|----------|---------|---------|
-| `HOME` | Used to derive default log location | OS default |
-
-### Log File
-
-`~/.opencode-context-agent.log` — Debug logging for all operations.
-
----
-
-## Testing Strategy
-
-1. **Unit tests** for each utility function
-2. **Integration tests** for event handlers
-3. **Multi-project test** to verify global operation
-4. **Migration test** to verify backward compatibility
+Run with: `npm test`
 
 ---
 
-## Rollout Plan
+## CLI Commands
 
-1. Create `SPEC.md`
-2. Implement `gsd-context-tools.cjs`
-3. Implement `opencode-context-agent.md`
-4. Create test scripts
-5. Test in multiple projects
-6. Document usage
+```bash
+# Context injection
+node src/cli/inject.js [--limit N] [--tokens N]
 
----
+# Search
+npm run search -- "query" [--type exit|compact] [--from YYYY-MM-DD] [--to YYYY-MM-DD] [--json]
 
-## Comparison with Plugin
-
-| Aspect | Plugin | Agent |
-|--------|--------|-------|
-| Loading | Requires OpenCode plugin system | Automatic via agents folder |
-| Per-project | No (fails outside dev dir) | Yes (global + per-project storage) |
-| Configuration | Per-project | Global (agent config) |
-| Updates | Requires plugin reinstall | Agent file update |
-| Event handling | Plugin API | Agent event system |
+# Reports
+node src/cli/report.js weekly [date]
+node src/cli/report.js monthly [month]
+node src/cli/report.js range <start> <end> [--save]
+```
 
 ---
 
 ## Key Design Decisions
 
-1. **Agent over Plugin** — Bypasses OpenCode plugin system limitations
-2. **Hierarchical Storage** — `YYYY/MM/WW/DD` enables temporal navigation
-3. **Atomic Writes** — Prevents data corruption on crashes
-4. **Write Serialization** — Prevents race conditions on summary updates
-5. **Queue-based Updates** — Non-blocking, sequential writes
-6. **Pre-exit Compression** — Captures data before session end events
-7. **Intelligence Learning** — Accumulates patterns across sessions
+| Decision | Rationale |
+|----------|-----------|
+| Plugin over Agent | Works within OpenCode plugin system |
+| Hierarchical Storage | Temporal navigation and organization |
+| Atomic Writes | Prevents data corruption |
+| Queue-based Serialization | Non-blocking concurrent writes |
+| LLM-based Scoring | Intelligent relevance filtering |
+| chars/4 Token Estimation | Simple approximation without tokenizer |
+| 20% Token Budget Reserved | Space for current session context |
+
+---
+
+## v1.3.x Changelog
+
+### v1.3.5 (2026-04-21)
+- Added .npmignore to exclude .planning/ and old/
+- Clean package contents (6 files, 10KB)
+
+### v1.3.4 (2026-04-21)
+- Initial modular structure release
+- Phase 2-4 features included
+
+### v1.0 - v1.2
+- Core context saving functionality
+- Phase 1 features (hierarchical storage, summaries)
