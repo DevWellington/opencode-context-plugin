@@ -131,16 +131,19 @@ async function updateDailySummary(baseDir, sessionInfo) {
     const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
     
     // Use lock to serialize writes and prevent race conditions
-    await dailySummaryLock;
+    // Chain the promise BEFORE doing any work
+    const currentLock = dailySummaryLock;
     
-    let updatePromise = (async () => {
+    dailySummaryLock = (async () => {
+      // Wait for previous operation to complete
+      await currentLock.catch(() => {});
+      
       // Read existing summary or create new
-      let content = '';
       let existingEntries = [];
       let currentHeader = null;
       
       try {
-        content = await fs.readFile(summaryPath, 'utf-8');
+        const content = await fs.readFile(summaryPath, 'utf-8');
         
         // Parse existing content to extract entries and current date header
         const lines = content.split('\n');
@@ -162,13 +165,11 @@ async function updateDailySummary(baseDir, sessionInfo) {
         }
       } catch (e) {
         // File doesn't exist yet
-        content = `# Daily Summary\n\n`;
       }
       
       // Check if we need to update the date header (new day)
       if (currentHeader !== today) {
         // New day - reset content with new date header
-        content = `# Daily Summary\n\n## ${today}\n`;
         existingEntries = [];
       }
       
@@ -187,9 +188,10 @@ async function updateDailySummary(baseDir, sessionInfo) {
         const compactCount = existingEntries.filter(e => e.includes('📦')).length;
         const exitCount = existingEntries.filter(e => e.includes('🚪')).length;
         
-        // Build final content
-        let finalContent = content;
-        finalContent += `\n**Total Sessions:** ${totalSessions}\n`;
+        // Build final content from scratch
+        let finalContent = `# Daily Summary\n\n`;
+        finalContent += `## ${today}\n\n`;
+        finalContent += `**Total Sessions:** ${totalSessions}\n`;
         finalContent += `**Compacts:** ${compactCount} | **Exits:** ${exitCount}\n\n`;
         finalContent += existingEntries.join('\n') + '\n';
         
@@ -198,8 +200,7 @@ async function updateDailySummary(baseDir, sessionInfo) {
       }
     })();
     
-    // Update lock to wait for this operation
-    dailySummaryLock = updatePromise.catch(() => {});
+    // Wait for our turn to complete
     await dailySummaryLock;
     
   } catch (error) {
@@ -331,6 +332,94 @@ async function triggerPreExitCompression(sessionId, directory, client) {
   }
 }
 
+async function initializeIntelligenceLearning(baseDir) {
+  const ctxDir = path.join(baseDir, CONTEXT_SESSION_DIR);
+  const filePath = path.join(ctxDir, 'intelligence-learning.md');
+  
+  try {
+    // Check if file already exists (don't overwrite)
+    try {
+      await fs.access(filePath);
+      debugLog(`[Intelligence] File already exists, skipping initialization: ${filePath}`);
+      return filePath;
+    } catch {
+      // File doesn't exist, proceed with creation
+    }
+    
+    // Get project name from directory
+    const projectName = path.basename(baseDir);
+    const timestamp = new Date().toISOString();
+    
+    // Create template content
+    let content = `# Intelligence Learning - ${projectName}\n\n`;
+    content += `## Last Updated\n`;
+    content += `- **Timestamp:** ${timestamp}\n`;
+    content += `- **Sessions Analyzed:** 0\n`;
+    content += `- **Last Session Type:** none\n\n`;
+    
+    content += `## Project Structure Decisions\n\n`;
+    content += `### Folder Hierarchy\n`;
+    content += `- **Why:** Temporal organization enables quick navigation by date\n`;
+    content += `- **Structure:** YYYY/MM/WW/DD with summaries at each level\n`;
+    content += `- **Tradeoff:** More directories vs. flat structure with search\n\n`;
+    
+    content += `### Naming Conventions\n`;
+    content += `- **exit-***: Session end (replaced "saida-" for i18n)\n`;
+    content += `- **compact-***: Manual or auto compaction\n`;
+    content += `- **summary.md**: Auto-generated summaries\n\n`;
+    
+    content += `## Architectural Decisions\n\n`;
+    content += `### Hook Selection\n`;
+    content += `- **session.compacted**: For manual/auto compaction\n`;
+    content += `- **session.idle**: For automatic session end detection\n`;
+    content += `- **session.deleted**: For explicit session deletion\n`;
+    content += `- **Pre-exit trigger**: Custom hook before session ends\n\n`;
+    
+    content += `### Event Handling Pattern\n`;
+    content += `- Use closure to access \`client\` object (not from event handler params)\n`;
+    content += `- Queue-based write serialization (no file locking needed)\n`;
+    content += `- Atomic writes via temp-file-rename pattern\n\n`;
+    
+    content += `## Bug Fix Guidance\n\n`;
+    content += `### Common Issue: "client is undefined"\n`;
+    content += `**Symptom:** Error "undefined is not an object (evaluating 'client.sessions.get")\n`;
+    content += `**Cause:** Event handler doesn't receive client parameter\n`;
+    content += `**Fix:** Use client from closure (outer plugin function scope)\n\n`;
+    
+    content += `### Common Issue: File corruption on crash\n`;
+    content += `**Symptom:** Truncated or malformed summary files\n`;
+    content += `**Cause:** Synchronous writes interrupted mid-operation\n`;
+    content += `**Fix:** Use atomic write pattern (temp file + rename)\n\n`;
+    
+    content += `## Session Patterns\n\n`;
+    content += `### Typical Session Duration\n`;
+    content += `- [Auto-populated from session analysis]\n\n`;
+    
+    content += `### Common Commands\n`;
+    content += `- [Auto-populated from session analysis]\n\n`;
+    
+    content += `## Key Learnings from Latest Sessions\n\n`;
+    content += `[Appended on each trigger execution]\n\n`;
+    
+    content += `---\n`;
+    content += `*Auto-generated by OpenCode Context Plugin*\n`;
+    
+    // Ensure directory exists
+    await fs.mkdir(ctxDir, { recursive: true });
+    
+    // Atomic write
+    await atomicWrite(filePath, content);
+    debugLog(`[Intelligence] Initialized intelligence learning file: ${filePath}`);
+    console.log(`[context-plugin] Intelligence learning file initialized`);
+    
+    return filePath;
+  } catch (error) {
+    debugLog(`[Intelligence] Error initializing learning file: ${error.message}`);
+    console.error(`[context-plugin] Failed to initialize intelligence learning: ${error.message}`);
+    throw error;
+  }
+}
+
 async function loadPreviousContexts(directory, limit = 5) {
   try {
     const ctxDir = path.join(directory, CONTEXT_SESSION_DIR);
@@ -450,6 +539,9 @@ export default async (input) => {
   // Perform migration before ensuring new directory exists
   await migrateContextFiles(directory);
   await ensureContextSessionDir(directory);
+  
+  // Initialize intelligence learning file
+  await initializeIntelligenceLearning(directory);
   
   return {
     "event": async (eventInput) => {
@@ -582,4 +674,4 @@ export default async (input) => {
 };
 
 // Export helper functions for testing and external use
-export { ensureHierarchicalDir, ensureContextSessionDir, atomicWrite, saveContext, loadPreviousContexts, updateDaySummary, updateWeekSummary, triggerPreExitCompression };
+export { ensureHierarchicalDir, ensureContextSessionDir, atomicWrite, saveContext, loadPreviousContexts, updateDaySummary, updateWeekSummary, updateDailySummary, triggerPreExitCompression, initializeIntelligenceLearning };
