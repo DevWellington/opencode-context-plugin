@@ -65,9 +65,9 @@ function isGreetingTitle(title) {
     if (lowerTitle.includes(keyword)) return true;
   }
   
-  // Check if title is just a timestamp (after prefix stripping, "New session - <timestamp>" becomes just timestamp)
+  // Check if title contains a timestamp pattern (for "New session - <timestamp>" format)
   // This indicates a default-named session that typically contains greeting content
-  if (title.match(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/)) {
+  if (/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(title)) {
     return true;
   }
   
@@ -119,6 +119,83 @@ function getWeekNumber(date) {
   d.setDate(d.getDate() + 4 - (d.getDay() || 7));
   const yearStart = new Date(d.getFullYear(), 0, 1);
   return Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+}
+
+/**
+ * Parse title from session file content (frontmatter or header)
+ */
+function extractTitleFromContent(content) {
+  // Try frontmatter title first
+  const frontmatterMatch = content.match(/^title:\s*["']?(.+?)["']?\s*$/m);
+  if (frontmatterMatch && frontmatterMatch[1] && !frontmatterMatch[1].includes('${')) {
+    return frontmatterMatch[1].trim();
+  }
+  
+  // Try **Title:** pattern in content
+  const titleMatch = content.match(/\*\*Title:\*\*\s*(.+)/);
+  if (titleMatch && titleMatch[1]) {
+    return titleMatch[1].trim();
+  }
+  
+  return null;
+}
+
+/**
+ * Parse messages from session file content
+ * Returns array of { role, content } objects
+ */
+function parseMessagesFromContent(content) {
+  const messages = [];
+  const messagePattern = /### Message (\d+) \[(\w+)\]\n\n([\s\S]*?)(?=\n### Message |\n---\n|\n## Messages\n|$)/g;
+  
+  let match;
+  while ((match = messagePattern.exec(content)) !== null) {
+    const role = match[2];
+    const messageContent = match[3].trim();
+    messages.push({ role, content: messageContent });
+  }
+  
+  return messages;
+}
+
+/**
+ * Infer structured data from raw messages when structured sections don't exist
+ */
+function inferFromMessages(messages, title) {
+  const result = {
+    goal: null,
+    instructions: null,
+    accomplished: null,
+    discoveries: null,
+    relevantFiles: []
+  };
+  
+  // Get user messages
+  const userMessages = messages.filter(m => m.role === 'user');
+  const assistantMessages = messages.filter(m => m.role === 'assistant');
+  
+  // First user message = Instructions
+  if (userMessages.length > 0) {
+    result.instructions = userMessages[0].content;
+  }
+  
+  // Infer goal from title if it seems meaningful (not just a timestamp)
+  if (title && !title.match(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/)) {
+    result.goal = title;
+  }
+  
+  // Last assistant message often indicates what was accomplished
+  if (assistantMessages.length > 0) {
+    const lastAssistant = assistantMessages[assistantMessages.length - 1].content;
+    // Truncate if too long and take first meaningful part
+    if (lastAssistant.length > 500) {
+      result.accomplished = lastAssistant.slice(0, 500) + '...';
+    } else {
+      result.accomplished = lastAssistant;
+    }
+  }
+  
+  return result;
 }
 
 async function gatherRecentSessionInfo(directory) {
@@ -181,27 +258,43 @@ async function gatherRecentSessionInfo(directory) {
   for (const file of sessionFiles) {
     const content = await fs.readFile(path.join(sessionDir, file), 'utf-8');
     
-    // Use contentExtractor to get structured data
+    // First try contentExtractor for structured data
     const extracted = extractSessionContent(content);
     const bugs = extractBugs(content);
     
-    // Extract title from filename (remove extension and date pattern)
-    const title = file.replace(/^exit-|^compact-/, '').replace(/\.md$/, '');
+    // Extract title from CONTENT, not filename
+    const titleFromContent = extractTitleFromContent(content);
+    // Fall back to filename if no title in content
+    const titleFromFilename = file.replace(/^exit-|^compact-/, '').replace(/\.md$/, '');
+    const title = titleFromContent || titleFromFilename;
+    
+    // Parse messages from content
+    const messages = parseMessagesFromContent(content);
+    
+    // If no structured sections found, infer from messages
+    let inferred = { goal: null, instructions: null, accomplished: null, discoveries: null, relevantFiles: [] };
+    if (!extracted.goal && !extracted.accomplished && messages.length > 0) {
+      inferred = inferFromMessages(messages, title);
+    }
+    
+    // Use Instructions from messages as firstUserMessage
+    const firstUserMessage = inferred.instructions || extracted.firstUserMessage || 
+      (messages.find(m => m.role === 'user')?.content || '');
     
     // Skip sessions that are just greetings - they don't represent meaningful work
-    const firstMsg = extracted.firstUserMessage || '';
-    if (isGreeting(firstMsg) || isGreetingTitle(title)) {
+    if (isGreeting(firstUserMessage) || isGreetingTitle(title)) {
       continue;
     }
     
     sessionSummaries.push({
       filename: file,
       title: title,
-      firstUserMessage: firstMsg,
-      goal: extracted.goal || '',
-      accomplished: extracted.accomplished || '',
-      discoveries: extracted.discoveries || '',
-      relevantFiles: extracted.relevantFiles || [],
+      firstUserMessage: firstUserMessage,
+      goal: extracted.goal || inferred.goal || '',
+      instructions: inferred.instructions || extracted.firstUserMessage || '',
+      accomplished: extracted.accomplished || inferred.accomplished || '',
+      discoveries: extracted.discoveries || inferred.discoveries || '',
+      relevantFiles: extracted.relevantFiles || inferred.relevantFiles || [],
       bugs: bugs
     });
   }

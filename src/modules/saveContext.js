@@ -147,7 +147,8 @@ messageCount: ${summary.messageCount}
       filename,
       timestamp: new Date().toISOString(),
       sessionId: summary.sessionId,
-      messageCount: summary.messageCount
+      messageCount: summary.messageCount,
+      title: summary.title
     };
     await updateIntelligenceLearningMeta(directory, learningSessionInfo);
 
