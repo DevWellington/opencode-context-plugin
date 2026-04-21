@@ -1,140 +1,69 @@
-# 🚀 Guia de Publicação - OpenCode Context Plugin
+# Guia de Publicação - OpenCode Context Plugin
 
-## ✅ Publicado no NPM
+## Pacote npm
 
-**Pacote:** `@devwellington/opencode-context-plugin`  
-**Versão atual:** 1.1.0  
-**NPM:** https://www.npmjs.com/package/@devwellington/opencode-context-plugin  
+**Pacote:** `@devwellington/opencode-context-plugin`
+**Versão atual:** 1.3.4
+**NPM:** https://www.npmjs.com/package/@devwellington/opencode-context-plugin
 **GitHub:** https://github.com/DevWellington/opencode-context-plugin
 
----
+## Publicar Atualizações
 
-## 📦 Instalação
-
-### Método 1: NPM (Recomendado)
-
-```bash
-# Instalação global
-npm install -g @devwellington/opencode-context-plugin@latest
-
-# Ou direto no opencode
-opencode plugin @devwellington/opencode-context-plugin@latest --global
-```
-
-### Método 2: Script
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/DevWellington/opencode-context-plugin/main/install.sh | bash
-```
-
-### Método 3: Git
-
-```bash
-git clone https://github.com/DevWellington/opencode-context-plugin.git \
-  ~/.config/opencode/plugins/opencode-context-plugin
-```
-
----
-
-## 🔄 Como Publicar Atualizações
-
-### 1. Preparar release
+### 1. Preparar e testar
 
 ```bash
 cd /path/to/opencode-context-plugin
 
 # Edite index.js com as mudanças
-# Atualize versão no package.json
+# Teste localmente em projetos
 ```
 
 ### 2. Versionar e publicar
 
 ```bash
-# Patch (1.1.0 → 1.1.1) - bug fixes
+# Patch (1.3.4 → 1.3.5) - bug fixes
 npm version patch
 
-# Minor (1.1.0 → 1.2.0) - novas features
+# Minor (1.3.4 → 1.4.0) - novas features
 npm version minor
 
-# Major (1.1.0 → 2.0.0) - breaking changes
-npm version major
-
-# Push e publish
-git push && git push --tags
-npm publish --access public
+# Publish
+npm publish
 ```
 
-### 3. Verificar publicação
+### 3. Atualizar instalação global
 
 ```bash
-npm view @devwellington/opencode-context-plugin
+npm install -g @devwellington/opencode-context-plugin@latest
+```
+
+### 4. Verificar
+
+```bash
 npm view @devwellington/opencode-context-plugin versions
 ```
 
----
-
-## 📋 Checklist de Release
+## Checklist de Release
 
 - [ ] Testar em múltiplos projetos
 - [ ] Atualizar CHANGELOG no README
 - [ ] Bump version no package.json
-- [ ] Commit e tag
-- [ ] Push para GitHub
+- [ ] Commit e push para GitHub
 - [ ] Publish no NPM
-- [ ] Testar instalação via npm
+- [ ] Atualizar instalação global com npm install -g
 
----
-
-## 🛠️ Desenvolvimento
-
-### Testar localmente
-
-```bash
-# Copie para pasta de plugins
-cp index.js ~/.config/opencode/plugins/opencode-context-plugin/index.js
-
-# Reinicie opencode
-opencode
-
-# Veja logs
-tail -f ~/.opencode-context-plugin.log
-```
-
-### Estrutura do projeto
+## Estrutura do Projeto
 
 ```
 opencode-context-plugin/
-├── index.js          # Plugin principal
+├── index.js          # Plugin principal (ESM, V2 export)
 ├── package.json      # Configuração npm
-├── install.sh        # Script de instalação
 ├── README.md         # Documentação
-├── PUBLISH.md        # Este arquivo
-└── .gitignore
+├── AGENTS.md         # Instruções para agentes
+└── old/              # Arquivos antigos/deprecados
 ```
 
----
-
-## 📊 Versões
-
-| Versão | Data | Mudanças |
-|--------|------|----------|
-| 1.1.0 | 2026-04-21 | Captura completa de mensagens, injeção de contexto |
-| 1.0.x | 2026-04-20 | Versões iniciais de teste |
-
----
-
-## 🔗 Links
+## Links
 
 - [NPM Package](https://www.npmjs.com/package/@devwellington/opencode-context-plugin)
 - [GitHub Repo](https://github.com/DevWellington/opencode-context-plugin)
-- [NPM Publish Guide](https://docs.npmjs.com/packages-and-modules/contributing-packages-to-the-registry)
-- [Semantic Versioning](https://semver.org/)
-
----
-
-## 🎯 Próximos Passos
-
-- [ ] Adicionar opção para configurar número de sessões injetadas
-- [ ] Suporte a auto-save periódico
-- [ ] Filtro de tool outputs para economia de tokens
-- [ ] Compressão de contexto antigo

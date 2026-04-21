@@ -1,93 +1,73 @@
 # OpenCode Context Plugin
 
-Plugin para OpenCode que salva automaticamente o contexto da sessão em `.opencode/contextos/` após cada compactação e ao sair.
+Plugin para OpenCode que salva automaticamente o contexto da sessão em `.opencode/context-session/` após cada compactação e ao sair.
 
 ## Funcionalidades
 
-- ✅ **Salvamento automático**: Após cada `/compact` ou ao sair do opencode
-- ✅ **Separação por tipo**: Arquivos prefixados por `compact-`, `saida-`
-- ✅ **Injeção de contexto**: Últimas 5 sessões injetadas na primeira mensagem
-- ✅ **Mensagens completas**: Captura conversas de usuário e assistente
-- ✅ **Economia de tokens**: Trunca mensagens longas (>2000 chars)
-- ✅ **Diretório automático**: Cria `.opencode/contextos/` automaticamente
+- **Salvamento automático**: Após cada `/compact` ou ao sair do opencode
+- **Estrutura hierárquica**: `YYYY/MM/WW/DD/` para organização temporal
+- **Sumários automáticos**: `daily-summary.md`, `day-summary.md`, `week-summary.md`
+- **Intelligence learning**: `intelligence-learning.md` com histórico de sessões
+- **Injeção de contexto**: Últimas 5 sessões injetadas na primeira mensagem
+- **Mensagens completas**: Captura conversas de usuário e assistente
+- **Atomic writes**: Previne corrupção de arquivos em caso de crash
+- **Migração automática**: De `.opencode/contextos/` para nova estrutura
 
 ## Estrutura de Arquivos
 
 ```
 {project}/
 └── .opencode/
-    └── contextos/
-        ├── saida-2026-04-21T02-15-29.md    # Fim de sessão (completo)
-        ├── compact-2026-04-21T02-10-46.md  # Compactação via /compact
-        └── ...
+    └── context-session/
+        ├── daily-summary.md          # Resumo de todas as sessões do dia
+        ├── intelligence-learning.md   # Histórico e aprendizados
+        ├── 2026/
+        │   └── 04/
+        │       └── W17/
+        │           └── 21/
+        │               ├── exit-2026-04-21T16-04-00.md     # Fim de sessão
+        │               ├── compact-2026-04-21T16-10-10.md  # Compactação
+        │               ├── day-summary.md                   # Resumo do dia
+        │               └── week-summary.md                  # Resumo da semana
 ```
 
 **Prefixos:**
-- `saida-` = Sessão completa ao sair do opencode
+- `exit-` = Sessão completa ao sair do opencode
 - `compact-` = Compactação manual ou automática via `/compact`
 
 ## Instalação
 
-### 📦 Via NPM (Recomendado)
+### Via NPM (Recomendado)
 
 ```bash
 # Instalação global
 npm install -g @devwellington/opencode-context-plugin@latest
-
-# Ou instale direto no opencode
-opencode plugin @devwellington/opencode-context-plugin@latest --global
 ```
 
-### ⚡ Via Script
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/DevWellington/opencode-context-plugin/main/install.sh | bash
-```
-
-### 🔧 Manual (Git)
-
-```bash
-# Clone para a pasta de plugins
-git clone https://github.com/DevWellington/opencode-context-plugin.git \
-  ~/.config/opencode/plugins/opencode-context-plugin
-
-# Adicione ao ~/.config/opencode/opencode.json:
-{
-  "plugin": ["opencode-context-plugin"]
-}
-```
-
-### 🖥️ Por Projeto
-
-```bash
-# Dentro do diretório do projeto
-mkdir -p .opencode/plugins
-git clone https://github.com/DevWellington/opencode-context-plugin.git \
-  .opencode/plugins/opencode-context-plugin
-```
+O plugin será carregado automaticamente pelo opencode se estiver instalado globalmente via npm.
 
 ## Configuração
 
-Adicione ao `~/.config/opencode/opencode.json` (global) ou `.opencode/opencode.json` (projeto):
+O plugin funciona automaticamente após instalação. Para configurar, edite `~/.config/opencode/opencode.json`:
 
 ```json
 {
-  "plugin": ["opencode-context-plugin"]
+  "plugin": ["@devwellington/opencode-context-plugin"]
 }
 ```
 
 ## Uso
 
-1. **Instale o plugin** (veja acima)
+1. **Instale o plugin**: `npm install -g @devwellington/opencode-context-plugin@latest`
 
 2. **Reinicie o OpenCode**: `opencode`
 
 3. **Use normalmente**:
    - `/compact` → Salva contexto em `compact-*.md`
-   - Sair da sessão → Salva contexto em `saida-*.md`
+   - Sair da sessão → Salva contexto em `exit-*.md`
    - Nova sessão → Injeta últimas 5 sessões na primeira mensagem
 
-4. **Visualize contextos**: `{projeto}/.opencode/contextos/`
+4. **Visualize contextos**: `{projeto}/.opencode/context-session/`
 
 ## API de Hooks
 
@@ -96,14 +76,14 @@ Adicione ao `~/.config/opencode/opencode.json` (global) ou `.opencode/opencode.j
 | `session.compacted` | Salva contexto após compactação |
 | `session.end` / `server.instance.disposed` | Salva contexto ao sair |
 | `experimental.chat.messages.transform` | Injeta contextos na 1ª mensagem |
-| `message.updated` / `message.part.delta` / `message.part.updated` | Captura mensagens | |
+| `message.updated` / `message.part.delta` | Captura mensagens |
 
 ## Solução de Problemas
 
 ### Plugin não carrega
 ```bash
 # Verifique instalação
-ls -la ~/.config/opencode/plugins/opencode-context-plugin/
+npm list -g @devwellington/opencode-context-plugin
 
 # Veja logs
 tail -50 ~/.opencode-context-plugin.log
@@ -111,59 +91,48 @@ tail -50 ~/.opencode-context-plugin.log
 
 ### Contexto não é salvo
 1. Execute `/compact` manualmente
-2. Verifique `.opencode/contextos/`
+2. Verifique `.opencode/context-session/`
 3. Confira logs: `tail -f ~/.opencode-context-plugin.log`
-
-### Desinstalar
-```bash
-# Remova do config
-# ~/.config/opencode/opencode.json: remova "opencode-context-plugin"
-
-# Remova plugin
-rm -rf ~/.config/opencode/plugins/opencode-context-plugin
-```
 
 ## Desenvolvimento
 
 ```bash
-cd /path/to/opencode-context-plugin
+# Clone o repositório
+git clone https://github.com/DevWellington/opencode-context-plugin.git
+cd opencode-context-plugin
 
-# Teste local
-cp index.js ~/.config/opencode/plugins/opencode-context-plugin/index.js
+# Edite index.js e publique
+npm version patch && npm publish
 
-# Reinicie opencode para recarregar
+# Para testar localmente, atualize a instalação global
+npm install -g @devwellington/opencode-context-plugin@latest
 ```
 
 ## Estrutura
 
 ```
 opencode-context-plugin/
+├── index.js        # Plugin principal (ESM com V2 export)
 ├── package.json    # Configuração npm
-├── index.js        # Plugin principal
-├── install.sh      # Script de instalação
-├── README.md       # Documentação
-└── PUBLISH.md      # Guia de publicação
+├── README.md       # Este arquivo
+└── AGENTS.md      # Instruções para agentes
 ```
 
 ## Changelog
 
-### v1.1.1 (2026-04-21) - Current
-- ✅ Estrutura hierárquica `YYYY/MM/WW/DD/`
-- ✅ Sumários automáticos (dia, semana, daily-summary.md)
-- ✅ Intelligence learning file (`intelligence-learning.md`)
-- ✅ Pre-exit compression (salva antes de sair)
-- ✅ Async fs/promises para todas operações
-- ✅ Atomic writes previnem corrupção de arquivos
-- ✅ Migração automática de versões anteriores
+### v1.3.4 (2026-04-21)
+- Limpeza do pacote npm
+- Improved error handling e debug logging
 
-### v1.1.0 (2026-04-21)
-- ✅ Captura completa de mensagens (usuário + assistente)
-- ✅ Suporte a `message.part.delta` e `message.part.updated`
-- ✅ Injeção de contexto de 5 sessões anteriores
-- ✅ Truncamento de mensagens longas (2000 chars)
+### v1.3.3 (2026-04-21)
+- Enhanced atomic write logging
+- Error handling em session.end handler
 
-### v1.0.x
-- Versões iniciais de teste
+### v1.3.0+ (2026-04-21)
+- Estrutura hierárquica `YYYY/MM/WW/DD/`
+- Sumários automáticos (day, week, daily)
+- Intelligence learning file
+- V2 export format para opencode 1.14+
 
 ## Licença
 

@@ -18,13 +18,8 @@ Thumbs.db
 *.tgz
 dist/
 
-# Plugin generated files (project-specific, not part of plugin)
-.opencode/
-!.opencode/opencode.json
-.planning/
-*.old
-*.test.js
-test-*.js
+# Old/deprecated files
+old/
 
-# npm specific
-.npmignore
+# Plugin generated files (project-specific)
+.opencode/
