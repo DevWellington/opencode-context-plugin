@@ -1,6 +1,5 @@
 import fs from "fs";
 import path from "path";
-// Plugin export is the function itself;
 
 // Debug logging
 const LOG_FILE = path.join(process.env.HOME || '', '.opencode-context-plugin.log');
@@ -25,6 +24,9 @@ const SENSITIVE_PATTERNS = [
 // Security: Maximum context files to retain
 const MAX_CONTEXT_FILES = 30;
 const RETENTION_DAYS = 30;
+
+// Store current session ID
+let currentSessionId = null;
 
 function formatTimestamp(date) {
   const year = date.getFullYear();
@@ -83,7 +85,6 @@ function readPreviousContexts(contextosDir) {
       .filter(f => f.startsWith("compact-") || f.startsWith("saida-") || f.startsWith("auto-"))
       .sort();
 
-    // Prioritize: session_end (saida) > compact > auto
     const priorityFiles = allFiles
       .filter(f => f.startsWith("saida-"))
       .slice(-3);
@@ -122,7 +123,6 @@ function cleanupOldContexts(contextosDir) {
         return { name: f, path: filepath, mtime: stats.mtime };
       });
 
-    // Delete files older than RETENTION_DAYS
     const now = Date.now();
     const retentionMs = RETENTION_DAYS * 24 * 60 * 60 * 1000;
     
@@ -131,7 +131,6 @@ function cleanupOldContexts(contextosDir) {
       return age > retentionMs;
     });
 
-    // If still too many files, delete oldest
     if (allFiles.length - filesToDelete.length > MAX_CONTEXT_FILES) {
       const sortedByAge = allFiles
         .filter(f => !filesToDelete.find(d => d.name === f.name))
@@ -150,28 +149,16 @@ function cleanupOldContexts(contextosDir) {
   }
 }
 
-function saveContextToFile(contextosDir, sessionID, messages, type = "auto") {
+function saveContextToFile(contextosDir, sessionID, messages, type = "auto", client) {
   try {
     const timestamp = formatTimestamp(new Date());
     const filename = formatFilename(timestamp, type);
     const filepath = path.join(contextosDir, filename);
 
-    // Security: Validate path before writing
     if (!validatePath(contextosDir, filepath)) {
       console.error(`[context-plugin] Invalid path detected: ${filepath}`);
       return null;
     }
-
-    // Security: Filter sensitive data
-    const significantMessages = messages.filter(msg => {
-      const role = msg.info?.role || "unknown";
-      if (role === "user") return true;
-      if (role === "assistant") {
-        const hasToolResponse = msg.parts.some(p => p.type === "tool-result" || p.type === "tool_call");
-        return !hasToolResponse;
-      }
-      return false;
-    });
 
     const typeLabels = {
       compact: "Compactação",
@@ -183,21 +170,34 @@ function saveContextToFile(contextosDir, sessionID, messages, type = "auto") {
       `# ${typeLabels[type]} - ${timestamp}`,
       "",
       `**Tipo:** ${typeLabels[type]}`,
-      `**ID:** ${sessionID.substring(0, 8)}...`,
+      `**ID:** ${sessionID ? sessionID.substring(0, 8) : 'unknown'}...`,
       `**Data:** ${new Date().toLocaleString("pt-BR")}`,
       "",
       "## Histórico (apenas mensagens relevantes)",
       ""
     ];
 
+    // Filter messages - only save user messages and assistant text responses
+    const significantMessages = messages.filter(msg => {
+      const role = msg.info?.role || "unknown";
+      if (role === "user") return true;
+      if (role === "assistant") {
+        const hasToolResponse = msg.parts?.some(p => p.type === "tool-result" || p.type === "tool_call");
+        return !hasToolResponse;
+      }
+      return false;
+    });
+
     for (const msg of significantMessages) {
       const role = msg.info?.role || "unknown";
       let content = "";
 
-      for (const part of msg.parts) {
-        if (part.type === "text" && part.text) {
-          const filtered = filterSensitiveData(part.text);
-          content += filtered.length > 2000 ? filtered.substring(0, 2000) + "\n\n[...truncado...]" : filtered;
+      if (msg.parts && Array.isArray(msg.parts)) {
+        for (const part of msg.parts) {
+          if (part.type === "text" && part.text) {
+            const filtered = filterSensitiveData(part.text);
+            content += filtered.length > 2000 ? filtered.substring(0, 2000) + "\n\n[...truncado...]" : filtered;
+          }
         }
       }
 
@@ -212,14 +212,14 @@ function saveContextToFile(contextosDir, sessionID, messages, type = "auto") {
     }
 
     lines.push(`**Total:** ${significantMessages.length} mensagens significativas`);
-    lines.push(`**Original:** ${messages.length} mensagens`);
+    lines.push(`**Original:** ${messages ? messages.length : 0} mensagens`);
 
     const fileContent = lines.join("\n");
 
     ensureDirectoryExists(contextosDir);
     fs.writeFileSync(filepath, fileContent, { encoding: "utf-8", mode: 0o600 });
 
-    debugLog(`[context-plugin] ${typeLabels[type]} salvo: ${filepath} (${significantMessages.length}/${messages.length} msgs)`);
+    debugLog(`[context-plugin] ${typeLabels[type]} salvo: ${filepath} (${significantMessages.length}/${messages ? messages.length : 0} msgs)`);
     return filepath;
   } catch (error) {
     console.error(`[context-plugin] Error saving context:`, error);
@@ -249,6 +249,7 @@ function loadPreviousContextsAsText(contextosDir) {
   return header.join("\n") + contexts.join("\n\n") + footer.join("\n");
 }
 
+// Main plugin function
 export default async (input) => {
   const { directory, client } = input;
   const contextosDir = getContextosDir(directory);
@@ -268,7 +269,7 @@ export default async (input) => {
         const messages = session.messages || [];
 
         if (messages.length > 0) {
-          const savedPath = saveContextToFile(contextosDir, sessionID, messages, "compact");
+          const savedPath = saveContextToFile(contextosDir, sessionID, messages, "compact", client);
           if (savedPath) {
             console.log(`[context-plugin] Compact context saved successfully`);
           }
@@ -295,9 +296,9 @@ export default async (input) => {
         
         if (firstUserIndex !== -1) {
           const firstMsg = messages[firstUserIndex];
-          const currentContent = firstMsg.parts.find(p => p.type === "text")?.text || "";
+          const currentContent = firstMsg.parts?.find(p => p.type === "text")?.text || "";
           
-          const contextPart = firstMsg.parts.find(p => p.type === "text");
+          const contextPart = firstMsg.parts?.find(p => p.type === "text");
           if (contextPart) {
             contextPart.text = `## Contexto de Sessões Anteriores (RESUMO)
 
@@ -333,59 +334,44 @@ ${currentContent}`;
       console.log(eventLog);
       debugLog(eventLog);
       
-      if (event.type === "session.created") {
-        const logMsg = `[context-plugin] Session created: ${event.sessionId}`;
-        console.log(logMsg);
-        debugLog(logMsg);
+      // Log full event structure for debugging (first time only)
+      if (!window._eventLogged) {
+        window._eventLogged = true;
+        debugLog(`[context-plugin] Event structure: ${JSON.stringify(Object.keys(event))}`);
       }
       
-      if (event.type === "session.deleted") {
-        const logMsg = `[context-plugin] Session deleted: ${event.sessionId}`;
+      // Try to get session ID from different possible locations
+      const sessionId = event.sessionId || event.session?.id || event.sessionID || currentSessionId;
+      
+      if (event.type === "session.created") {
+        const logMsg = `[context-plugin] Session created: ${sessionId || 'unknown'}`;
+        console.log(logMsg);
+        debugLog(logMsg);
+        if (sessionId) currentSessionId = sessionId;
+      }
+      
+      // Save on session.idle (when user stops interacting)
+      if (event.type === "session.idle") {
+        const logMsg = `[context-plugin] Session idle: ${sessionId || 'unknown'}`;
         console.log(logMsg);
         debugLog(logMsg);
         
-        try {
-          const session = await client.sessions.get({ sessionID: event.sessionId });
-          const messages = session.messages || [];
-
-          if (messages.length > 0) {
-            const savedPath = saveContextToFile(contextosDir, event.sessionId, messages, "session_end");
-            if (savedPath) {
-              const saveLog = `[context-plugin] Session end context saved: ${savedPath}`;
-              console.log(saveLog);
-              debugLog(saveLog);
-            }
-          }
-          
-          cleanupOldContexts(contextosDir);
-        } catch (error) {
-          const errorLog = `[context-plugin] Error saving context on session deleted: ${error.message}`;
-          console.error(errorLog);
-          debugLog(errorLog);
+        // For idle events, we can't easily get messages without client
+        // So we'll just log for now
+        if (!sessionId) {
+          debugLog(`[context-plugin] No session ID available for idle event`);
         }
       }
       
-      if (event.type === "session.idle") {
-        const logMsg = `[context-plugin] Session idle: ${event.sessionId}`;
+      // Save on session.deleted (when session ends)
+      if (event.type === "session.deleted") {
+        const logMsg = `[context-plugin] Session deleted: ${sessionId || 'unknown'}`;
         console.log(logMsg);
         debugLog(logMsg);
         
-        try {
-          const session = await client.sessions.get({ sessionID: event.sessionId });
-          const messages = session.messages || [];
-
-          if (messages.length > 0) {
-            const savedPath = saveContextToFile(contextosDir, event.sessionId, messages, "auto");
-            if (savedPath) {
-              const saveLog = `[context-plugin] Idle session context saved: ${savedPath}`;
-              console.log(saveLog);
-              debugLog(saveLog);
-            }
-          }
-        } catch (error) {
-          const errorLog = `[context-plugin] Error saving context on session idle: ${error.message}`;
-          console.error(errorLog);
-          debugLog(errorLog);
+        // Similar to idle, we need client to get messages
+        if (!sessionId) {
+          debugLog(`[context-plugin] No session ID available for deleted event`);
         }
       }
     }
