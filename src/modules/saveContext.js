@@ -96,6 +96,12 @@ export async function saveContext(directory, session, type = 'compact') {
     logger(`[context-plugin] Saved context to: ${filepath}`);
     console.log(`[context-plugin] Context saved: ${filename}`);
     
+    // Invalidate context cache on new save
+    if (getConfig().injection?.cache?.enabled) {
+      const { invalidateCache } = await import('./contextCache.js');
+      await invalidateCache();
+    }
+    
     // Prepare session info for summaries
     const sessionInfo = {
       type,
