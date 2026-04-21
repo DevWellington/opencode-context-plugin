@@ -1,238 +1,140 @@
-# 🚀 Guia de Publicação e Instalação
+# 🚀 Guia de Publicação - OpenCode Context Plugin
 
-## Opção 1: Publicar no NPM (Recomendado para uso geral)
+## ✅ Publicado no NPM
 
-### Passo 1: Preparar para publicação
+**Pacote:** `@devwellington/opencode-context-plugin`  
+**Versão atual:** 1.1.0  
+**NPM:** https://www.npmjs.com/package/@devwellington/opencode-context-plugin  
+**GitHub:** https://github.com/DevWellington/opencode-context-plugin
 
-```bash
-cd /Users/wellingtonribeiro/projects/opencode-context-plugin
+---
 
-# Verifique se tem conta no npm
-npm whoami
+## 📦 Instalação
 
-# Se não tiver, crie uma conta em https://www.npmjs.com/signup
-npm login
-```
-
-### Passo 2: Publicar no NPM
+### Método 1: NPM (Recomendado)
 
 ```bash
-# Teste local primeiro
-npm pack
+# Instalação global
+npm install -g @devwellington/opencode-context-plugin@latest
 
-# Publique (versão inicial)
-npm publish --access public
-
-# Para atualizações futuras
-npm version patch  # 1.0.0 -> 1.0.1
-npm publish
-```
-
-### Passo 3: Instalar em qualquer computador
-
-```bash
-# Instalação global via npm
-npm install -g @devwellington/opencode-context-plugin
-
-# Ou instale diretamente no opencode
+# Ou direto no opencode
 opencode plugin @devwellington/opencode-context-plugin@latest --global
 ```
 
-### Passo 4: Configurar no OpenCode
+### Método 2: Script
 
-Edite `~/.config/opencode/opencode.json`:
-
-```json
-{
-  "plugins": [
-    "@devwellington/opencode-context-plugin"
-  ]
-}
-```
-
----
-
-## Opção 2: GitHub (Sem NPM)
-
-### Passo 1: Criar repositório no GitHub
-
-```bash
-cd /Users/wellingtonribeiro/projects/opencode-context-plugin
-
-# Inicialize o git se não tiver
-git init
-
-# Adicione os arquivos
-git add .
-git commit -m "Initial commit: opencode context plugin"
-
-# Crie o repositório no GitHub (via web ou CLI)
-gh repo create opencode-context-plugin --public --source=. --push
-```
-
-### Passo 2: Instalar via Git em qualquer computador
-
-```bash
-# Clone para a pasta de plugins do opencode
-git clone https://github.com/DevWellington/opencode-context-plugin.git \
-  ~/.config/opencode/plugins/context-plugin
-```
-
-### Passo 3: Configurar
-
-Edite `~/.config/opencode/opencode.json`:
-
-```json
-{
-  "plugins": ["context-plugin"]
-}
-```
-
----
-
-## Opção 3: Instalação Rápida (Script Único)
-
-Crie um script de instalação:
-
-```bash
-#!/bin/bash
-# install.sh
-
-PLUGIN_DIR="$HOME/.config/opencode/plugins/context-plugin"
-
-echo "🔧 Instalando opencode-context-plugin..."
-
-# Criar diretório
-mkdir -p "$PLUGIN_DIR"
-
-# Clonar ou atualizar
-if [ -d "$PLUGIN_DIR/.git" ]; then
-  cd "$PLUGIN_DIR" && git pull
-else
-  git clone https://github.com/DevWellington/opencode-context-plugin.git "$PLUGIN_DIR"
-fi
-
-# Adicionar ao config se não existir
-CONFIG_FILE="$HOME/.config/opencode/opencode.json"
-if ! grep -q "context-plugin" "$CONFIG_FILE" 2>/dev/null; then
-  # Backup
-  cp "$CONFIG_FILE" "${CONFIG_FILE}.bak"
-  
-  # Adicionar plugin (simplificado)
-  echo "⚠️  Adicione manualmente ao $CONFIG_FILE:"
-  echo '  "plugins": ["context-plugin"]'
-fi
-
-echo "✅ Instalação completa!"
-echo "🔄 Reinicie o OpenCode: opencode"
-```
-
-Uso:
 ```bash
 curl -fsSL https://raw.githubusercontent.com/DevWellington/opencode-context-plugin/main/install.sh | bash
 ```
 
----
-
-## Opção 4: Copia Manual (Desenvolvimento/Testing)
-
-### No seu computador atual:
+### Método 3: Git
 
 ```bash
-# Copiar para plugins globais
-cp -r /Users/wellingtonribeiro/projects/opencode-context-plugin \
-  ~/.config/opencode/plugins/context-plugin
-```
-
-### Em outro computador:
-
-```bash
-# Via SCP/RSYNC
-scp -r ~/projects/opencode-context-plugin user@outro-pc:~/.config/opencode/plugins/
-
-# Ou via USB/Drive
-# 1. Copie a pasta para um drive
-# 2. No outro PC: cp -r /drive/opencode-context-plugin ~/.config/opencode/plugins/context-plugin
+git clone https://github.com/DevWellington/opencode-context-plugin.git \
+  ~/.config/opencode/plugins/opencode-context-plugin
 ```
 
 ---
 
-## 📋 Checklist de Publicação
+## 🔄 Como Publicar Atualizações
 
-### Antes de publicar:
-
-- [ ] `package.json` com nome único (`@devwellington/opencode-context-plugin`)
-- [ ] `README.md` completo com instruções de instalação
-- [ ] `LICENSE` (MIT já está)
-- [ ] `.gitignore` configurado
-- [ ] Testado em múltiplos projetos
-- [ ] Versionamento semântico (1.0.0)
-
-### Após publicar:
-
-- [ ] Documentação atualizada no GitHub
-- [ ] Instruções de instalação claras
-- [ ] Exemplos de uso
-- [ ] Changelog (opcional)
-
----
-
-## 🌍 Instalação em Múltiplos Computadores
-
-### Método recomendado (NPM + Config Sync):
-
-1. **Publique no NPM** (Opção 1)
-
-2. **Sincronize sua config** via dotfiles:
+### 1. Preparar release
 
 ```bash
-# No seu repositório de dotfiles
-echo 'opencode plugin @devwellington/opencode-context-plugin@latest --global' >> ~/.dotfiles/install.sh
+cd /path/to/opencode-context-plugin
+
+# Edite index.js com as mudanças
+# Atualize versão no package.json
 ```
 
-3. **Em cada computador novo**:
+### 2. Versionar e publicar
 
 ```bash
-# Instale o plugin
-npm install -g @devwellington/opencode-context-plugin
+# Patch (1.1.0 → 1.1.1) - bug fixes
+npm version patch
 
-# Ou via opencode CLI
-opencode plugin @devwellington/opencode-context-plugin@latest --global
+# Minor (1.1.0 → 1.2.0) - novas features
+npm version minor
+
+# Major (1.1.0 → 2.0.0) - breaking changes
+npm version major
+
+# Push e publish
+git push && git push --tags
+npm publish --access public
+```
+
+### 3. Verificar publicação
+
+```bash
+npm view @devwellington/opencode-context-plugin
+npm view @devwellington/opencode-context-plugin versions
 ```
 
 ---
 
-## 🔗 Links Úteis
+## 📋 Checklist de Release
 
+- [ ] Testar em múltiplos projetos
+- [ ] Atualizar CHANGELOG no README
+- [ ] Bump version no package.json
+- [ ] Commit e tag
+- [ ] Push para GitHub
+- [ ] Publish no NPM
+- [ ] Testar instalação via npm
+
+---
+
+## 🛠️ Desenvolvimento
+
+### Testar localmente
+
+```bash
+# Copie para pasta de plugins
+cp index.js ~/.config/opencode/plugins/opencode-context-plugin/index.js
+
+# Reinicie opencode
+opencode
+
+# Veja logs
+tail -f ~/.opencode-context-plugin.log
+```
+
+### Estrutura do projeto
+
+```
+opencode-context-plugin/
+├── index.js          # Plugin principal
+├── package.json      # Configuração npm
+├── install.sh        # Script de instalação
+├── README.md         # Documentação
+├── PUBLISH.md        # Este arquivo
+└── .gitignore
+```
+
+---
+
+## 📊 Versões
+
+| Versão | Data | Mudanças |
+|--------|------|----------|
+| 1.1.0 | 2026-04-21 | Captura completa de mensagens, injeção de contexto |
+| 1.0.x | 2026-04-20 | Versões iniciais de teste |
+
+---
+
+## 🔗 Links
+
+- [NPM Package](https://www.npmjs.com/package/@devwellington/opencode-context-plugin)
+- [GitHub Repo](https://github.com/DevWellington/opencode-context-plugin)
 - [NPM Publish Guide](https://docs.npmjs.com/packages-and-modules/contributing-packages-to-the-registry)
-- [OpenCode Plugin Docs](https://opencode.ai/docs/plugins)
 - [Semantic Versioning](https://semver.org/)
 
 ---
 
-## 📊 Comparação de Métodos
+## 🎯 Próximos Passos
 
-| Método | Facilidade | Atualização | Offline | Recomendado para |
-|--------|-----------|-------------|---------|------------------|
-| **NPM** | ⭐⭐⭐⭐⭐ | Automática | ❌ | Produção / Geral |
-| **GitHub** | ⭐⭐⭐⭐ | Git pull | ✅ | Dev / Teams |
-| **Script** | ⭐⭐⭐⭐⭐ | Automática | ❌ | Distribuição fácil |
-| **Manual** | ⭐⭐ | Manual | ✅ | Testing / Local |
-
----
-
-## 🎯 Minha Recomendação
-
-**Para você usar em todos os computadores:**
-
-1. **Publique no NPM** (5 minutos)
-2. **Crie repositório GitHub** (público ou privado)
-3. **Use o script de instalação** para facilitar
-
-Assim você:
-- ✅ Tem backup na nuvem
-- ✅ Instala em qualquer PC com 1 comando
-- ✅ Recebe updates facilmente
-- ✅ Pode compartilhar com outros
-
-Quer que eu crie o script de instalação e o `.gitignore` completo?
+- [ ] Adicionar opção para configurar número de sessões injetadas
+- [ ] Suporte a auto-save periódico
+- [ ] Filtro de tool outputs para economia de tokens
+- [ ] Compressão de contexto antigo

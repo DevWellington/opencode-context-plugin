@@ -1,15 +1,15 @@
 # OpenCode Context Plugin
 
-Plugin para OpenCode que salva o contexto da sessão em `.opencode/contextos/` após cada compactação e ao sair do opencode.
+Plugin para OpenCode que salva automaticamente o contexto da sessão em `.opencode/contextos/` após cada compactação e ao sair.
 
 ## Funcionalidades
 
-- **Salvamento automático**: Após cada `/compact` ou ao sair do opencode
-- **Separação por tipo**: Arquivos prefixados por `compact-`, `saida-`, `auto-`
-- **Injeção de contexto**: Contexto de sessões anteriores é injetado APENAS na primeira mensagem
-- **Economia de tokens**: Filtra tool outputs, trunca mensagens longas, limita a 5 sessões anteriores
-- **Priorização**: Sessões completas (saida) têm prioridade sobre compactações
-- **Diretório automático**: Cria a estrutura de diretórios necessária
+- ✅ **Salvamento automático**: Após cada `/compact` ou ao sair do opencode
+- ✅ **Separação por tipo**: Arquivos prefixados por `compact-`, `saida-`
+- ✅ **Injeção de contexto**: Últimas 5 sessões injetadas na primeira mensagem
+- ✅ **Mensagens completas**: Captura conversas de usuário e assistente
+- ✅ **Economia de tokens**: Trunca mensagens longas (>2000 chars)
+- ✅ **Diretório automático**: Cria `.opencode/contextos/` automaticamente
 
 ## Estrutura de Arquivos
 
@@ -17,33 +17,34 @@ Plugin para OpenCode que salva o contexto da sessão em `.opencode/contextos/` a
 {project}/
 └── .opencode/
     └── contextos/
-        ├── saida-20250420-1430.md    # Fim de sessão (completo)
-        ├── compact-20250420-1515.md  # Compactação manual
-        ├── auto-20250420-1600.md     # Auto-save (se habilitado)
+        ├── saida-2026-04-21T02-15-29.md    # Fim de sessão (completo)
+        ├── compact-2026-04-21T02-10-46.md  # Compactação via /compact
         └── ...
 ```
 
 **Prefixos:**
-- `saida-` = Sessão completa ao sair (prioridade máxima)
-- `compact-` = Compactação via `/compact`
-- `auto-` = Auto-save periódico (futuro)
+- `saida-` = Sessão completa ao sair do opencode
+- `compact-` = Compactação manual ou automática via `/compact`
 
 ## Instalação
 
-### ⚡ Método Rápido (Recomendado)
+### 📦 Via NPM (Recomendado)
+
+```bash
+# Instalação global
+npm install -g @devwellington/opencode-context-plugin@latest
+
+# Ou instale direto no opencode
+opencode plugin @devwellington/opencode-context-plugin@latest --global
+```
+
+### ⚡ Via Script
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/DevWellington/opencode-context-plugin/main/install.sh | bash
 ```
 
-### 📦 Via NPM (Em breve)
-
-```bash
-npm install -g @devwellington/opencode-context-plugin
-opencode plugin @devwellington/opencode-context-plugin@latest --global
-```
-
-### 🔧 Manual
+### 🔧 Manual (Git)
 
 ```bash
 # Clone para a pasta de plugins
@@ -67,88 +68,93 @@ git clone https://github.com/DevWellington/opencode-context-plugin.git \
 
 ## Configuração
 
-### No `config.json` do projeto ou global:
-
-Adicione o plugin ao array de plugin:
+Adicione ao `~/.config/opencode/opencode.json` (global) ou `.opencode/opencode.json` (projeto):
 
 ```json
 {
-  "plugin": [
-    "opencode-context-plugin"
-  ]
-}
-```
-
-Ou com opções:
-
-```json
-{
-  "plugin": [
-    ["opencode-context-plugin", { /* opções futuras */ }]
-  ]
+  "plugin": ["opencode-context-plugin"]
 }
 ```
 
 ## Uso
 
-1. **Instale o plugin** conforme as instruções acima
+1. **Instale o plugin** (veja acima)
 
-2. **Reinicie o OpenCode** ou abra uma nova sessão
+2. **Reinicie o OpenCode**: `opencode`
 
-3. **Use normalmente** - o contexto será salvo automaticamente ao usar `/compact` ou ao sair do opencode
+3. **Use normalmente**:
+   - `/compact` → Salva contexto em `compact-*.md`
+   - Sair da sessão → Salva contexto em `saida-*.md`
+   - Nova sessão → Injeta últimas 5 sessões na primeira mensagem
 
-4. **Contexto é injetado** apenas na 1ª mensagem (últimas 5 sessões, filtrado)
+4. **Visualize contextos**: `{projeto}/.opencode/contextos/`
 
 ## API de Hooks
 
-O plugin utiliza os seguintes hooks:
-
 | Hook | Função |
 |------|--------|
-| `experimental.compaction.autocontinue` | Captura contexto após compactação |
-| `experimental.chat.messages.transform` | Injeta contextos anteriores na sessão |
-| `command.execute.before` | Detecta comando `/compact` |
-| `session.end` | Salva contexto ao sair do opencode |
+| `session.compacted` | Salva contexto após compactação |
+| `session.end` / `server.instance.disposed` | Salva contexto ao sair |
+| `experimental.chat.messages.transform` | Injeta contextos na 1ª mensagem |
+| `message.updated` / `message.part.delta` / `message.part.updated` | Captura mensagens | |
 
 ## Solução de Problemas
 
 ### Plugin não carrega
+```bash
+# Verifique instalação
+ls -la ~/.config/opencode/plugins/opencode-context-plugin/
 
-1. Verifique se o caminho está correto em `~/.config/opencode/`
-2. Verifique se o `package.json` está na raiz do plugin
-3. Verifique os logs do OpenCode
+# Veja logs
+tail -50 ~/.opencode-context-plugin.log
+```
 
 ### Contexto não é salvo
+1. Execute `/compact` manualmente
+2. Verifique `.opencode/contextos/`
+3. Confira logs: `tail -f ~/.opencode-context-plugin.log`
 
-1. Verifique se o diretório `.opencode/contextos/` existe
-2. Verifique permissões de escrita
-3. Execute `/compact` manualmente para acionar o salvamento
-
-### Verificar instalação
-
+### Desinstalar
 ```bash
-ls -la ~/.config/opencode/plugins/opencode-context-plugin/
-ls -la .opencode/plugins/opencode-context-plugin/  # se instalado por projeto
+# Remova do config
+# ~/.config/opencode/opencode.json: remova "opencode-context-plugin"
+
+# Remova plugin
+rm -rf ~/.config/opencode/plugins/opencode-context-plugin
 ```
 
 ## Desenvolvimento
 
 ```bash
-# Navegue até o diretório do plugin
 cd /path/to/opencode-context-plugin
 
-# Adicione como dependência de desenvolvimento (opcional)
-npm link
+# Teste local
+cp index.js ~/.config/opencode/plugins/opencode-context-plugin/index.js
+
+# Reinicie opencode para recarregar
 ```
 
-## Estrutura do Plugin
+## Estrutura
 
 ```
 opencode-context-plugin/
 ├── package.json    # Configuração npm
-├── index.js        # Código principal do plugin
-└── README.md       # Este arquivo
+├── index.js        # Plugin principal
+├── install.sh      # Script de instalação
+├── README.md       # Documentação
+└── PUBLISH.md      # Guia de publicação
 ```
+
+## Changelog
+
+### v1.1.0 (2026-04-21)
+- ✅ Captura completa de mensagens (usuário + assistente)
+- ✅ Suporte a `message.part.delta` e `message.part.updated`
+- ✅ Injeção de contexto de 5 sessões anteriores
+- ✅ Truncamento de mensagens longas (2000 chars)
+
+### v1.0.x
+- Versões iniciais de teste
 
 ## Licença
 

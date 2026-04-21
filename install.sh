@@ -2,14 +2,12 @@
 
 set -e
 
-echo "🚀 Instalando opencode-context-plugin..."
+echo "🚀 Instalando @devwellington/opencode-context-plugin..."
 
 # Detectar sistema operacional
 if [[ "$OSTYPE" == "darwin"* ]]; then
-  # macOS
   PLUGIN_DIR="$HOME/.config/opencode/plugins/opencode-context-plugin"
 elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
-  # Linux
   PLUGIN_DIR="$HOME/.config/opencode/plugins/opencode-context-plugin"
 else
   echo "❌ Sistema operacional não suportado: $OSTYPE"
@@ -18,7 +16,7 @@ fi
 
 # Verificar se opencode está instalado
 if ! command -v opencode &> /dev/null; then
-  echo "❌ OpenCode não encontrado. Instale primeiro: https://opencode.ai"
+  echo "❌ OpenCode não encontrado. Instale: https://opencode.ai"
   exit 1
 fi
 
@@ -31,9 +29,9 @@ if [ -d "$PLUGIN_DIR" ]; then
   rm -rf "$PLUGIN_DIR"
 fi
 
-# Clonar repositório
+# Clonar repositório (última versão estável)
 echo "📦 Clonando repositório..."
-git clone https://github.com/DevWellington/opencode-context-plugin.git "$PLUGIN_DIR"
+git clone --depth 1 https://github.com/DevWellington/opencode-context-plugin.git "$PLUGIN_DIR"
 
 # Verificar se o config do opencode existe
 CONFIG_FILE="$HOME/.config/opencode/opencode.json"
@@ -50,37 +48,32 @@ cp "$CONFIG_FILE" "$BACKUP_FILE"
 
 # Adicionar plugin ao config (usando jq se disponível, senão fallback)
 if command -v jq &> /dev/null; then
-  # Usar jq para manipulação JSON segura
   if jq -e '.plugin' "$CONFIG_FILE" > /dev/null 2>&1; then
-    # Array plugin já existe, adicionar se não existir
     if ! jq -e '.plugin | index("opencode-context-plugin")' "$CONFIG_FILE" > /dev/null 2>&1; then
       jq '.plugin += ["opencode-context-plugin"]' "$CONFIG_FILE" > "${CONFIG_FILE}.tmp" && mv "${CONFIG_FILE}.tmp" "$CONFIG_FILE"
       echo "✅ Plugin adicionado ao config"
     else
-      echo "⚠️  Plugin já está no config"
+      echo "ℹ️  Plugin já está no config"
     fi
   else
-    # Array plugin não existe, criar
     jq '. + {plugin: ["opencode-context-plugin"]}' "$CONFIG_FILE" > "${CONFIG_FILE}.tmp" && mv "${CONFIG_FILE}.tmp" "$CONFIG_FILE"
     echo "✅ Plugin adicionado ao config"
   fi
 else
-  # Fallback sem jq - instrução manual
   echo "⚠️  jq não encontrado. Adicione manualmente ao $CONFIG_FILE:"
-  echo ""
   echo '  "plugin": ["opencode-context-plugin"]'
-  echo ""
 fi
 
 echo ""
 echo "✅ Instalação completa!"
 echo ""
-echo "📁 Plugin instalado em: $PLUGIN_DIR"
+echo "📁 Plugin: $PLUGIN_DIR"
 echo "📝 Config: $CONFIG_FILE"
 echo ""
-echo "🔄 Reinicie o OpenCode:"
-echo "   opencode"
+echo "🔄 Reinicie o OpenCode: opencode"
 echo ""
-echo "📚 Ver arquivos de contexto em:"
-echo "   {seu-projeto}/.opencode/contextos/"
+echo "📚 Contextos salvos em: {projeto}/.opencode/contextos/"
+echo ""
+echo "📦 Alternativa via npm:"
+echo "   npm install -g @devwellington/opencode-context-plugin@latest"
 echo ""

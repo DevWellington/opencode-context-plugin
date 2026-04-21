@@ -1,15 +1,19 @@
-node_modules/
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-package-lock.json
-.DS_Store
+# Logs
 *.log
-.opencode/contextos/*.md
-.env
-.env.local
-*.db
-*.db-wal
-*.db-shm
-.planning
-.opencode
+.opencode-context-plugin.log
+
+# Node
+node_modules/
+package-lock.json
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Build
+*.tgz
+dist/
