@@ -1,0 +1,9 @@
+{
+  "contextPlugin": {
+    "maxContexts": 5,
+    "enableLearning": true,
+    "logLevel": "info",
+    "debug": false,
+    "debounceMs": 500
+  }
+}
