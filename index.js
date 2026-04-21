@@ -136,7 +136,7 @@ async function saveContext(directory, session, type = 'compact') {
     
     debugLog(`[Daily Summary] Updated with ${filename}`);
     
-    return { savedFilePath: filepath, summariesUpdated: true };
+    return filepath;
   } catch (error) {
     debugLog(`[context-plugin] Error saving context: ${error.message}`);
     console.error(`[context-plugin] Error saving context: ${error.message}`);
