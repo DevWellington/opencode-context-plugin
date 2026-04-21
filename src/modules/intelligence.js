@@ -3,6 +3,7 @@ import path from "path";
 import { createDebugLogger } from '../utils/debug.js';
 import { atomicWrite } from '../utils/fileUtils.js';
 import { extractSessionContent, extractBugs, findPatterns } from './contentExtractor.js';
+import { updateGlobalIntelligence } from '../utils/globalIntelligence.js';
 
 const logger = createDebugLogger('intelligence');
 
@@ -306,6 +307,16 @@ export async function updateIntelligenceLearning(baseDir, sessionInfo) {
       // Atomic write
       await atomicWrite(filePath, content);
       logger(`[Intelligence] Updated learning file: ${filePath}`);
+      
+      // Sync to global intelligence (fire-and-forget, don't block local updates)
+      const projectName = path.basename(baseDir);
+      updateGlobalIntelligence(projectName, {
+        sessionCount: sessionsAnalyzed,
+        lastSessionType: sessionInfo.type,
+        timestamp: sessionInfo.timestamp || new Date().toISOString()
+      }).catch(err => {
+        logger(`[Intelligence] Global sync error (non-blocking): ${err.message}`);
+      });
     } catch (error) {
       logger(`[Intelligence] Error updating learning file: ${error.message}`);
       console.error(`[context-plugin] Intelligence learning update failed: ${error.message}`);

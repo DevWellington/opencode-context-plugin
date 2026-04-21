@@ -146,10 +146,10 @@ Plans:
   4. Contexts can optionally sync to remote storage
 
 Plans:
-- [ ] 07-01: Create global intelligence learning file
-- [ ] 07-02: Implement cross-project context linking
-- [ ] 07-03: Add project templates from learnings
-- [ ] 07-04: Add remote storage sync (optional)
+- [x] 07-01-PLAN.md: Create global intelligence learning file (planned)
+- [x] 07-02-PLAN.md: Implement cross-project context linking (planned)
+- [x] 07-03-PLAN.md: Add project templates from learnings (planned)
+- [x] 07-04-PLAN.md: Add remote storage sync (optional) (planned)
 
 ---
 
@@ -174,8 +174,8 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 4. Advanced Search & Retrieval | v2.0 | 3/3 | Complete | 2026-04-21 |
 | 5. Agent System & Obsidian Integration | v1.3 | 6/6 | Complete | 2026-04-21 |
 | 5. Content-Focused Reports | v1.4 | 4/4 | Complete | 2026-04-21 |
-| 6. OpenCode Internal AI | v1.5 | 0/2 | Planning | - |
-| 7. Multi-Project Support | v2.1 | 0/4 | Not started | - |
+| 6. OpenCode Internal AI | v1.5 | 2/2 | Complete | 2026-04-21 |
+| 7. Multi-Project Support | v2.1 | 4/4 | Planning | - |
 | 8. Dashboard & UI | Future | 0/TBD | Not started | - |
 | 9. AI-Powered Insights | Future | 0/TBD | Not started | - |
 

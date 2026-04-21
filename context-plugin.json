@@ -4,6 +4,10 @@
   "logLevel": "info",
   "debug": false,
   "debounceMs": 500,
+  "globalIntelligence": {
+    "enabled": true,
+    "path": "~/.opencode/global-intelligence.md"
+  },
   "logRotation": {
     "enabled": true,
     "maxSizeBytes": 10485760,

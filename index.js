@@ -5,6 +5,7 @@ import { loadConfig, getConfig, LOG_FILE, CONTEXT_SESSION_DIR } from './src/conf
 import { createDebugLogger, debugLog } from './src/utils/debug.js';
 import { saveContext } from './src/modules/saveContext.js';
 import { initializeIntelligenceLearning } from './src/modules/intelligence.js';
+import { initializeGlobalIntelligence } from './src/utils/globalIntelligence.js';
 import { getRelevantContexts, formatForInjection } from './src/modules/contextInjector.js';
 
 const logger = createDebugLogger('context-plugin');
@@ -193,6 +194,11 @@ class ContextPlugin {
       // Initialize intelligence learning file on plugin startup
       initializeIntelligenceLearning(this.directory).catch(err => {
         logger(`[context-plugin] Intelligence learning init failed: ${err.message}`);
+      });
+      
+      // Initialize global intelligence file on plugin startup
+      initializeGlobalIntelligence().catch(err => {
+        logger(`[context-plugin] Global intelligence init failed: ${err.message}`);
       });
     }
     
