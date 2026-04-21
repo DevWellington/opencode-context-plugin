@@ -147,6 +147,15 @@ opencode-context-plugin/
 
 ## Changelog
 
+### v1.1.1 (2026-04-21) - Current
+- ✅ Estrutura hierárquica `YYYY/MM/WW/DD/`
+- ✅ Sumários automáticos (dia, semana, daily-summary.md)
+- ✅ Intelligence learning file (`intelligence-learning.md`)
+- ✅ Pre-exit compression (salva antes de sair)
+- ✅ Async fs/promises para todas operações
+- ✅ Atomic writes previnem corrupção de arquivos
+- ✅ Migração automática de versões anteriores
+
 ### v1.1.0 (2026-04-21)
 - ✅ Captura completa de mensagens (usuário + assistente)
 - ✅ Suporte a `message.part.delta` e `message.part.updated`

@@ -41,8 +41,77 @@ Transform the context saving plugin into a production-ready session management s
 
 ---
 
-## Future Phases (TBD)
+---
 
-- Phase 2: Context injection optimization
-- Phase 3: Advanced search and retrieval
-- Phase 4: Multi-project support
+## Phase 2: Code Quality & Performance
+
+**Goal:** Refactor monolithic index.js into modular structure, optimize context injection, and add configuration options.
+
+**Status:** 🟡 Ready to plan
+
+**Requirements:**
+- **[MODULAR-01]** Extract saveContext logic into separate module
+- **[MODULAR-02]** Extract summary generation into separate module
+- **[MODULAR-03]** Extract intelligence learning into separate module
+- **[PERF-01]** Implement debouncing for summary updates
+- **[PERF-02]** Add log rotation or debug flag
+- **[CONFIG-01]** Allow configuration via opencode.json (maxSessions, enableLearning, logLevel)
+- **[TEST-01]** Mock client API for integration tests
+
+**Estimated Plans:** 3-4
+
+---
+
+## Phase 3: Context Injection Optimization
+
+**Goal:** Smart context injection based on relevance, not just recency.
+
+**Status:** ⚪ TBD
+
+**Requirements:**
+- **[INJECT-01]** Filter contexts by relevance score
+- **[INJECT-02]** Limit injected content by tokens, not just file count
+- **[INJECT-03]** Add user prompt to manually request context injection
+- **[INJECT-04]** Cache injected context to avoid re-reading files
+
+**Estimated Plans:** 3
+
+---
+
+## Phase 4: Advanced Search & Retrieval
+
+**Goal:** Make it easy to find specific sessions and content.
+
+**Status:** ⚪ TBD
+
+**Requirements:**
+- **[SEARCH-01]** Full-text search across all sessions
+- **[SEARCH-02]** Filter by date range, type (compact/exit), keywords
+- **[SEARCH-03]** CLI tool for searching from terminal
+- **[SEARCH-04]** Generate weekly/monthly reports
+
+**Estimated Plans:** 4
+
+---
+
+## Phase 5: Multi-Project Support
+
+**Goal:** Share learnings and contexts across projects.
+
+**Status:** ⚪ TBD
+
+**Requirements:**
+- **[MULTI-01]** Global intelligence learning file
+- **[MULTI-02]** Cross-project context linking
+- **[MULTI-03]** Project templates based on learnings
+- **[MULTI-04]** Sync contexts to remote storage (optional)
+
+**Estimated Plans:** 3-4
+
+---
+
+## Long-term Vision
+
+- **Phase 6:** Dashboard/UI for browsing sessions
+- **Phase 7:** AI-powered insights and patterns
+- **Phase 8:** Collaboration features (share sessions with team)
