@@ -75,7 +75,11 @@ export async function getRelevantContexts(currentSession, options = {}) {
     
     if (validCached.length > 0) {
       logger(`[injector] Using ${validCached.length} cached contexts`);
-      return validCached.slice(0, maxContexts);
+      return validCached.slice(0, maxContexts).map(entry => ({
+        context: { id: entry.contextId, score: entry.relevanceScore },
+        content: entry.content,
+        tokens: entry.tokens
+      }));
     }
   }
   

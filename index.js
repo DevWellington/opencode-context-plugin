@@ -369,8 +369,6 @@ class ContextPlugin {
 
 // Main plugin entry point
 export { saveContext } from './src/modules/saveContext.js';
-export { registerPluginHooks };
-export { autoInjectContexts };
 export { getRelevantContexts, formatForInjection, injectContextPrompt } from './src/modules/contextInjector.js';
 
 // V2 Export format - { id, server } - server must be instantiable with `new`
