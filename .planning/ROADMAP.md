@@ -86,11 +86,12 @@ Plans:
   5. @ocp-help provides comprehensive agent documentation
 
 **Plans:**
-4/4 plans complete
+5/5 plans
 - [x] 05-02: Create @ocp-read-* agents with --summary/--all parameters
 - [x] 05-03: Implement @ocp-generate-intelligence-learning with historical tracking
 - [x] 05-04: Implement @ocp-read-intelligence-learning agent
 - [ ] 05-05: Add @ocp-help agent with full documentation
+- [ ] 05-06: Auto-generate reports on /exit or /compact
 
 **Agent Commands:**
 | Agent | Description |
