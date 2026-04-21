@@ -20,7 +20,7 @@ Transform the context saving plugin into a production-ready session management s
 - [x] 01-context-session-improvements-01-PLAN.md — Migrate to async fs/promises, rename contextos→context-session and saida→exit
 - [x] 01-context-session-improvements-02-PLAN.md — Implement hierarchical folder structure (YYYY/MM/WW/DD) with auto-summaries
 - [x] 01-context-session-improvements-03-PLAN.md — Create daily summary routine at context-session root
-- [ ] 01-context-session-improvements-04-PLAN.md — Implement pre-exit compression and intelligence learning file
+- [x] 01-context-session-improvements-04-PLAN.md — Implement pre-exit compression and intelligence learning file
 
 ---
 

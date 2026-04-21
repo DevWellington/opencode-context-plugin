@@ -4,13 +4,13 @@ milestone: v1.0
 milestone_name: milestone
 current_plan: 03 of 04
 status: completed
-stopped_at: Completed 01-03-PLAN.md
-last_updated: "2026-04-21T12:20:00.000Z"
+stopped_at: Completed 01-04-PLAN.md
+last_updated: "2026-04-21T12:21:05.697Z"
 progress:
   total_phases: 1
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 4
-  completed_plans: 3
+  completed_plans: 4
 ---
 
 # Project State
@@ -64,6 +64,9 @@ Impact: Minimal overhead (< 10ms) but ensures data integrity
 - [Phase 01]: Use atomic writes (temp file + rename) for file safety
 - [Phase 01]: Maintain OLD_CONTEXTOS_DIR constant for migration detection
 - [Phase 01]: Rename old directory to .deprecated instead of deleting
+- [Phase 01]: Use session.idle and session.deleted events for pre-exit trigger to catch all session end scenarios
+- [Phase 01]: Queue-based serialization for intelligence learning updates instead of file locking
+- [Phase 01]: Limit Key Learnings section to last 20 entries to prevent unbounded file growth
 
 ## Pending Todos
 
@@ -79,8 +82,8 @@ None currently.
 
 ## Session
 
-**Last Session:** 2026-04-21T12:20:00.000Z
-**Stopped At:** Completed 01-03-PLAN.md
+**Last Session:** 2026-04-21T12:20:49.290Z
+**Stopped At:** Completed 01-04-PLAN.md
 
 ## Patterns
 
