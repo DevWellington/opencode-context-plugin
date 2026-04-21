@@ -33,14 +33,14 @@ Plugin para OpenCode que salva o contexto da sessão em `.opencode/contextos/` a
 ### ⚡ Método Rápido (Recomendado)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/wellingtonribeiro/opencode-context-plugin/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/DevWellington/opencode-context-plugin/main/install.sh | bash
 ```
 
 ### 📦 Via NPM (Em breve)
 
 ```bash
-npm install -g @wellingtonribeiro/opencode-context-plugin
-opencode plugin @wellingtonribeiro/opencode-context-plugin@latest --global
+npm install -g @devwellington/opencode-context-plugin
+opencode plugin @devwellington/opencode-context-plugin@latest --global
 ```
 
 ### 🔧 Manual

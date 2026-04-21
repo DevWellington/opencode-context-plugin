@@ -32,10 +32,10 @@ npm publish
 
 ```bash
 # Instalação global via npm
-npm install -g @wellingtonribeiro/opencode-context-plugin
+npm install -g @devwellington/opencode-context-plugin
 
 # Ou instale diretamente no opencode
-opencode plugin @wellingtonribeiro/opencode-context-plugin@latest --global
+opencode plugin @devwellington/opencode-context-plugin@latest --global
 ```
 
 ### Passo 4: Configurar no OpenCode
@@ -45,7 +45,7 @@ Edite `~/.config/opencode/opencode.json`:
 ```json
 {
   "plugins": [
-    "@wellingtonribeiro/opencode-context-plugin"
+    "@devwellington/opencode-context-plugin"
   ]
 }
 ```
@@ -74,7 +74,7 @@ gh repo create opencode-context-plugin --public --source=. --push
 
 ```bash
 # Clone para a pasta de plugins do opencode
-git clone https://github.com/wellingtonribeiro/opencode-context-plugin.git \
+git clone https://github.com/DevWellington/opencode-context-plugin.git \
   ~/.config/opencode/plugins/context-plugin
 ```
 
@@ -109,7 +109,7 @@ mkdir -p "$PLUGIN_DIR"
 if [ -d "$PLUGIN_DIR/.git" ]; then
   cd "$PLUGIN_DIR" && git pull
 else
-  git clone https://github.com/wellingtonribeiro/opencode-context-plugin.git "$PLUGIN_DIR"
+  git clone https://github.com/DevWellington/opencode-context-plugin.git "$PLUGIN_DIR"
 fi
 
 # Adicionar ao config se não existir
@@ -129,7 +129,7 @@ echo "🔄 Reinicie o OpenCode: opencode"
 
 Uso:
 ```bash
-curl -fsSL https://raw.githubusercontent.com/wellingtonribeiro/opencode-context-plugin/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/DevWellington/opencode-context-plugin/main/install.sh | bash
 ```
 
 ---
@@ -161,7 +161,7 @@ scp -r ~/projects/opencode-context-plugin user@outro-pc:~/.config/opencode/plugi
 
 ### Antes de publicar:
 
-- [ ] `package.json` com nome único (`@wellingtonribeiro/opencode-context-plugin`)
+- [ ] `package.json` com nome único (`@devwellington/opencode-context-plugin`)
 - [ ] `README.md` completo com instruções de instalação
 - [ ] `LICENSE` (MIT já está)
 - [ ] `.gitignore` configurado
@@ -187,17 +187,17 @@ scp -r ~/projects/opencode-context-plugin user@outro-pc:~/.config/opencode/plugi
 
 ```bash
 # No seu repositório de dotfiles
-echo 'opencode plugin @wellingtonribeiro/opencode-context-plugin@latest --global' >> ~/.dotfiles/install.sh
+echo 'opencode plugin @devwellington/opencode-context-plugin@latest --global' >> ~/.dotfiles/install.sh
 ```
 
 3. **Em cada computador novo**:
 
 ```bash
 # Instale o plugin
-npm install -g @wellingtonribeiro/opencode-context-plugin
+npm install -g @devwellington/opencode-context-plugin
 
 # Ou via opencode CLI
-opencode plugin @wellingtonribeiro/opencode-context-plugin@latest --global
+opencode plugin @devwellington/opencode-context-plugin@latest --global
 ```
 
 ---
