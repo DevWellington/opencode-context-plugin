@@ -5,6 +5,7 @@ import { loadConfig, getConfig, LOG_FILE, CONTEXT_SESSION_DIR } from './src/conf
 import { createDebugLogger, debugLog } from './src/utils/debug.js';
 import { saveContext } from './src/modules/saveContext.js';
 import { initializeIntelligenceLearning } from './src/modules/intelligence.js';
+import { getRelevantContexts, formatForInjection } from './src/modules/contextInjector.js';
 
 const logger = createDebugLogger('context-plugin');
 
@@ -113,17 +114,68 @@ async function migrateContextFiles(directory) {
 
 function buildContextInjection(contexts) {
   if (contexts.length === 0) return '';
-  
+
   let injection = `\n\n---\n## Previous Session Contexts\n\n`;
   injection += `*The following contexts from previous sessions are available for reference:*\n\n`;
-  
+
   contexts.forEach(ctx => {
     injection += `### From: ${ctx.file}\n`;
     injection += `${ctx.content}\n\n`;
     injection += `---\n\n`;
   });
-  
+
   return injection;
+}
+
+/**
+ * Auto-inject relevant contexts at session start
+ * Called from OpenCode plugin lifecycle hook
+ */
+export async function autoInjectContexts(session) {
+  const config = getConfig();
+
+  if (!config.injection?.enabled || !config.injection?.autoInject) {
+    return null;
+  }
+
+  try {
+    const scoredContexts = await getRelevantContexts(session, {
+      maxContexts: config.injection.maxContexts,
+      maxTokens: config.injection.maxTokens
+    });
+
+    if (scoredContexts.length === 0) {
+      return null;
+    }
+
+    const injected = formatForInjection(scoredContexts);
+    logger(`[context-plugin] Auto-injected ${scoredContexts.length} contexts`);
+
+    return injected;
+  } catch (error) {
+    logger(`[context-plugin] Auto-inject failed: ${error.message}`);
+    return null;
+  }
+}
+
+/**
+ * Hook registration for OpenCode plugin API
+ * This registers the plugin with OpenCode's lifecycle hooks
+ */
+export function registerPluginHooks(opencodeApi) {
+  // Session start - auto inject if enabled
+  opencodeApi.onSessionStart(async (session) => {
+    const injected = await autoInjectContexts(session);
+    if (injected) {
+      opencodeApi.addToPrompt(injected);
+    }
+  });
+
+  // Session end - save context (existing behavior)
+  opencodeApi.onSessionEnd(async (session) => {
+    const { saveContext } = await import('./src/modules/saveContext.js');
+    await saveContext(session.directory || session.directory, session, 'exit');
+  });
 }
 
 // V2 Plugin class that opencode will instantiate
@@ -314,6 +366,12 @@ class ContextPlugin {
     return messages;
   }
 }
+
+// Main plugin entry point
+export { saveContext } from './src/modules/saveContext.js';
+export { registerPluginHooks };
+export { autoInjectContexts };
+export { getRelevantContexts, formatForInjection, injectContextPrompt } from './src/modules/contextInjector.js';
 
 // V2 Export format - { id, server } - server must be instantiable with `new`
 export default {
