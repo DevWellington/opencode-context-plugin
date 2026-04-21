@@ -686,144 +686,167 @@ let currentSessionId = null;
 let hasInjectedContext = false;
 let lastSession = null;
 
-// V2 Plugin class that opencode will instantiate
-class ContextPlugin {
-  constructor(input) {
-    this.directory = input?.directory;
-    this.client = input?.client;
-    debugLog(`[context-plugin] ContextPlugin instantiated for: ${this.directory}`);
+export default async (input) => {
+  console.log(`[context-plugin] 🔍 PLUGIN INVOKED with input:`, JSON.stringify(input)?.slice(0, 200));
+  
+  if (!input) {
+    console.error(`[context-plugin] ❌ ERROR: input is null/undefined!`);
+    return null;
   }
-
-  async event(eventInput) {
-    debugLog(`[context-plugin] RAW EVENT received: ${JSON.stringify(eventInput)}`);
-    const event = eventInput?.event || eventInput;
-    const eventType = event?.type;
-
-    debugLog(`[context-plugin] Parsed eventType: ${eventType}`);
-    if (!eventType) return;
-
-    if (eventType === "session.created") {
-      currentSessionId = event?.sessionId || event?.sessionID || event?.session?.id;
-      hasInjectedContext = false;
-      lastSession = null;
-      debugLog(`[context-plugin] Session created: ${currentSessionId}`);
-    }
-
-    if (eventType === "session.updated") {
-      const info = event?.properties?.info;
-      if (info) {
-        if (!lastSession) lastSession = {};
-        Object.assign(lastSession, info);
-        debugLog(`[context-plugin] Session metadata updated`);
+  
+  const { directory, client } = input;
+  
+  if (!directory) {
+    console.error(`[context-plugin] ❌ ERROR: directory is missing from input!`);
+    return null;
+  }
+  
+  if (!client) {
+    console.warn(`[context-plugin] ⚠️ WARNING: client is missing from input!`);
+  }
+  
+  console.log(`[context-plugin] ✅ directory: ${directory}, client: ${client ? 'present' : 'MISSING'}`);
+  debugLog(`[context-plugin] Loaded for: ${directory}`);
+  console.log(`[context-plugin] Context Plugin loaded`);
+  
+  // Perform migration before ensuring new directory exists
+  await migrateContextFiles(directory);
+  await ensureContextSessionDir(directory);
+  
+  // Initialize intelligence learning file
+  await initializeIntelligenceLearning(directory);
+  
+  return {
+    "event": async (eventInput) => {
+      debugLog(`[context-plugin] RAW EVENT received: ${JSON.stringify(eventInput)}`);
+      const event = eventInput?.event || eventInput;
+      const eventType = event?.type;
+      
+      debugLog(`[context-plugin] Parsed eventType: ${eventType}`);
+      if (!eventType) return;
+      
+      if (eventType === "session.created") {
+        currentSessionId = event?.sessionId || event?.sessionID || event?.session?.id;
+        hasInjectedContext = false;
+        lastSession = null;
+        debugLog(`[context-plugin] Session created: ${currentSessionId}`);
       }
-    }
-
-    if (eventType === "message.updated" || eventType === "message.created") {
-      const msgInfo = event?.properties?.info;
-      const msgId = msgInfo?.id;
-
-      if (msgId && msgInfo?.role) {
-        if (!lastSession) lastSession = { messages: [] };
-        if (!lastSession.messages) lastSession.messages = [];
-
-        const existingIdx = lastSession.messages.findIndex(m => m.id === msgId);
-        if (existingIdx === -1) {
-          lastSession.messages.push({ ...msgInfo, content: '' });
-          debugLog(`[context-plugin] Message added: ${lastSession.messages.length} total`);
+      
+      if (eventType === "session.updated") {
+        const info = event?.properties?.info;
+        if (info) {
+          if (!lastSession) lastSession = {};
+          Object.assign(lastSession, info);
+          debugLog(`[context-plugin] Session metadata updated`);
+        }
+      }
+      
+      if (eventType === "message.updated" || eventType === "message.created") {
+        const msgInfo = event?.properties?.info;
+        const msgId = msgInfo?.id;
+        
+        if (msgId && msgInfo?.role) {
+          if (!lastSession) lastSession = { messages: [] };
+          if (!lastSession.messages) lastSession.messages = [];
+          
+          const existingIdx = lastSession.messages.findIndex(m => m.id === msgId);
+          if (existingIdx === -1) {
+            lastSession.messages.push({ ...msgInfo, content: '' });
+            debugLog(`[context-plugin] Message added: ${lastSession.messages.length} total`);
+          } else {
+            Object.assign(lastSession.messages[existingIdx], msgInfo);
+          }
+        }
+      }
+      
+      if (eventType === "message.part.delta") {
+        const msgId = event?.properties?.messageID;
+        const delta = event?.properties?.delta;
+        
+        if (msgId && delta && lastSession?.messages) {
+          const msg = lastSession.messages.find(m => m.id === msgId);
+          if (msg) {
+            msg.content = (msg.content || '') + delta;
+          }
+        }
+      }
+      
+      if (eventType === "message.part.updated") {
+        const msgId = event?.properties?.part?.messageID || event?.properties?.messageID;
+        const text = event?.properties?.part?.text;
+        
+        if (msgId && text && lastSession?.messages) {
+          const msg = lastSession.messages.find(m => m.id === msgId);
+          if (msg && !msg.content) {
+            msg.content = text;
+            debugLog(`[context-plugin] Message content from part.updated: ${text.length} chars`);
+          }
+        }
+      }
+      
+      if (eventType === "command.execute.before") {
+        const command = event?.command || event?.properties?.command || event?.properties?.name;
+        if (command === '/compact' || command === 'compact') {
+          debugLog('[context-plugin] /compact command detected');
+        }
+      }
+      
+      if (eventType === "session.compacted" || eventType === "experimental.compaction.autocontinue") {
+        debugLog('[context-plugin] session.compacted event received - saving context');
+        if (lastSession) {
+          await saveContext(directory, lastSession, 'compact');
         } else {
-          Object.assign(lastSession.messages[existingIdx], msgInfo);
+          debugLog('[context-plugin] No lastSession available for compact save');
         }
       }
-    }
-
-    if (eventType === "message.part.delta") {
-      const msgId = event?.properties?.messageID;
-      const delta = event?.properties?.delta;
-
-      if (msgId && delta && lastSession?.messages) {
-        const msg = lastSession.messages.find(m => m.id === msgId);
-        if (msg) {
-          msg.content = (msg.content || '') + delta;
+      
+      if (eventType === "session.end" || eventType === "server.instance.disposed") {
+        debugLog('[context-plugin] Session ending - saving final context');
+        if (lastSession) {
+          await saveContext(directory, lastSession, 'exit');
         }
       }
-    }
-
-    if (eventType === "message.part.updated") {
-      const msgId = event?.properties?.part?.messageID || event?.properties?.messageID;
-      const text = event?.properties?.part?.text;
-
-      if (msgId && text && lastSession?.messages) {
-        const msg = lastSession.messages.find(m => m.id === msgId);
-        if (msg && !msg.content) {
-          msg.content = text;
-          debugLog(`[context-plugin] Message content from part.updated: ${text.length} chars`);
+      
+      // Pre-exit compression trigger - catches session ending BEFORE data is lost
+      if (eventType === "session.idle" || eventType === "session.deleted") {
+        const sessionId = event?.properties?.sessionID || event?.sessionId || currentSessionId;
+        if (sessionId) {
+          debugLog(`[Pre-Exit] Session ${sessionId} ending, triggering compression...`);
+          // Use client from closure (critical fix from debug/plugin-not-working.md)
+          await triggerPreExitCompression(sessionId, directory, client);
         }
       }
-    }
-
-    if (eventType === "command.execute.before") {
-      const command = event?.command || event?.properties?.command || event?.properties?.name;
-      if (command === '/compact' || command === 'compact') {
-        debugLog('[context-plugin] /compact command detected');
+    },
+    
+    "experimental.chat.messages.transform": async (transformInput) => {
+      const messages = transformInput?.messages || transformInput;
+      
+      if (!messages || messages.length === 0) {
+        return messages;
       }
-    }
-
-    if (eventType === "session.compacted" || eventType === "experimental.compaction.autocontinue") {
-      debugLog('[context-plugin] session.compacted event received - saving context');
-      if (lastSession) {
-        await saveContext(this.directory, lastSession, 'compact');
-      } else {
-        debugLog('[context-plugin] No lastSession available for compact save');
+      
+      const isFirstMessage = messages.length === 1 && !hasInjectedContext;
+      
+      if (isFirstMessage) {
+        debugLog('[context-plugin] First message detected - injecting context');
+        const contexts = await loadPreviousContexts(directory, 5);
+        
+        if (contexts.length > 0) {
+          const injection = buildContextInjection(contexts);
+          const firstMsg = messages[0];
+          
+          if (firstMsg.content) {
+            firstMsg.content = firstMsg.content + injection;
+            hasInjectedContext = true;
+            debugLog(`[context-plugin] Injected ${contexts.length} contexts into first message`);
+          }
+        }
       }
-    }
-
-    if (eventType === "session.end" || eventType === "server.instance.disposed") {
-      debugLog('[context-plugin] Session ending - saving final context');
-      if (lastSession) {
-        await saveContext(this.directory, lastSession, 'exit');
-      }
-    }
-
-    if (eventType === "session.idle" || eventType === "session.deleted") {
-      const sessionId = event?.properties?.sessionID || event?.sessionId || currentSessionId;
-      if (sessionId) {
-        debugLog(`[Pre-Exit] Session ${sessionId} ending, triggering compression...`);
-        await triggerPreExitCompression(sessionId, this.directory, this.client);
-      }
-    }
-  }
-
-  async "experimental.chat.messages.transform"(transformInput) {
-    const messages = transformInput?.messages || transformInput;
-
-    if (!messages || messages.length === 0) {
+      
       return messages;
     }
-
-    const isFirstMessage = messages.length === 1 && !hasInjectedContext;
-
-    if (isFirstMessage) {
-      debugLog('[context-plugin] First message detected - injecting context');
-      const contexts = await loadPreviousContexts(this.directory, 5);
-
-      if (contexts.length > 0) {
-        const injection = buildContextInjection(contexts);
-        const firstMsg = messages[0];
-
-        if (firstMsg.content) {
-          firstMsg.content = firstMsg.content + injection;
-          hasInjectedContext = true;
-          debugLog(`[context-plugin] Injected ${contexts.length} contexts into first message`);
-        }
-      }
-    }
-
-    return messages;
-  }
-}
-
-// V2 Export format - { id, server }
-export default {
-  id: "@devwellington/opencode-context-plugin",
-  server: ContextPlugin
+  };
 };
+
+// Export helper functions for testing and external use
+export { ensureHierarchicalDir, ensureContextSessionDir, atomicWrite, saveContext, loadPreviousContexts, updateDaySummary, updateWeekSummary, updateDailySummary, triggerPreExitCompression, initializeIntelligenceLearning, updateIntelligenceLearning };

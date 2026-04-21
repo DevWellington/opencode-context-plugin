@@ -1,0 +1,1 @@
+NUNCA ENCERRE O OPENCODE via kill ou pkill
