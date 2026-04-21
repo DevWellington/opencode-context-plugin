@@ -40,9 +40,9 @@ Requirements for initial release. Each maps to roadmap phases.
 ### Search & Retrieval
 
 - [x] **SEARCH-01**: Full-text search across all sessions
-- [ ] **SEARCH-02**: Filter by date range, type (compact/exit), keywords
-- [ ] **SEARCH-03**: CLI tool for searching from terminal
-- [ ] **SEARCH-04**: Generate weekly/monthly reports
+- [x] **SEARCH-02**: Filter by date range, type (compact/exit), keywords
+- [x] **SEARCH-03**: CLI tool for searching from terminal
+- [x] **SEARCH-04**: Generate weekly/monthly reports
 
 ### Multi-Project
 
@@ -102,9 +102,9 @@ Which phases cover which requirements.
 | INJECT-03 | Phase 3 | Pending |
 | INJECT-04 | Phase 3 | Pending |
 | SEARCH-01 | Phase 4 | Complete |
-| SEARCH-02 | Phase 4 | Pending |
-| SEARCH-03 | Phase 4 | Pending |
-| SEARCH-04 | Phase 4 | Pending |
+| SEARCH-02 | Phase 4 | Complete |
+| SEARCH-03 | Phase 4 | Complete |
+| SEARCH-04 | Phase 4 | Complete |
 | MULTI-01 | Phase 5 | Pending |
 | MULTI-02 | Phase 5 | Pending |
 | MULTI-03 | Phase 5 | Pending |
