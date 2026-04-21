@@ -2,6 +2,7 @@ import fs from "fs/promises";
 import path from "path";
 import { createDebugLogger } from '../utils/debug.js';
 import { atomicWrite } from '../utils/fileUtils.js';
+import { extractSessionContent, extractBugs } from './contentExtractor.js';
 
 const logger = createDebugLogger('intelligence');
 
@@ -173,10 +174,66 @@ export async function updateIntelligenceLearning(baseDir, sessionInfo) {
       
       content = updatedLines.join('\n');
       
+      // Extract structured content if session content is available
+      let extracted = { goal: null, accomplished: null, discoveries: null, relevantFiles: [], firstUserMessage: null };
+      let bugs = [];
+      
+      if (sessionInfo.content) {
+        // Use contentExtractor functions if content is provided
+        extracted = extractSessionContent(sessionInfo.content);
+        bugs = extractBugs(sessionInfo.content);
+      } else if (sessionInfo.filename) {
+        // Try to read session file if filename is provided
+        try {
+          const sessionPath = path.join(ctxDir, '..', '..', sessionInfo.filename);
+          const sessionContent = await fs.readFile(sessionPath, 'utf-8');
+          extracted = extractSessionContent(sessionContent);
+          bugs = extractBugs(sessionContent);
+        } catch (error) {
+          logger(`[Intelligence] Could not read session file: ${error.message}`);
+        }
+      }
+      
       // Deduplicate: Check if this session already exists
       if (sessionInfo.sessionId && content.includes(sessionInfo.sessionId)) {
         logger(`[Intelligence] Session ${sessionInfo.sessionId} already recorded, skipping duplicate`);
         return;
+      }
+      
+      // Build Key Learnings entry following template format
+      const templateSections = [];
+      
+      if (extracted.goal) {
+        templateSections.push(`## Goal\n${extracted.goal}`);
+      }
+      
+      templateSections.push(`## Instructions\n${sessionInfo.type === 'exit' ? 'Session ended' : 'Session compacted'}`);
+      
+      if (extracted.discoveries) {
+        templateSections.push(`## Discoveries\n${extracted.discoveries}`);
+      }
+      
+      if (extracted.accomplished) {
+        templateSections.push(`## Accomplished\n${extracted.accomplished}`);
+      } else if (sessionInfo.messageCount) {
+        templateSections.push(`## Accomplished\n${sessionInfo.messageCount} messages processed`);
+      }
+      
+      if (extracted.relevantFiles.length > 0) {
+        const filesList = extracted.relevantFiles.map(f => `- ${f}`).join('\n');
+        templateSections.push(`## Relevant files / directories\n${filesList}`);
+      }
+      
+      // Add bug tracking if bugs with solutions were found
+      if (bugs.length > 0) {
+        const bugsSection = bugs.map(bug => {
+          let bugEntry = `### Bug: ${bug.symptom}\n`;
+          if (bug.cause) bugEntry += `**Cause:** ${bug.cause}\n`;
+          if (bug.solution) bugEntry += `**Solution:** ${bug.solution}\n`;
+          if (bug.prevention) bugEntry += `**Prevention:** ${bug.prevention}\n`;
+          return bugEntry;
+        }).join('\n');
+        templateSections.push(`\n${bugsSection}`);
       }
       
       // Append to Key Learnings section
@@ -188,11 +245,11 @@ export async function updateIntelligenceLearning(baseDir, sessionInfo) {
         // Append before the footer
         const footerIndex = content.indexOf('---\n*Auto-generated');
         if (footerIndex !== -1) {
-          let newEntry = `\n### Session ${sessionsAnalyzed} - ${sessionInfo.type.toUpperCase()}\n`;
+          let newEntry = `### Session ${sessionsAnalyzed} - ${sessionInfo.type.toUpperCase()}\n`;
           newEntry += `- **Date:** ${sessionInfo.timestamp || new Date().toISOString()}\n`;
-          newEntry += `- **Session ID:** ${sessionInfo.sessionId || 'unknown'}\n`;
-          newEntry += `- **Messages:** ${sessionInfo.messageCount || 0} messages\n`;
-          newEntry += `- **File:** ${sessionInfo.filename || 'unknown'}\n\n`;
+          newEntry += `- **Session ID:** ${sessionInfo.sessionId || 'unknown'}\n\n`;
+          newEntry += templateSections.join('\n\n');
+          newEntry += '\n\n';
           
           content = content.slice(0, footerIndex) + newEntry + content.slice(footerIndex);
         }
@@ -203,19 +260,19 @@ export async function updateIntelligenceLearning(baseDir, sessionInfo) {
         const insertPosition = footerIndex !== -1 ? footerIndex : content.length;
         
         let sectionContent = content.slice(sectionStart, insertPosition);
-        const entries = sectionContent.split('\n### Session').filter(s => s.trim().length > 0);
+        const entries = sectionContent.split(/(?=### Session \d+)/).filter(s => s.trim().length > 0);
         
         // Limit to last 19 entries (adding 1 new = 20 total)
         if (entries.length >= 20) {
           entries.shift(); // Remove oldest
         }
         
-        // Add new entry
+        // Build new entry with template format
         let newEntry = `### Session ${sessionsAnalyzed} - ${sessionInfo.type.toUpperCase()}\n`;
         newEntry += `- **Date:** ${sessionInfo.timestamp || new Date().toISOString()}\n`;
-        newEntry += `- **Session ID:** ${sessionInfo.sessionId || 'unknown'}\n`;
-        newEntry += `- **Messages:** ${sessionInfo.messageCount || 0} messages\n`;
-        newEntry += `- **File:** ${sessionInfo.filename || 'unknown'}\n\n`;
+        newEntry += `- **Session ID:** ${sessionInfo.sessionId || 'unknown'}\n\n`;
+        newEntry += templateSections.join('\n\n');
+        newEntry += '\n\n';
         
         entries.push(newEntry);
         

@@ -16,6 +16,7 @@ import path from 'path';
 import fs from 'fs/promises';
 import { REPORT_PATHS, extractKeywordsFromContent } from './utils/linkBuilder.js';
 import { getConfig } from '../config.js';
+import { extractSessionContent, extractBugs, findPatterns } from '../modules/contentExtractor.js';
 
 const INTELLIGENCE_FILE = 'intelligence-learning.md';
 const MAX_ENTRIES = 20;
@@ -126,24 +127,23 @@ async function gatherRecentSessionInfo(directory) {
   const sessionSummaries = [];
   for (const file of sessionFiles) {
     const content = await fs.readFile(path.join(sessionDir, file), 'utf-8');
-
-    // Extract title
-    const titleMatch = content.match(/\*\*Title:\*\*\s*(.+)/);
-    // Extract first user message
-    const firstUser = content.match(/### Message 0 \[user\]\n\n(.+?)(?=\n###)/s);
-    // Extract goal/accomplished from compact sessions
-    const goalMatch = content.match(/\*\*Goal:\*\*\s*(.+?)(?=\n\n|\*\*|$)/s);
-    const accomplishedMatch = content.match(/\*\*Accomplished:\*\*\s*(.+?)(?=\n\n|\*\*|$)/s);
-    // Extract relevant files
-    const filesMatch = content.match(/\*\*Relevant files.+?\*\*\s*(.+?)(?=\n\n|\*\*##|$)/s);
-
+    
+    // Use contentExtractor to get structured data
+    const extracted = extractSessionContent(content);
+    const bugs = extractBugs(content);
+    
+    // Extract title from filename (remove extension and date pattern)
+    const title = file.replace(/^exit-|^compact-/, '').replace(/\.md$/, '');
+    
     sessionSummaries.push({
       filename: file,
-      title: titleMatch?.[1]?.trim() || file,
-      firstUserMessage: firstUser?.[1]?.trim().slice(0, 100) || '',
-      goal: goalMatch?.[1]?.trim() || '',
-      accomplished: accomplishedMatch?.[1]?.trim() || '',
-      relevantFiles: filesMatch?.[1]?.trim() || ''
+      title: title,
+      firstUserMessage: extracted.firstUserMessage || '',
+      goal: extracted.goal || '',
+      accomplished: extracted.accomplished || '',
+      discoveries: extracted.discoveries || '',
+      relevantFiles: extracted.relevantFiles || [],
+      bugs: bugs
     });
   }
 
@@ -227,9 +227,23 @@ function parseExistingEntries(content) {
 function generateIntelligenceContent(entries, latestEntry) {
   const keywords = latestEntry.keywords?.join(' | ') || 'opencode-context-plugin | intelligence-learning';
 
-  // Extract meaningful patterns from accomplishments
-  const patterns = entries
-    .flatMap(e => e.sessions?.map(s => s.accomplished).filter(Boolean) || [])
+  // Extract structured content from all entries using contentExtractor patterns
+  const allSessions = entries.flatMap(e => e.sessions || []);
+  
+  // Use findPatterns to identify cross-session patterns
+  const patternSessions = allSessions
+    .filter(s => s.content || (s.goal || s.accomplished || s.discoveries))
+    .map((s, i) => ({
+      sessionId: s.sessionId || `session-${i}`,
+      content: s.content || `## Goal\n${s.goal || ''}\n\n## Accomplished\n${s.accomplished || ''}\n\n## Discoveries\n${s.discoveries || ''}`
+    }));
+  
+  const patterns = patternSessions.length >= 2 ? findPatterns(patternSessions) : [];
+
+  // Build accomplishments list for pattern analysis
+  const accomplishments = allSessions
+    .map(s => s.accomplished)
+    .filter(Boolean)
     .slice(0, 10);
 
   let content = `---
@@ -257,15 +271,33 @@ lastUpdated: ${new Date().toISOString()}
       content += `### ${e.date.split('T')[0]} - ${e.sessionCount} sessions\n\n`;
       for (const session of e.sessions) {
         content += `#### ${session.title}\n`;
-        content += `- **Request:** ${session.firstUserMessage || '(no request)'}\n`;
-        if (session.accomplished) {
-          content += `- **Accomplished:** ${session.accomplished}\n`;
-        }
+        
+        // Use template format for structured content
         if (session.goal) {
-          content += `- **Goal:** ${session.goal}\n`;
+          content += `## Goal\n${session.goal}\n\n`;
         }
-        if (session.relevantFiles) {
-          content += `- **Files:** ${session.relevantFiles}\n`;
+        if (session.firstUserMessage) {
+          content += `## Instructions\n${session.firstUserMessage}\n\n`;
+        }
+        if (session.discoveries) {
+          content += `## Discoveries\n${session.discoveries}\n\n`;
+        }
+        if (session.accomplished) {
+          content += `## Accomplished\n${session.accomplished}\n\n`;
+        }
+        if (session.relevantFiles?.length) {
+          content += `## Relevant Files\n${session.relevantFiles.map(f => `- ${f}`).join('\n')}\n\n`;
+        }
+        
+        // Add bug history if any
+        if (session.bugs?.length) {
+          for (const bug of session.bugs) {
+            content += `### Bug: ${bug.symptom}\n`;
+            if (bug.cause) content += `**Cause:** ${bug.cause}\n`;
+            if (bug.solution) content += `**Solution:** ${bug.solution}\n`;
+            if (bug.prevention) content += `**Prevention:** ${bug.prevention}\n`;
+            content += '\n';
+          }
         }
         content += '\n';
       }
@@ -274,19 +306,30 @@ lastUpdated: ${new Date().toISOString()}
       content += `### Session ${i + 1} - ${(e.type || 'unknown').toUpperCase()}\n`;
       content += `- **Date:** ${e.date}\n`;
       content += `- **Session ID:** ${e.id}\n`;
-      content += `- **Messages:** ${e.messages || 0}\n`;
-      if (e.keywords?.length) {
-        content += `- **Keywords:** ${e.keywords.join(', ')}\n`;
-      }
+      if (e.messages) content += `- **Messages:** ${e.messages}\n`;
+      if (e.keywords?.length) content += `- **Keywords:** ${e.keywords.join(', ')}\n`;
       content += '\n';
     }
   }
 
-  // Pattern Analysis from Accomplishments
+  // Pattern Analysis section using findPatterns output
   if (patterns.length > 0) {
-    content += `## Patterns from Accomplishments\n\n`;
-    for (const pattern of patterns) {
-      content += `- ${pattern}\n`;
+    content += `## Patterns from Recent Sessions\n\n`;
+    for (const pattern of patterns.slice(0, 10)) {
+      content += `- **${pattern.pattern}:** seen in ${pattern.frequency} sessions\n`;
+    }
+    content += '\n';
+  }
+
+  // Bug History section - only bugs with solutions
+  const allBugs = allSessions.flatMap(s => s.bugs || []).filter(Boolean);
+  if (allBugs.length > 0) {
+    content += `## Bug History (Resolved Only)\n\n`;
+    for (const bug of allBugs.slice(0, 10)) {
+      content += `### ${bug.symptom}\n`;
+      if (bug.cause) content += `**Cause:** ${bug.cause}\n`;
+      if (bug.solution) content += `**Solution:** ${bug.solution}\n`;
+      content += '\n';
     }
     content += '\n';
   }
