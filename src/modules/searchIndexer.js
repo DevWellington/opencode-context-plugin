@@ -1,383 +1,328 @@
-import fs from "fs/promises";
-import path from "path";
-import { createDebugLogger } from '../utils/debug.js';
+#!/usr/bin/env node
+/**
+ * Search indexer module
+ * Builds and maintains a search index of context files
+ */
 
-const logger = createDebugLogger('search-indexer');
+import fs from 'fs/promises';
+import path from 'path';
+import matter from 'gray-matter';
 
-const SEARCH_INDEX_DIR = '.opencode/context-session';
-const SEARCH_INDEX_FILE = '.search-index.json';
+const CONTEXT_SESSION_DIR = '.opencode/context-session';
+const INDEX_DIR = '.opencode/context-session/.index';
 
 /**
- * Normalize word for indexing
+ * Extract text content from context file
  */
-function normalizeWord(word) {
-  return word.toLowerCase().replace(/[^a-z0-9]/g, '');
+function extractText(content) {
+  // Remove frontmatter
+  const withoutFrontmatter = content.replace(/^---[\s\S]*?---\n?/m, '');
+  // Remove markdown formatting but keep text
+  return withoutFrontmatter
+    .replace(/#{1,6}\s/g, '')
+    .replace(/\*\*(.+?)\*\*/g, '$1')
+    .replace(/\*(.+?)\*/g, '$1')
+    .replace(/`(.+?)`/g, '$1')
+    .replace(/\[(.+?)\]\(.+?\)/g, '$1')
+    .trim();
 }
 
 /**
- * Extract words from content
+ * Simple tokenizer for search
  */
-function extractWords(content) {
-  const words = content.split(/\s+/);
-  return words.filter(w => w.length > 2).map(normalizeWord);
+function tokenize(text) {
+  return text
+    .toLowerCase()
+    .split(/\s+/)
+    .filter(t => t.length > 2)
+    .filter(t => !/^\d+$/.test(t));
 }
 
 /**
- * Build search index for all session files in directory
+ * Build search index from context files
  */
-export async function buildSearchIndex(directory) {
-  logger('[searchIndexer] Building search index...');
-  const contextDir = path.join(directory, SEARCH_INDEX_DIR);
-  const indexPath = path.join(contextDir, SEARCH_INDEX_FILE);
+export async function buildSearchIndex(directory = process.cwd()) {
+  const indexPath = path.join(directory, INDEX_DIR);
+  const contextDir = path.join(directory, CONTEXT_SESSION_DIR);
+
+  const index = {
+    builtAt: new Date().toISOString(),
+    files: []
+  };
 
   try {
-    // Ensure directory exists
-    await fs.mkdir(contextDir, { recursive: true });
+    await fs.mkdir(indexPath, { recursive: true });
 
-    // Recursively find all .md files
-    const files = await findSessionFiles(contextDir);
-    logger(`[searchIndexer] Found ${files.length} session files`);
-
-    const indexedFiles = [];
-    const contentIndex = {};
+    // Scan for all context files
+    const files = await scanDirectory(contextDir);
 
     for (const filePath of files) {
       try {
         const content = await fs.readFile(filePath, 'utf-8');
-        const relativePath = path.relative(contextDir, filePath);
-        
-        // Extract info for index
-        const lines = content.split('\n');
-        const firstLine = lines.find(l => l.trim()) || '';
-        const wordCount = content.split(/\s+/).length;
+        const parsed = matter(content);
+        const text = extractText(content);
+        const tokens = tokenize(text);
 
-        // Extract id from filename
+        const stat = await fs.stat(filePath);
         const filename = path.basename(filePath, '.md');
-        const id = filename;
 
-        // Index words
-        const words = extractWords(content);
-        const wordCounts = {};
-        words.forEach(word => {
-          if (word.length > 2) {
-            wordCounts[word] = (wordCounts[word] || 0) + 1;
-          }
-        });
+        // Parse type from filename (exit- or compact-)
+        const type = filename.startsWith('exit-') ? 'exit' :
+                     filename.startsWith('compact-') ? 'compact' : 'unknown';
 
-        // Add to content index
-        Object.keys(wordCounts).forEach(word => {
-          if (!contentIndex[word]) {
-            contentIndex[word] = [];
-          }
-          contentIndex[word].push({
-            id,
-            count: wordCounts[word],
-            path: relativePath
-          });
-        });
+        // Parse date from filename
+        const dateMatch = filename.match(/(\d{4}-\d{2}-\d{2})/);
+        const date = dateMatch ? dateMatch[1] : null;
 
-        indexedFiles.push({
-          path: relativePath,
-          id,
-          type: filename.startsWith('exit-') ? 'exit' : filename.startsWith('compact-') ? 'compact' : 'unknown',
-          date: extractDateFromPath(relativePath),
-          wordCount,
-          firstLine: firstLine.slice(0, 100)
+        index.files.push({
+          id: filename,
+          path: filePath,
+          type,
+          date,
+          tokens,
+          tokenCount: tokens.length,
+          mtime: stat.mtime.toISOString(),
+          snippet: text.slice(0, 500) // First 500 chars for preview
         });
-      } catch (error) {
-        logger(`[searchIndexer] Error indexing ${filePath}: ${error.message}`);
+      } catch (err) {
+        // Skip problematic files
       }
     }
 
-    const index = {
-      version: '1.0',
-      lastUpdated: new Date().toISOString(),
-      indexedFiles,
-      contentIndex
-    };
-
-    await fs.writeFile(indexPath, JSON.stringify(index, null, 2), 'utf-8');
-    logger(`[searchIndexer] Index built with ${indexedFiles.length} files, ${Object.keys(contentIndex).length} unique words`);
+    // Save index
+    const indexFile = path.join(indexPath, 'search-index.json');
+    await fs.writeFile(indexFile, JSON.stringify(index, null, 2));
 
     return index;
   } catch (error) {
-    logger(`[searchIndexer] Error building index: ${error.message}`);
     throw error;
   }
 }
 
 /**
- * Recursively find all .md session files
+ * Scan directory for context files recursively
  */
-async function findSessionFiles(dir, files = []) {
+async function scanDirectory(dir) {
+  const results = [];
+
   try {
     const entries = await fs.readdir(dir, { withFileTypes: true });
+
     for (const entry of entries) {
       const fullPath = path.join(dir, entry.name);
+
       if (entry.isDirectory()) {
-        await findSessionFiles(fullPath, files);
-      } else if (entry.isFile() && entry.name.endsWith('.md')) {
-        files.push(fullPath);
+        // Skip .index directory
+        if (entry.name === '.index') continue;
+        const subResults = await scanDirectory(fullPath);
+        results.push(...subResults);
+      } else if (entry.name.startsWith('exit-') || entry.name.startsWith('compact-')) {
+        if (entry.name.endsWith('.md')) {
+          results.push(fullPath);
+        }
       }
     }
-  } catch (error) {
-    // Directory doesn't exist or is empty
+  } catch {
+    // Directory doesn't exist
   }
-  return files;
+
+  return results;
 }
 
 /**
- * Extract date from path like "2026/04/W1/2026-04-21/exit-xxx.md"
+ * Load search index
  */
-function extractDateFromPath(relativePath) {
-  const match = relativePath.match(/(\d{4}-\d{2}-\d{2})/);
-  return match ? match[1] : null;
-}
-
-/**
- * Update search index with a new or modified session file
- */
-export async function updateSearchIndex(directory, newSessionPath) {
-  logger(`[searchIndexer] Updating index with: ${newSessionPath}`);
-  const contextDir = path.join(directory, SEARCH_INDEX_DIR);
-  const indexPath = path.join(contextDir, SEARCH_INDEX_FILE);
+export async function loadSearchIndex(directory = process.cwd()) {
+  const indexFile = path.join(directory, INDEX_DIR, 'search-index.json');
 
   try {
-    // Load existing index or create new one
-    let index;
-    try {
-      const content = await fs.readFile(indexPath, 'utf-8');
-      index = JSON.parse(content);
-    } catch {
-      // Index doesn't exist, build from scratch
-      return await buildSearchIndex(directory);
-    }
-
-    // Get absolute path
-    const absPath = newSessionPath.startsWith('/') 
-      ? newSessionPath 
-      : path.join(directory, newSessionPath);
-
-    // Check if file exists
-    let fileExists = false;
-    try {
-      await fs.access(absPath);
-      fileExists = true;
-    } catch {}
-
-    if (!fileExists) {
-      logger(`[searchIndexer] File not found: ${absPath}`);
-      return index;
-    }
-
-    const content = await fs.readFile(absPath, 'utf-8');
-    const relativePath = path.relative(contextDir, absPath);
-    const filename = path.basename(absPath, '.md');
-    const id = filename;
-    const lines = content.split('\n');
-    const firstLine = lines.find(l => l.trim()) || '';
-    const wordCount = content.split(/\s+/).length;
-
-    // Find existing entry and update or add new
-    const existingIdx = index.indexedFiles.findIndex(f => f.id === id);
-    const fileEntry = {
-      path: relativePath,
-      id,
-      type: filename.startsWith('exit-') ? 'exit' : filename.startsWith('compact-') ? 'compact' : 'unknown',
-      date: extractDateFromPath(relativePath),
-      wordCount,
-      firstLine: firstLine.slice(0, 100)
-    };
-
-    if (existingIdx >= 0) {
-      index.indexedFiles[existingIdx] = fileEntry;
-    } else {
-      index.indexedFiles.push(fileEntry);
-    }
-
-    // Rebuild content index for this file
-    const words = extractWords(content);
-    const wordCounts = {};
-    words.forEach(word => {
-      if (word.length > 2) {
-        wordCounts[word] = (wordCounts[word] || 0) + 1;
-      }
-    });
-
-    // Remove old entries for this file from content index
-    Object.keys(index.contentIndex).forEach(word => {
-      index.contentIndex[word] = index.contentIndex[word].filter(e => e.id !== id);
-      if (index.contentIndex[word].length === 0) {
-        delete index.contentIndex[word];
-      }
-    });
-
-    // Add new entries
-    Object.keys(wordCounts).forEach(word => {
-      if (!index.contentIndex[word]) {
-        index.contentIndex[word] = [];
-      }
-      index.contentIndex[word].push({
-        id,
-        count: wordCounts[word],
-        path: relativePath
-      });
-    });
-
-    index.lastUpdated = new Date().toISOString();
-
-    await fs.writeFile(indexPath, JSON.stringify(index, null, 2), 'utf-8');
-    logger(`[searchIndexer] Index updated for ${id}`);
-
-    return index;
-  } catch (error) {
-    logger(`[searchIndexer] Error updating index: ${error.message}`);
-    throw error;
+    const content = await fs.readFile(indexFile, 'utf-8');
+    return JSON.parse(content);
+  } catch {
+    return null;
   }
 }
 
 /**
- * Search sessions for matching query
+ * Search sessions with query and options
  */
 export async function searchSessions(directory, query, options = {}) {
   const { limit = 10, snippetLength = 200 } = options;
-  logger(`[searchIndexer] Searching for: ${query}`);
 
-  const contextDir = path.join(directory, SEARCH_INDEX_DIR);
-  const indexPath = path.join(contextDir, SEARCH_INDEX_FILE);
+  // Load or build index
+  let index = await loadSearchIndex(directory);
 
-  try {
-    // Load index
-    let index;
+  if (!index || !index.files || index.files.length === 0) {
+    // Try to build index
     try {
-      const content = await fs.readFile(indexPath, 'utf-8');
-      index = JSON.parse(content);
-    } catch {
-      // Index doesn't exist, build it
       index = await buildSearchIndex(directory);
-    }
-
-    // Parse query into words
-    const queryWords = query.toLowerCase().split(/\s+/).filter(w => w.length > 2);
-
-    if (queryWords.length === 0) {
+    } catch {
       return [];
     }
+  }
 
-    // Score each file
-    const scores = {};
-    for (const word of queryWords) {
-      const normalizedWord = normalizeWord(word);
-      const entries = index.contentIndex[normalizedWord] || [];
-      for (const entry of entries) {
-        if (!scores[entry.id]) {
-          scores[entry.id] = { score: 0, entry };
+  const queryTokens = tokenize(query);
+
+  if (queryTokens.length === 0) {
+    // Return recent files if no query
+    return index.files
+      .sort((a, b) => new Date(b.mtime) - new Date(a.mtime))
+      .slice(0, limit)
+      .map(f => ({
+        id: f.id,
+        path: f.path,
+        score: 1,
+        snippet: f.snippet.slice(0, snippetLength),
+        date: f.date,
+        type: f.type
+      }));
+  }
+
+  // Score each file
+  const scored = index.files.map(file => {
+    let score = 0;
+    const fileTokens = new Set(file.tokens);
+
+    for (const qt of queryTokens) {
+      for (const ft of fileTokens) {
+        if (ft.includes(qt) || qt.includes(ft)) {
+          score += 1;
+          // Exact match bonus
+          if (ft === qt) score += 2;
         }
-        // Score based on word count (more occurrences = higher score)
-        scores[entry.id].score += entry.count;
+      }
+      // Also check snippet
+      if (file.snippet.toLowerCase().includes(qt)) {
+        score += 0.5;
       }
     }
 
-    // Sort by score
-    const sortedIds = Object.keys(scores).sort((a, b) => scores[b].score - scores[a].score);
-    const results = [];
+    return { ...file, score };
+  });
 
-    for (const id of sortedIds.slice(0, limit)) {
-      const fileEntry = index.indexedFiles.find(f => f.id === id);
-      if (!fileEntry) continue;
+  // Sort by score descending
+  scored.sort((a, b) => b.score - a.score);
 
-      const filePath = path.join(contextDir, fileEntry.path);
-      
-      // Load content for snippet
-      let snippet = '';
-      try {
-        const content = await fs.readFile(filePath, 'utf-8');
-        snippet = extractSnippet(content, queryWords, snippetLength);
-      } catch {
-        snippet = fileEntry.firstLine;
+  // Get top results
+  const results = scored.slice(0, limit).map(f => {
+    // Find snippet around match
+    const lowerSnippet = f.snippet.toLowerCase();
+    let snippetStart = 0;
+    for (const qt of queryTokens) {
+      const pos = lowerSnippet.indexOf(qt);
+      if (pos !== -1) {
+        snippetStart = Math.max(0, pos - 50);
+        break;
       }
-
-      results.push({
-        id: fileEntry.id,
-        path: fileEntry.path,
-        score: scores[id].score,
-        snippet,
-        date: fileEntry.date,
-        type: fileEntry.type
-      });
     }
 
-    logger(`[searchIndexer] Found ${results.length} results`);
-    return results;
-  } catch (error) {
-    logger(`[searchIndexer] Search error: ${error.message}`);
-    throw error;
-  }
-}
+    return {
+      id: f.id,
+      path: f.path,
+      score: f.score / (queryTokens.length * 3), // Normalize
+      snippet: f.snippet.slice(snippetStart, snippetStart + snippetLength),
+      date: f.date,
+      type: f.type
+    };
+  });
 
-/**
- * Extract snippet around matching words
- */
-function extractSnippet(content, queryWords, maxLength) {
-  const lowerContent = content.toLowerCase();
-  
-  // Find first occurrence of any query word
-  let firstMatchPos = -1;
-  for (const word of queryWords) {
-    const pos = lowerContent.indexOf(word);
-    if (pos >= 0 && (firstMatchPos < 0 || pos < firstMatchPos)) {
-      firstMatchPos = pos;
-    }
-  }
-
-  if (firstMatchPos < 0) {
-    // No exact match, return beginning
-    return content.slice(0, maxLength) + (content.length > maxLength ? '...' : '');
-  }
-
-  // Extract surrounding context
-  const start = Math.max(0, firstMatchPos - maxLength / 2);
-  const end = Math.min(content.length, firstMatchPos + maxLength / 2);
-  
-  let snippet = content.slice(start, end);
-  if (start > 0) snippet = '...' + snippet;
-  if (end < content.length) snippet = snippet + '...';
-
-  // Highlight matching words
-  for (const word of queryWords) {
-    const regex = new RegExp(`(${word})`, 'gi');
-    snippet = snippet.replace(regex, '**$1**');
-  }
-
-  return snippet;
+  return results;
 }
 
 /**
  * Get index statistics
  */
-export async function getIndexStats(directory) {
-  const contextDir = path.join(directory, SEARCH_INDEX_DIR);
-  const indexPath = path.join(contextDir, SEARCH_INDEX_FILE);
+export async function getIndexStats(directory = process.cwd()) {
+  const index = await loadSearchIndex(directory);
 
-  try {
-    let index;
-    try {
-      const content = await fs.readFile(indexPath, 'utf-8');
-      index = JSON.parse(content);
-    } catch {
-      return { fileCount: 0, wordCount: 0, lastUpdated: null };
-    }
-
-    return {
-      fileCount: index.indexedFiles.length,
-      wordCount: Object.keys(index.contentIndex).length,
-      lastUpdated: index.lastUpdated,
-      version: index.version
-    };
-  } catch (error) {
-    logger(`[searchIndexer] Error getting stats: ${error.message}`);
-    return { fileCount: 0, wordCount: 0, lastUpdated: null };
+  if (!index || !index.files) {
+    return { total: 0, exit: 0, compact: 0, lastBuilt: null };
   }
+
+  const exit = index.files.filter(f => f.type === 'exit').length;
+  const compact = index.files.filter(f => f.type === 'compact').length;
+
+  return {
+    total: index.files.length,
+    exit,
+    compact,
+    lastBuilt: index.builtAt
+  };
 }
 
-export { SEARCH_INDEX_DIR, SEARCH_INDEX_FILE };
+/**
+ * Update search index with a new or modified session file
+ * This is called by saveContext.js when a new session is saved
+ */
+export async function updateSearchIndex(directory, sessionFilePath) {
+  const indexFile = path.join(directory, INDEX_DIR, 'search-index.json');
+  
+  try {
+    // Load existing index
+    let index = await loadSearchIndex(directory);
+    
+    // If no index exists, build from scratch
+    if (!index || !index.files) {
+      return await buildSearchIndex(directory);
+    }
+
+    // Get absolute path to the session file
+    const absPath = path.isAbsolute(sessionFilePath) 
+      ? sessionFilePath 
+      : path.join(directory, sessionFilePath);
+
+    // Check if file exists
+    try {
+      await fs.access(absPath);
+    } catch {
+      // File doesn't exist, skip update
+      return index;
+    }
+
+    // Read and parse the session file
+    const content = await fs.readFile(absPath, 'utf-8');
+    const text = extractText(content);
+    const tokens = tokenize(text);
+    const filename = path.basename(absPath, '.md');
+    const stat = await fs.stat(absPath);
+
+    // Parse type from filename
+    const type = filename.startsWith('exit-') ? 'exit' :
+                 filename.startsWith('compact-') ? 'compact' : 'unknown';
+
+    // Parse date from filename
+    const dateMatch = filename.match(/(\d{4}-\d{2}-\d{2})/);
+    const date = dateMatch ? dateMatch[1] : null;
+
+    // Create file entry
+    const fileEntry = {
+      id: filename,
+      path: absPath,
+      type,
+      date,
+      tokens,
+      tokenCount: tokens.length,
+      mtime: stat.mtime.toISOString(),
+      snippet: text.slice(0, 500)
+    };
+
+    // Find and update existing entry or add new one
+    const existingIdx = index.files.findIndex(f => f.id === filename);
+    if (existingIdx >= 0) {
+      index.files[existingIdx] = fileEntry;
+    } else {
+      index.files.push(fileEntry);
+    }
+
+    // Update built timestamp
+    index.builtAt = new Date().toISOString();
+
+    // Save updated index
+    await fs.writeFile(indexFile, JSON.stringify(index, null, 2));
+
+    return index;
+  } catch (error) {
+    // If update fails, return null (caller should handle gracefully)
+    return null;
+  }
+}
