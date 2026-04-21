@@ -120,12 +120,38 @@ export async function getRelevantContexts(currentSession, options = {}) {
 }
 
 /**
+ * Interactive context selection for manual injection
+ * Returns list of selected context IDs for injection
+ */
+export async function selectContextsInteractively(contexts) {
+  // For CLI/manual mode: return top contexts by relevance
+  // Integration with OpenCode prompt hooks would go here
+  // This enables: /inject or !context command
+  return contexts.slice(0, 5).map(c => c.context.id);
+}
+
+/**
+ * Inject contexts into current session prompt
+ * Called when user triggers manual injection
+ */
+export async function injectContextPrompt(currentSession) {
+  const scoredContexts = await getRelevantContexts(currentSession);
+  const selectedIds = await selectContextsInteractively(scoredContexts);
+
+  const selectedContexts = scoredContexts.filter(
+    c => selectedIds.includes(c.context.id)
+  );
+
+  return formatForInjection(selectedContexts);
+}
+
+/**
  * Format contexts for injection into session
  * INJECT-02: Token-based limiting applied
  */
 export function formatForInjection(scoredContexts) {
   const lines = ['## Relevant Contexts\n'];
-  
+
   for (const item of scoredContexts) {
     lines.push(`### ${item.context.id} (score: ${item.context.score?.toFixed(2) || 'N/A'})`);
     lines.push(`Tokens: ~${item.tokens}`);
@@ -133,6 +159,6 @@ export function formatForInjection(scoredContexts) {
     lines.push(item.content);
     lines.push('\n---\n');
   }
-  
+
   return lines.join('\n');
 }
