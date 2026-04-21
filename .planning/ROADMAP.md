@@ -86,7 +86,7 @@ Plans:
   5. @ocp-help provides comprehensive agent documentation
 
 **Plans:**
-- [ ] 05-01: Create @ocp-generate-* agents (today, weekly, monthly, annual)
+- [x] 05-01: Create @ocp-generate-* agents (today, weekly, monthly, annual)
 - [ ] 05-02: Create @ocp-read-* agents with --summary/--all parameters
 - [ ] 05-03: Implement @ocp-generate-intelligence-learning with historical tracking
 - [ ] 05-04: Implement @ocp-read-intelligence-learning agent
