@@ -42,12 +42,15 @@ async function ensureHierarchicalDir(baseDir) {
 async function atomicWrite(filePath, content) {
   const dir = path.dirname(filePath);
   const tempFile = path.join(dir, `.tmp-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+  debugLog(`[atomic-write] Starting: ${filePath}`);
   
   try {
     await fs.writeFile(tempFile, content, 'utf-8');
+    debugLog(`[atomic-write] Temp file written: ${tempFile}`);
     await fs.rename(tempFile, filePath);
-    debugLog(`[context-plugin] Atomic write completed: ${filePath}`);
+    debugLog(`[atomic-write] Rename completed: ${filePath}`);
   } catch (error) {
+    debugLog(`[atomic-write] Error: ${error.message}, cleaning up temp file`);
     // Clean up temp file on error
     try {
       await fs.unlink(tempFile);
@@ -80,8 +83,10 @@ function extractSessionSummary(session) {
 }
 
 async function saveContext(directory, session, type = 'compact') {
+  debugLog(`[saveContext] START - type=${type}, sessionId=${session?.id || session?.sessionID}, messages=${session?.messages?.length || 0}`);
   try {
     const pathComponents = await ensureHierarchicalDir(directory);
+    debugLog(`[saveContext] Hierarchical dir ensured: ${JSON.stringify(pathComponents)}`);
     const { dirPath, year, month, week, day } = pathComponents;
     const timestamp = getTimestamp();
     const filename = `${type}-${timestamp}.md`;
@@ -778,9 +783,17 @@ class ContextPlugin {
     }
 
     if (eventType === "session.end" || eventType === "server.instance.disposed") {
-      debugLog('[context-plugin] Session ending - saving final context');
+      debugLog(`[context-plugin] Session ending event - lastSession has ${lastSession?.messages?.length || 0} messages, id: ${lastSession?.id || lastSession?.sessionID || 'none'}`);
       if (lastSession) {
-        await saveContext(this.directory, lastSession, 'exit');
+        try {
+          await saveContext(this.directory, lastSession, 'exit');
+          debugLog(`[context-plugin] Exit context save completed successfully`);
+        } catch (err) {
+          debugLog(`[context-plugin] saveContext failed: ${err.message}`);
+          console.error(`[context-plugin] saveContext failed: ${err.message}`);
+        }
+      } else {
+        debugLog(`[context-plugin] No lastSession available for exit save`);
       }
     }
 

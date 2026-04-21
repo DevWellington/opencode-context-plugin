@@ -17,3 +17,14 @@ Thumbs.db
 # Build
 *.tgz
 dist/
+
+# Plugin generated files (project-specific, not part of plugin)
+.opencode/
+!.opencode/opencode.json
+.planning/
+*.old
+*.test.js
+test-*.js
+
+# npm specific
+.npmignore
