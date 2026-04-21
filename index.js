@@ -81,10 +81,10 @@ function extractSessionSummary(session) {
 
 async function saveContext(directory, session, type = 'compact') {
   try {
-    const ctxDir = await ensureContextSessionDir(directory);
+    const { dirPath } = await ensureHierarchicalDir(directory);
     const timestamp = getTimestamp();
     const filename = `${type}-${timestamp}.md`;
-    const filepath = path.join(ctxDir, filename);
+    const filepath = path.join(dirPath, filename);
     
     const summary = extractSessionSummary(session);
     
