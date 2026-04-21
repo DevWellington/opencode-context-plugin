@@ -21,6 +21,59 @@ import { extractSessionContent, extractBugs, findPatterns } from '../modules/con
 const INTELLIGENCE_FILE = 'intelligence-learning.md';
 const MAX_ENTRIES = 20;
 
+// Greeting patterns to filter out - messages that are just salutations
+const GREETING_PATTERNS = [
+  /^oi$/i, /^hi$/i, /^hello$/i, /^olá$/i, /^hey$/i, /^e aí$/i,
+  /^bom dia$/i, /^boa tarde$/i, /^boa noite$/i, /^tudo bem$/i,
+  /^(hi|hey|yo|sup)\s*[!.]*$/i
+];
+
+// Keywords that indicate greeting titles (not actual work)
+const GREETING_KEYWORDS = [
+  'greeting', 'saudação', 'cumprimento', 'light chat', 'quick check-in'
+];
+
+/**
+ * Check if content is likely just a greeting (not meaningful work)
+ */
+function isGreeting(content) {
+  if (!content || typeof content !== 'string') return false;
+  
+  const trimmed = content.trim().toLowerCase();
+  
+  // Check if it's too short (likely greeting)
+  if (trimmed.length < 5) return true;
+  
+  // Check against greeting patterns
+  for (const pattern of GREETING_PATTERNS) {
+    if (pattern.test(trimmed)) return true;
+  }
+  
+  return false;
+}
+
+/**
+ * Check if session title indicates greeting content
+ */
+function isGreetingTitle(title) {
+  if (!title) return false;
+  
+  const lowerTitle = title.toLowerCase();
+  
+  // Check greeting keywords in title
+  for (const keyword of GREETING_KEYWORDS) {
+    if (lowerTitle.includes(keyword)) return true;
+  }
+  
+  // Check if title is just a timestamp (after prefix stripping, "New session - <timestamp>" becomes just timestamp)
+  // This indicates a default-named session that typically contains greeting content
+  if (title.match(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/)) {
+    return true;
+  }
+  
+  return false;
+}
+
 export async function updateIntelligenceLearning(directory) {
   const config = getConfig();
   const intelligencePath = path.join(directory, REPORT_PATHS.intelligence);
@@ -135,10 +188,16 @@ async function gatherRecentSessionInfo(directory) {
     // Extract title from filename (remove extension and date pattern)
     const title = file.replace(/^exit-|^compact-/, '').replace(/\.md$/, '');
     
+    // Skip sessions that are just greetings - they don't represent meaningful work
+    const firstMsg = extracted.firstUserMessage || '';
+    if (isGreeting(firstMsg) || isGreetingTitle(title)) {
+      continue;
+    }
+    
     sessionSummaries.push({
       filename: file,
       title: title,
-      firstUserMessage: extracted.firstUserMessage || '',
+      firstUserMessage: firstMsg,
       goal: extracted.goal || '',
       accomplished: extracted.accomplished || '',
       discoveries: extracted.discoveries || '',
@@ -146,13 +205,26 @@ async function gatherRecentSessionInfo(directory) {
       bugs: bugs
     });
   }
+  
+  // If all sessions were filtered out as greetings, return empty entry
+  if (sessionSummaries.length === 0) {
+    return {
+      id: `session-${Date.now()}`,
+      date: today.toISOString(),
+      type: sessionFiles[0]?.startsWith('exit-') ? 'exit' : 'compact',
+      sessionCount: 0,
+      sessions: [],
+      keywords: [],
+      skippedGreetings: true
+    };
+  }
 
   // Return structured info
   return {
     id: `session-${Date.now()}`,
     date: today.toISOString(),
     type: sessionFiles[0]?.startsWith('exit-') ? 'exit' : 'compact',
-    sessionCount: sessionFiles.length,
+    sessionCount: sessionSummaries.length, // Use filtered count, not original files
     sessions: sessionSummaries,
     // Extract meaningful keywords from actual content
     keywords: sessionSummaries
@@ -186,6 +258,16 @@ function parseExistingEntries(content) {
       firstUserMessage: requests[i] || '',
       accomplished: accomplished[i] || ''
     }));
+
+    // Deduplicate: skip if we already have a session with same title and request
+    const isDuplicate = entries.some(e => 
+      e.sessions?.some(s => 
+        s.title === title && s.firstUserMessage === requests[i]
+      )
+    );
+    if (isDuplicate) {
+      continue;
+    }
 
     entries.push({
       id: `parsed-${dateStr}`,

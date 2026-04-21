@@ -14,6 +14,42 @@ const CONTEXT_SESSION_DIR = '.opencode/context-session';
 // Queue-based serialization for intelligence learning updates
 let learningWriteQueue = Promise.resolve();
 
+// Greeting patterns to filter out
+const GREETING_PATTERNS = [
+  /^oi$/i, /^hi$/i, /^hello$/i, /^olá$/i, /^hey$/i, /^e aí$/i,
+  /^bom dia$/i, /^boa tarde$/i, /^boa noite$/i, /^tudo bem$/i,
+  /^(hi|hey|yo|sup)\s*[!.]*$/i
+];
+
+const GREETING_KEYWORDS = [
+  'greeting', 'saudação', 'cumprimento', 'light chat', 'quick check-in'
+];
+
+/**
+ * Check if content is likely just a greeting
+ */
+function checkIsGreeting(firstMessage, title) {
+  if (!firstMessage && !title) return false;
+  
+  const msg = firstMessage?.trim().toLowerCase() || '';
+  const t = title?.toLowerCase() || '';
+  
+  // Check short messages
+  if (msg.length > 0 && msg.length < 5) return true;
+  
+  // Check patterns
+  for (const pattern of GREETING_PATTERNS) {
+    if (pattern.test(msg)) return true;
+  }
+  
+  // Check title keywords
+  for (const keyword of GREETING_KEYWORDS) {
+    if (t.includes(keyword)) return true;
+  }
+  
+  return false;
+}
+
 /**
  * Initialize intelligence learning file with template
  */
@@ -225,6 +261,24 @@ export async function updateIntelligenceLearning(baseDir, sessionInfo) {
       if (sessionInfo.sessionId && content.includes(sessionInfo.sessionId)) {
         logger(`[Intelligence] Session ${sessionInfo.sessionId} already recorded, skipping duplicate`);
         return;
+      }
+      
+      // Filter out greeting content - don't record purely salutations
+      const firstMsg = extracted.firstUserMessage || '';
+      const isGreeting = checkIsGreeting(firstMsg, sessionInfo.title);
+      if (isGreeting) {
+        logger(`[Intelligence] Skipping greeting content, not meaningful work`);
+        return;
+      }
+      
+      // Additional deduplication: check for similar first messages
+      if (firstMsg && content.includes(firstMsg)) {
+        // Check if it's the same session (by timestamp) or just same message content
+        const timestamp = sessionInfo.timestamp || '';
+        if (!content.includes(`**Date:** ${timestamp.split('T')[0]}`)) {
+          logger(`[Intelligence] Similar session content already recorded, skipping duplicate`);
+          return;
+        }
       }
       
       // Build Key Learnings entry following template format
