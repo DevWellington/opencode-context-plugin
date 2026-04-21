@@ -68,7 +68,7 @@ Plans:
 
 Plans:
 - [x] 03-01: Implement relevance-based context filtering
-- [ ] 03-02: Add token-based content limiting
+- [x] 03-02: Add token-based content limiting
 - [ ] 03-03: Add manual context injection prompt and caching
 
 ### 📋 v2.0 Search & Multi-Project (Planned)
@@ -147,7 +147,7 @@ Phases execute in numeric order: 1 → 1.1 → 1.2 → 1.3 → 1.4 → 2 → 3 �
 |-------|-----------|----------------|--------|-----------|
 | 1. Context Session Restructuring | v1.0 | 4/4 | Complete | 2026-04-21 |
 | 2. Code Quality & Performance | v1.1 | 3/3 | Complete | 2026-04-21 |
-| 3. Context Injection Optimization | v1.2 | 1/3 | In progress | - |
+| 3. Context Injection Optimization | v1.2 | 2/3 | In progress | - |
 | 4. Advanced Search & Retrieval | v2.0 | 0/4 | Not started | - |
 | 5. Multi-Project Support | v2.0 | 0/4 | Not started | - |
 | 6. Dashboard & UI | Future | 0/TBD | Not started | - |

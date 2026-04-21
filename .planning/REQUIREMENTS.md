@@ -33,7 +33,7 @@ Requirements for initial release. Each maps to roadmap phases.
 ### Context Injection
 
 - [ ] **INJECT-01**: Filter contexts by relevance score
-- [ ] **INJECT-02**: Limit injected content by tokens, not just file count
+- [x] **INJECT-02**: Limit injected content by tokens, not just file count
 - [ ] **INJECT-03**: Add user prompt to manually request context injection
 - [ ] **INJECT-04**: Cache injected context to avoid re-reading files
 
@@ -98,7 +98,7 @@ Which phases cover which requirements.
 | CONFIG-01 | Phase 2 | Complete |
 | TEST-01 | Phase 2 | Complete |
 | INJECT-01 | Phase 3 | Pending |
-| INJECT-02 | Phase 3 | Pending |
+| INJECT-02 | Phase 3 | Complete |
 | INJECT-03 | Phase 3 | Pending |
 | INJECT-04 | Phase 3 | Pending |
 | SEARCH-01 | Phase 4 | Pending |
