@@ -84,7 +84,8 @@ Some other content here.
         discoveries: null,
         relevantFiles: [],
         firstUserMessage: null,
-        raw: ''
+        raw: '',
+        relatedSessions: []
       });
 
       expect(extractSessionContent(null)).toEqual({
@@ -93,7 +94,8 @@ Some other content here.
         discoveries: null,
         relevantFiles: [],
         firstUserMessage: null,
-        raw: ''
+        raw: '',
+        relatedSessions: []
       });
 
       expect(extractSessionContent(undefined)).toEqual({
@@ -102,7 +104,8 @@ Some other content here.
         discoveries: null,
         relevantFiles: [],
         firstUserMessage: null,
-        raw: ''
+        raw: '',
+        relatedSessions: []
       });
     });
 

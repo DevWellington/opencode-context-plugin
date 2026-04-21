@@ -1,4 +1,6 @@
+import path from 'path';
 import { createDebugLogger } from '../utils/debug.js';
+import { findRelatedSessions, formatCrossProjectLink } from '../utils/crossProjectLinks.js';
 
 const logger = createDebugLogger('content-extractor');
 
@@ -53,7 +55,7 @@ Return only valid JSON, no markdown formatting.`
 /**
  * Extract structured data from session file content
  * @param {string} sessionContent - Raw session file content
- * @returns {Object} { goal, accomplished, discoveries, relevantFiles, firstUserMessage, raw }
+ * @returns {Object} { goal, accomplished, discoveries, relevantFiles, firstUserMessage, raw, relatedSessions }
  */
 export function extractSessionContent(sessionContent) {
   if (!sessionContent || typeof sessionContent !== 'string') {
@@ -63,7 +65,8 @@ export function extractSessionContent(sessionContent) {
       discoveries: null,
       relevantFiles: [],
       firstUserMessage: null,
-      raw: sessionContent || ''
+      raw: sessionContent || '',
+      relatedSessions: []  // Cross-project links will be added by enrichWithRelatedSessions
     };
   }
 
@@ -73,7 +76,8 @@ export function extractSessionContent(sessionContent) {
     discoveries: null,
     relevantFiles: [],
     firstUserMessage: null,
-    raw: sessionContent
+    raw: sessionContent,
+    relatedSessions: []  // Cross-project links will be added by enrichWithRelatedSessions
   };
 
   // Parse markdown sections
@@ -690,4 +694,80 @@ function normalizeFilePattern(file) {
   }
   
   return normalized;
+}
+
+/**
+ * Enrich extracted content with cross-project related sessions
+ * This is called separately after extractSessionContent to avoid blocking the main extraction
+ * 
+ * @param {Object} extractedContent - Result from extractSessionContent
+ * @param {string} sessionContent - Original session content
+ * @returns {Promise<Object>} Same object with relatedSessions populated
+ */
+export async function enrichWithRelatedSessions(extractedContent, sessionContent) {
+  if (!extractedContent || extractedContent.relatedSessions) {
+    return extractedContent;
+  }
+
+  // Create a session object for findRelatedSessions
+  const session = {
+    content: sessionContent,
+    goal: extractedContent.goal,
+    accomplished: extractedContent.accomplished
+  };
+
+  try {
+    // Find related sessions with 500ms timeout
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error('Cross-project search timeout')), 500);
+    });
+
+    const relatedPromise = findRelatedSessions(session, {
+      keyword: extractedContent.goal || '',
+      goal: extractedContent.goal || '',
+      maxResults: 3
+    });
+
+    const related = await Promise.race([relatedPromise, timeoutPromise]);
+    
+    // Format cross-project links for the related sessions
+    extractedContent.relatedSessions = related.map(r => ({
+      project: r.project,
+      path: r.session,
+      relevance: r.relevance,
+      reason: r.reason,
+      link: formatCrossProjectLink(r.project, path.basename(r.session, '.md'))
+    }));
+  } catch (error) {
+    logger(`[enrich] Cross-project search failed: ${error.message}`);
+    // Don't fail the whole extraction - just leave relatedSessions empty
+    extractedContent.relatedSessions = [];
+  }
+
+  return extractedContent;
+}
+
+/**
+ * Extract any cross-project links from session content
+ * Parses [[project:session-id]] format from content
+ * 
+ * @param {string} sessionContent - Raw session content
+ * @returns {Array} Array of { project, sessionId, fullMatch }
+ */
+export function extractCrossProjectLinks(sessionContent) {
+  if (!sessionContent) return [];
+
+  const links = [];
+  const pattern = /\[\[([^\]:]+):([^\]]+)\]\]/g;
+  
+  let match;
+  while ((match = pattern.exec(sessionContent)) !== null) {
+    links.push({
+      project: match[1],
+      sessionId: match[2],
+      fullMatch: match[0]
+    });
+  }
+
+  return links;
 }

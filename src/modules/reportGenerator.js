@@ -7,7 +7,8 @@
 import fs from 'fs/promises';
 import path from 'path';
 import matter from 'gray-matter';
-import { extractSessionContent, extractBugs, findPatterns, inferMissingFields } from './contentExtractor.js';
+import { extractSessionContent, extractBugs, findPatterns, inferMissingFields, extractCrossProjectLinks } from './contentExtractor.js';
+import { resolveLinksInContent } from '../utils/crossProjectLinks.js';
 
 const CONTEXT_SESSION_DIR = '.opencode/context-session';
 const REPORTS_DIR = '.opencode/context-session/reports';
@@ -129,7 +130,8 @@ async function parseSessionFile(filePath, opencodeClient = null) {
       discoveries,
       relevantFiles: extracted.relevantFiles,
       bugs,
-      patterns: []
+      patterns: [],
+      crossProjectLinks: extractCrossProjectLinks(content)
     };
   } catch (error) {
     return null;
@@ -485,9 +487,34 @@ export async function generateMonthlyReport(directory, monthYear, opencodeClient
     report += '\n';
   }
 
+  // Cross-Project References - aggregate all cross-project links from sessions
+  const allCrossProjectLinks = sessions.flatMap(s => s.crossProjectLinks || []).filter(Boolean);
+  if (allCrossProjectLinks.length > 0) {
+    report += `## Cross-Project References\n\n`;
+    // Deduplicate by project
+    const byProject = {};
+    for (const link of allCrossProjectLinks) {
+      if (!byProject[link.project]) {
+        byProject[link.project] = [];
+      }
+      if (!byProject[link.project].includes(link.sessionId)) {
+        byProject[link.project].push(link.sessionId);
+      }
+    }
+    for (const [project, sessions_list] of Object.entries(byProject)) {
+      const linkStr = `[[${project}:${sessions_list.join(', ')}]]`;
+      report += `- ${linkStr}`;
+      report += '\n';
+    }
+    report += '\n';
+  }
+
   report += `---\n*Report generated on ${new Date().toISOString()}*\n`;
 
-  return report;
+  // Resolve cross-project links in the full report
+  const resolvedReport = await resolveLinksInContent(report, directory);
+
+  return resolvedReport;
 }
 
 /**
