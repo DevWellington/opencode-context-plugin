@@ -122,6 +122,92 @@ async function saveContext(directory, session, type = 'compact') {
   }
 }
 
+// In-memory lock for daily summary updates to prevent race conditions
+let dailySummaryLock = Promise.resolve();
+
+async function updateDailySummary(baseDir, sessionInfo) {
+  try {
+    const summaryPath = path.join(baseDir, CONTEXT_SESSION_DIR, 'daily-summary.md');
+    const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
+    
+    // Use lock to serialize writes and prevent race conditions
+    await dailySummaryLock;
+    
+    let updatePromise = (async () => {
+      // Read existing summary or create new
+      let content = '';
+      let existingEntries = [];
+      let currentHeader = null;
+      
+      try {
+        content = await fs.readFile(summaryPath, 'utf-8');
+        
+        // Parse existing content to extract entries and current date header
+        const lines = content.split('\n');
+        const entriesStart = lines.findIndex(line => line.startsWith('- ['));
+        
+        if (entriesStart !== -1) {
+          // Extract existing entries
+          for (let i = entriesStart; i < lines.length; i++) {
+            if (lines[i].startsWith('- [')) {
+              existingEntries.push(lines[i]);
+            }
+          }
+          
+          // Check current date header
+          const dateHeaderIdx = lines.findIndex(line => line.startsWith('## '));
+          if (dateHeaderIdx !== -1) {
+            currentHeader = lines[dateHeaderIdx].replace('## ', '').trim();
+          }
+        }
+      } catch (e) {
+        // File doesn't exist yet
+        content = `# Daily Summary\n\n`;
+      }
+      
+      // Check if we need to update the date header (new day)
+      if (currentHeader !== today) {
+        // New day - reset content with new date header
+        content = `# Daily Summary\n\n## ${today}\n`;
+        existingEntries = [];
+      }
+      
+      // Format new entry
+      const typeEmoji = sessionInfo.type === 'compact' ? '📦 Compact' : '🚪 Exit';
+      const newEntry = `- [${sessionInfo.timestamp}] ${typeEmoji}: ${sessionInfo.filename}`;
+      
+      // Check if filename already exists (idempotency)
+      const alreadyExists = existingEntries.some(entry => entry.includes(sessionInfo.filename));
+      
+      if (!alreadyExists) {
+        existingEntries.push(newEntry);
+        
+        // Calculate statistics
+        const totalSessions = existingEntries.length;
+        const compactCount = existingEntries.filter(e => e.includes('📦')).length;
+        const exitCount = existingEntries.filter(e => e.includes('🚪')).length;
+        
+        // Build final content
+        let finalContent = content;
+        finalContent += `\n**Total Sessions:** ${totalSessions}\n`;
+        finalContent += `**Compacts:** ${compactCount} | **Exits:** ${exitCount}\n\n`;
+        finalContent += existingEntries.join('\n') + '\n';
+        
+        await atomicWrite(summaryPath, finalContent);
+        debugLog(`[context-plugin] Updated daily summary: ${summaryPath}`);
+      }
+    })();
+    
+    // Update lock to wait for this operation
+    dailySummaryLock = updatePromise.catch(() => {});
+    await dailySummaryLock;
+    
+  } catch (error) {
+    debugLog(`[context-plugin] Error updating daily summary: ${error.message}`);
+    // Don't fail session save if summary update fails
+  }
+}
+
 async function updateDaySummary(dirPath, sessionInfo) {
   try {
     const summaryPath = path.join(dirPath, 'day-summary.md');
@@ -205,6 +291,43 @@ async function updateWeekSummary(baseDir, year, month, week) {
   } catch (error) {
     debugLog(`[context-plugin] Error updating week summary: ${error.message}`);
     // Don't fail session save if summary update fails
+  }
+}
+
+async function triggerPreExitCompression(sessionId, directory, client) {
+  try {
+    debugLog(`[Pre-Exit] Triggering compression for session ${sessionId}`);
+    
+    // Fetch session data using client from closure
+    let session;
+    try {
+      session = await client.sessions.get(sessionId);
+    } catch (error) {
+      debugLog(`[Pre-Exit] Failed to fetch session ${sessionId}: ${error.message}`);
+      console.error(`[context-plugin] Pre-exit compression failed: ${error.message}`);
+      return null;
+    }
+    
+    if (!session) {
+      debugLog(`[Pre-Exit] Session ${sessionId} not found, skipping compression`);
+      return null;
+    }
+    
+    debugLog(`[Pre-Exit] Session fetched successfully, ${session.messages?.length || 0} messages`);
+    
+    // Save context with type='exit'
+    const result = await saveContext(directory, session, 'exit');
+    
+    if (result) {
+      debugLog(`[Pre-Exit] Compression completed: ${result}`);
+      console.log(`[context-plugin] Pre-exit compression completed: ${path.basename(result)}`);
+    }
+    
+    return result;
+  } catch (error) {
+    debugLog(`[Pre-Exit] Error during compression: ${error.message}`);
+    console.error(`[context-plugin] Pre-exit compression error: ${error.message}`);
+    return null;
   }
 }
 
@@ -416,6 +539,16 @@ export default async (input) => {
           await saveContext(directory, lastSession, 'exit');
         }
       }
+      
+      // Pre-exit compression trigger - catches session ending BEFORE data is lost
+      if (eventType === "session.idle" || eventType === "session.deleted") {
+        const sessionId = event?.properties?.sessionID || event?.sessionId || currentSessionId;
+        if (sessionId) {
+          debugLog(`[Pre-Exit] Session ${sessionId} ending, triggering compression...`);
+          // Use client from closure (critical fix from debug/plugin-not-working.md)
+          await triggerPreExitCompression(sessionId, directory, client);
+        }
+      }
     },
     
     "experimental.chat.messages.transform": async (transformInput) => {
@@ -449,4 +582,4 @@ export default async (input) => {
 };
 
 // Export helper functions for testing and external use
-export { ensureHierarchicalDir, ensureContextSessionDir, atomicWrite, saveContext, loadPreviousContexts, updateDaySummary, updateWeekSummary };
+export { ensureHierarchicalDir, ensureContextSessionDir, atomicWrite, saveContext, loadPreviousContexts, updateDaySummary, updateWeekSummary, triggerPreExitCompression };
