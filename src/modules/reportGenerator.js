@@ -7,7 +7,7 @@
 import fs from 'fs/promises';
 import path from 'path';
 import matter from 'gray-matter';
-import { extractSessionContent, extractBugs, findPatterns } from './contentExtractor.js';
+import { extractSessionContent, extractBugs, findPatterns, inferMissingFields } from './contentExtractor.js';
 
 const CONTEXT_SESSION_DIR = '.opencode/context-session';
 const REPORTS_DIR = '.opencode/context-session/reports';
@@ -75,8 +75,10 @@ function getQuarter(month) {
 
 /**
  * Parse session file and enrich with contentExtractor data
+ * @param {string} filePath - Path to session file
+ * @param {Object} opencodeClient - OpenCode client for AI inference (optional)
  */
-async function parseSessionFile(filePath) {
+async function parseSessionFile(filePath, opencodeClient = null) {
   try {
     const content = await fs.readFile(filePath, 'utf-8');
     const parsed = matter(content);
@@ -94,14 +96,37 @@ async function parseSessionFile(filePath) {
     const extracted = extractSessionContent(content);
     const bugs = extractBugs(content);
 
+    // Enhance with AI inference if client is available
+    let goal = extracted.goal;
+    let accomplished = extracted.accomplished;
+    let discoveries = extracted.discoveries;
+
+    if (opencodeClient) {
+      try {
+        const inferred = await inferMissingFields(content, opencodeClient);
+        // Use inferred values if they're better/more complete
+        if (inferred.goal && (!goal || inferred.confidence?.goal > 0.7)) {
+          goal = inferred.goal;
+        }
+        if (inferred.accomplished && (!accomplished || inferred.confidence?.accomplished > 0.7)) {
+          accomplished = inferred.accomplished;
+        }
+        if (inferred.discoveries && (!discoveries || inferred.confidence?.discoveries > 0.7)) {
+          discoveries = inferred.discoveries;
+        }
+      } catch (error) {
+        // AI inference failed, use extracted values
+      }
+    }
+
     return {
       filename,
       type,
       date,
       title: parsed.data?.title || filename,
-      goal: extracted.goal,
-      accomplished: extracted.accomplished,
-      discoveries: extracted.discoveries,
+      goal,
+      accomplished,
+      discoveries,
       relevantFiles: extracted.relevantFiles,
       bugs,
       patterns: []
@@ -113,8 +138,12 @@ async function parseSessionFile(filePath) {
 
 /**
  * Scan for session files in date range - returns enriched session objects
+ * @param {string} directory - Base directory to scan
+ * @param {string} startDate - Start date (YYYY-MM-DD)
+ * @param {string} endDate - End date (YYYY-MM-DD)
+ * @param {Object} opencodeClient - OpenCode client for AI inference (optional)
  */
-export async function scanSessionsInRange(directory, startDate, endDate) {
+export async function scanSessionsInRange(directory, startDate, endDate, opencodeClient = null) {
   const sessions = [];
   const baseDir = path.join(directory, CONTEXT_SESSION_DIR);
 
@@ -132,7 +161,7 @@ export async function scanSessionsInRange(directory, startDate, endDate) {
           if (dateMatch) {
             const fileDate = dateMatch[1];
             if (fileDate >= startDate && fileDate <= endDate) {
-              const session = await parseSessionFile(fullPath);
+              const session = await parseSessionFile(fullPath, opencodeClient);
               if (session) {
                 sessions.push(session);
               }
@@ -326,8 +355,11 @@ function generateExecutiveSummary(sessions, monthName, year) {
 
 /**
  * Generate monthly content-focused report
+ * @param {string} directory - Base directory
+ * @param {string} monthYear - Month in YYYY-MM format
+ * @param {Object} opencodeClient - OpenCode client for AI inference (optional)
  */
-export async function generateMonthlyReport(directory, monthYear) {
+export async function generateMonthlyReport(directory, monthYear, opencodeClient = null) {
   let year, month;
   if (monthYear && monthYear.includes('-')) {
     [year, month] = monthYear.split('-').map(Number);
@@ -338,7 +370,7 @@ export async function generateMonthlyReport(directory, monthYear) {
   }
 
   const { start, end } = getMonthRange(year, month);
-  const sessions = await scanSessionsInRange(directory, start, end);
+  const sessions = await scanSessionsInRange(directory, start, end, opencodeClient);
 
   const monthName = new Date(year, month - 1).toLocaleString('default', { month: 'long' });
   const byWeek = groupByWeek(sessions);
@@ -460,10 +492,13 @@ export async function generateMonthlyReport(directory, monthYear) {
 
 /**
  * Generate annual content-focused report with quarterly themes
+ * @param {string} directory - Base directory
+ * @param {number} year - Year
+ * @param {Object} opencodeClient - OpenCode client for AI inference (optional)
  */
-export async function generateAnnualReport(directory, year) {
+export async function generateAnnualReport(directory, year, opencodeClient = null) {
   const { start, end } = getYearRange(year);
-  const sessions = await scanSessionsInRange(directory, start, end);
+  const sessions = await scanSessionsInRange(directory, start, end, opencodeClient);
   const byQuarter = groupByQuarter(sessions);
 
   // Gather all data
@@ -587,15 +622,67 @@ export async function generateAnnualReport(directory, year) {
 }
 
 /**
- * Generate weekly activity report (legacy, kept for compatibility)
+ * Generate activity report for a custom date range
+ * Used by CLI for 'range' command
+ * @param {string} directory - Base directory
+ * @param {Object} options - Options with startDate and endDate
+ * @param {Object} opencodeClient - OpenCode client for AI inference (optional)
  */
-export async function generateWeeklyReport(directory, weekStart) {
+export async function generateActivityReport(directory, options = {}, opencodeClient = null) {
+  const { startDate, endDate } = options;
+  
+  if (!startDate || !endDate) {
+    throw new Error('generateActivityReport requires startDate and endDate options');
+  }
+  
+  const sessions = await scanSessionsInRange(directory, startDate, endDate, opencodeClient);
+  const byDay = {};
+  
+  for (const session of sessions) {
+    const day = session.date || 'unknown';
+    if (!byDay[day]) byDay[day] = [];
+    byDay[day].push(session);
+  }
+  
+  let report = `# Activity Report - ${startDate} to ${endDate}\n\n`;
+  report += `**Period:** ${startDate} to ${endDate}\n`;
+  report += `**Total Sessions:** ${sessions.length}\n\n`;
+  report += `## Sessions\n\n`;
+  
+  for (const [day, daySessions] of Object.entries(byDay).sort()) {
+    const dayName = getDayName(day);
+    report += `### ${day} (${dayName})\n\n`;
+    for (const session of daySessions) {
+      const icon = session.type === 'exit' ? '🚪' : '📦';
+      report += `${icon} **${session.title || session.filename}**\n`;
+      if (session.goal) {
+        report += `   → Goal: ${session.goal.slice(0, 80)}${session.goal.length > 80 ? '...' : ''}\n`;
+      }
+      if (session.accomplished) {
+        report += `   ✓ ${session.accomplished.slice(0, 80)}${session.accomplished.length > 80 ? '...' : ''}\n`;
+      }
+    }
+    report += '\n';
+  }
+  
+  report += `---\n*Report generated on ${new Date().toISOString()}*\n`;
+  
+  return report;
+}
+
+/**
+ * Generate weekly activity report (legacy, kept for compatibility)
+ * @param {string} directory - Base directory
+ * @param {string} weekStart - Start date of week (optional)
+ * @param {Object} opencodeClient - OpenCode client for AI inference (optional)
+ */
+export async function generateWeeklyReport(directory, weekStart, opencodeClient = null) {
   const date = weekStart ? new Date(weekStart) : new Date();
   const year = date.getFullYear();
   const week = getWeekNumber(date);
   const { start, end } = getWeekRange(year, week);
 
-  const sessions = await scanSessionsInRange(directory, start, end);
+  const sessions = await scanSessionsInRange(directory, start, end, opencodeClient);
   const byDay = {};
 
   for (const session of sessions) {

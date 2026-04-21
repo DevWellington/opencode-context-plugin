@@ -67,8 +67,13 @@ export function extractSessionSummary(session) {
 /**
  * Save context to hierarchical folder structure
  * Returns filepath on success, null on failure
+ * @param {string} directory - Base directory
+ * @param {Object} session - Session object
+ * @param {string} type - Type of save ('compact' or 'exit')
+ * @param {Object} opencodeClient - OpenCode client for AI inference (optional)
  */
-export async function saveContext(directory, session, type = 'compact') {
+export async function saveContext(directory, session, type = 'compact', opencodeClient = null) {
+  console.log(`[saveContext] FUNCTION CALLED - directory=${directory}, type=${type}, hasClient=${!!opencodeClient}`);
   logger(`[saveContext] START - type=${type}, sessionId=${session?.id || session?.sessionID}, messages=${session?.messages?.length || 0}`);
   try {
     const pathComponents = await ensureHierarchicalDir(directory);
@@ -79,14 +84,27 @@ export async function saveContext(directory, session, type = 'compact') {
     const filepath = path.join(dirPath, filename);
     
     const summary = extractSessionSummary(session);
+    const now = new Date().toISOString();
     
-    let content = `# Session Context - ${type.toUpperCase()}\n\n`;
-    content += `**Session ID:** ${summary.sessionId}\n`;
-    content += `**Slug:** ${summary.slug}\n`;
-    content += `**Title:** ${summary.title}\n`;
-    content += `**Timestamp:** ${new Date().toISOString()}\n`;
-    content += `**Message Count:** ${summary.messageCount}\n\n`;
-    content += `---\n\n`;
+    let content = `---
+sessionId: "${summary.sessionId}"
+slug: "${summary.slug}"
+title: "${summary.title}"
+timestamp: "${now}"
+messageCount: ${summary.messageCount}
+---
+
+# Session Context - ${type.toUpperCase()}
+
+**Session ID:** ${summary.sessionId}
+**Slug:** ${summary.slug}
+**Title:** ${summary.title}
+**Timestamp:** ${now}
+**Message Count:** ${summary.messageCount}
+
+---
+
+`;
     content += `## Messages\n\n`;
     
     summary.messages.forEach((msg) => {
@@ -133,22 +151,26 @@ export async function saveContext(directory, session, type = 'compact') {
     };
     await updateIntelligenceLearningMeta(directory, learningSessionInfo);
 
-    // Regenerate all reports (non-blocking, best-effort)
-    // This runs after context save completes without blocking
-    setImmediate(async () => {
-      try {
-        const now = new Date();
-        const year = now.getFullYear();
-        const month = `${year}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-        await Promise.all([
-          generateMonthlySummary(directory, month),
-          generateAnnualSummary(directory, year),
-          updateIntelligenceLearning(directory)
-        ]);
-      } catch (error) {
-        logger(`[saveContext] Report regeneration failed (non-fatal): ${error.message}`);
-      }
-    });
+    // Regenerate all reports (non-blocking, fire-and-forget)
+    // Start async operations without awaiting - they run in background
+    const reportDate = new Date();
+    const reportYear = reportDate.getFullYear();
+    const reportMonth = `${reportYear}-${String(reportDate.getMonth() + 1).padStart(2, '0')}`;
+    logger(`[saveContext] Starting report regeneration: ${directory}, month: ${reportMonth}`);
+    console.log(`[saveContext] Starting report regeneration: ${directory}, month: ${reportMonth}`);
+    Promise.all([
+      generateMonthlySummary(directory, reportMonth),
+      generateAnnualSummary(directory, reportYear),
+      updateIntelligenceLearning(directory)
+    ])
+      .then(() => {
+        console.log(`[saveContext] Report regeneration completed`);
+        logger(`[saveContext] Report regeneration completed`);
+      })
+      .catch(error => {
+        console.error(`[saveContext] Report regeneration ERROR: ${error.message}`, error);
+        logger(`[saveContext] Report regeneration ERROR: ${error.message}`);
+      });
 
     // Update search index with new session (non-blocking, best effort)
     try {

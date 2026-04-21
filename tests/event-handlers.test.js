@@ -228,11 +228,12 @@ describe('Event Handler Integration Tests', () => {
 
       await plugin.event({ type: 'session.compacted' });
 
-      // saveContext should have been called with 'compact' type
+      // saveContext should have been called with 'compact' type and client
       expect(saveContext).toHaveBeenCalledWith(
         tempDir,
         expect.anything(), // session object
-        'compact'
+        'compact',
+        mockClient
       );
     });
   });
@@ -257,7 +258,8 @@ describe('Event Handler Integration Tests', () => {
       expect(saveContext).toHaveBeenCalledWith(
         tempDir,
         expect.anything(),
-        'exit'
+        'exit',
+        mockClient
       );
     });
 

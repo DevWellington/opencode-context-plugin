@@ -189,6 +189,11 @@ class ContextPlugin {
       loadConfig(this.directory).then(config => {
         logger(`[context-plugin] Configuration loaded: debug=${config.debug}, debounceMs=${config.debounceMs}`);
       });
+      
+      // Initialize intelligence learning file on plugin startup
+      initializeIntelligenceLearning(this.directory).catch(err => {
+        logger(`[context-plugin] Intelligence learning init failed: ${err.message}`);
+      });
     }
     
     logger(`[context-plugin] ContextPlugin instantiated for: ${this.directory}`);
@@ -271,7 +276,7 @@ class ContextPlugin {
     if (eventType === "session.compacted" || eventType === "experimental.compaction.autocontinue") {
       logger('[context-plugin] session.compacted event received - saving context');
       if (lastSession) {
-        await saveContext(this.directory, lastSession, 'compact');
+        await saveContext(this.directory, lastSession, 'compact', this.client);
       } else {
         logger('[context-plugin] No lastSession available for compact save');
       }
@@ -281,7 +286,7 @@ class ContextPlugin {
       logger(`[context-plugin] Session ending event - lastSession has ${lastSession?.messages?.length || 0} messages, id: ${lastSession?.id || lastSession?.sessionID || 'none'}`);
       if (lastSession) {
         try {
-          await saveContext(this.directory, lastSession, 'exit');
+          await saveContext(this.directory, lastSession, 'exit', this.client);
           logger(`[context-plugin] Exit context save completed successfully`);
         } catch (err) {
           logger(`[context-plugin] saveContext failed: ${err.message}`);
@@ -304,13 +309,23 @@ class ContextPlugin {
   async triggerPreExitCompression(sessionId) {
     try {
       logger(`[Pre-Exit] Triggering compression for session ${sessionId}`);
+      logger(`[Pre-Exit] this type: ${typeof this}, this.client type: ${typeof this?.client}`);
+      
+      // Guard: Check if client is available
+      if (!this.client || !this.client.sessions) {
+        logger(`[Pre-Exit] Client not available (this.client=${this?.client}, this.client.sessions=${this?.client?.sessions}), skipping compression`);
+        return null;
+      }
       
       // Fetch session data using client from closure
       let session;
       try {
+        logger(`[Pre-Exit] Attempting to call this.client.sessions.get(${sessionId})`);
         session = await this.client.sessions.get(sessionId);
+        logger(`[Pre-Exit] Session fetched successfully`);
       } catch (error) {
         logger(`[Pre-Exit] Failed to fetch session ${sessionId}: ${error.message}`);
+        logger(`[Pre-Exit] Error stack: ${error.stack}`);
         console.error(`[context-plugin] Pre-exit compression failed: ${error.message}`);
         return null;
       }
@@ -323,7 +338,7 @@ class ContextPlugin {
       logger(`[Pre-Exit] Session fetched successfully, ${session.messages?.length || 0} messages`);
       
       // Save context with type='exit'
-      const result = await saveContext(this.directory, session, 'exit');
+      const result = await saveContext(this.directory, session, 'exit', this.client);
       
       if (result) {
         logger(`[Pre-Exit] Compression completed: ${result}`);
