@@ -7,6 +7,7 @@ import { saveContext } from './src/modules/saveContext.js';
 import { initializeIntelligenceLearning } from './src/modules/intelligence.js';
 import { initializeGlobalIntelligence } from './src/utils/globalIntelligence.js';
 import { getRelevantContexts, formatForInjection } from './src/modules/contextInjector.js';
+import { listAvailableContexts, formatContextPreview, interactiveInject } from './src/modules/injectPrompt.js';
 import { syncToRemote, getSyncStatus, initializeRemoteSync } from './src/modules/remoteSync.js';
 
 const logger = createDebugLogger('context-plugin');
@@ -385,6 +386,46 @@ class ContextPlugin {
     const messages = transformInput?.messages || transformInput;
 
     if (!messages || messages.length === 0) {
+      return messages;
+    }
+
+    // Check if user message contains /inject command
+    const lastMsg = messages[messages.length - 1];
+    if (lastMsg?.role === 'user' && lastMsg?.content?.includes('/inject')) {
+      logger('[context-plugin] /inject command detected');
+
+      // Parse /inject arguments: /inject N or /inject --all
+      const injectMatch = lastMsg.content.match(/\/inject(?:\s+(\d+))?(?:\s+--all)?/);
+
+      const contexts = await listAvailableContexts({ messages }, {
+        maxContexts: 10,
+        maxTokens: 16000
+      });
+
+      if (contexts.length > 0) {
+        // Replace /inject command with empty string first
+        lastMsg.content = lastMsg.content.replace(/\/inject(?:\s+\d+)?(?:\s+--all)?/, '').trim();
+
+        // If specific index requested, inject just that context
+        if (injectMatch?.[1]) {
+          const idx = parseInt(injectMatch[1]) - 1;
+          if (idx >= 0 && idx < contexts.length) {
+            const injection = await interactiveInject({ messages }, [idx]);
+            lastMsg.content += '\n\n' + injection;
+            logger(`[context-plugin] Injected context #${injectMatch[1]}`);
+          } else {
+            lastMsg.content += '\n\nInvalid context index. Available: 1-' + contexts.length;
+          }
+        } else {
+          // Show context list for selection
+          const preview = formatContextPreview(contexts);
+          lastMsg.content += '\n\n' + preview + '\n\nUse `/inject N` to inject context #N';
+        }
+      } else {
+        lastMsg.content = lastMsg.content.replace(/\/inject(?:\s+\d+)?(?:\s+--all)?/, '').trim();
+        lastMsg.content += '\n\nNo relevant contexts found.';
+      }
+
       return messages;
     }
 
