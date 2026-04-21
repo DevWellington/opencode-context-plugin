@@ -11,3 +11,5 @@ package-lock.json
 *.db
 *.db-wal
 *.db-shm
+.planning
+.opencode
