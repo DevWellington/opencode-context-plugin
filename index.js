@@ -1,379 +1,254 @@
 import fs from "fs";
 import path from "path";
 
-// Debug logging
 const LOG_FILE = path.join(process.env.HOME || '', '.opencode-context-plugin.log');
+const CONTEXTOS_DIR = '.opencode/contextos';
+
 function debugLog(message) {
   try {
     const timestamp = new Date().toISOString();
     fs.appendFileSync(LOG_FILE, `[${timestamp}] ${message}\n`);
-  } catch (e) {
-    // Ignore log errors
+  } catch (e) {}
+}
+
+function ensureContextosDir(directory) {
+  const ctxDir = path.join(directory, CONTEXTOS_DIR);
+  if (!fs.existsSync(ctxDir)) {
+    fs.mkdirSync(ctxDir, { recursive: true });
+    debugLog(`[context-plugin] Created directory: ${ctxDir}`);
   }
+  return ctxDir;
 }
 
-// Security: Sensitive data patterns to filter
-const SENSITIVE_PATTERNS = [
-  { name: 'AWS Access Key', pattern: /AKIA[0-9A-Z]{16}/g, replacement: '[REDACTED_AWS_KEY]' },
-  { name: 'GitHub Token', pattern: /ghp_[a-zA-Z0-9]{36}/g, replacement: '[REDACTED_GITHUB_TOKEN]' },
-  { name: 'Stripe Key', pattern: /sk_live_[a-zA-Z0-9]{24}/g, replacement: '[REDACTED_STRIPE_KEY]' },
-  { name: 'Generic API Key', pattern: /api[_-]?key["']?\s*[:=]\s*["'][a-zA-Z0-9]{16,}["']/gi, replacement: '[REDACTED_API_KEY]' },
-  { name: 'Private Tag', pattern: /<private>[\s\S]*?<\/private>/gi, replacement: '[REDACTED_PRIVATE_CONTENT]' }
-];
-
-// Security: Maximum context files to retain
-const MAX_CONTEXT_FILES = 30;
-const RETENTION_DAYS = 30;
-
-// Store current session ID
-let currentSessionId = null;
-
-function formatTimestamp(date) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  const hours = String(date.getHours()).padStart(2, "0");
-  const minutes = String(date.getMinutes()).padStart(2, "0");
-  return `${year}${month}${day}-${hours}${minutes}`;
+function getTimestamp() {
+  const now = new Date();
+  return now.toISOString().replace(/[:.]/g, '-').slice(0, -5);
 }
 
-function formatFilename(timestamp, type) {
-  const typePrefix = {
-    compact: "compact",
-    session_end: "saida",
-    auto: "auto"
-  };
-  return `${typePrefix[type]}-${timestamp}.md`;
-}
-
-function getContextosDir(projectDir) {
-  return path.join(projectDir, ".opencode", "contextos");
-}
-
-// Security: Validate path is within allowed bounds
-function validatePath(baseDir, targetPath) {
-  const resolved = path.resolve(targetPath);
-  const resolvedBase = path.resolve(baseDir);
-  return resolved.startsWith(resolvedBase + path.sep) || resolved === resolvedBase;
-}
-
-// Security: Filter sensitive data from content
-function filterSensitiveData(content) {
-  let filtered = content;
-  for (const { pattern, replacement } of SENSITIVE_PATTERNS) {
-    filtered = filtered.replace(pattern, replacement);
-  }
-  return filtered;
-}
-
-function ensureDirectoryExists(dirPath) {
-  if (!fs.existsSync(dirPath)) {
-    fs.mkdirSync(dirPath, { recursive: true, mode: 0o700 });
-  }
-}
-
-function readPreviousContexts(contextosDir) {
-  const contexts = [];
+function extractSessionSummary(session) {
+  if (!session) return null;
   
-  if (!fs.existsSync(contextosDir)) {
-    return contexts;
-  }
-
-  try {
-    const allFiles = fs.readdirSync(contextosDir)
-      .filter(f => f.endsWith(".md"))
-      .filter(f => f.startsWith("compact-") || f.startsWith("saida-") || f.startsWith("auto-"))
-      .sort();
-
-    const priorityFiles = allFiles
-      .filter(f => f.startsWith("saida-"))
-      .slice(-3);
-    
-    const compactFiles = allFiles
-      .filter(f => f.startsWith("compact-"))
-      .slice(-2);
-
-    const selectedFiles = [...priorityFiles, ...compactFiles].slice(-5);
-
-    for (const file of selectedFiles) {
-      const filepath = path.join(contextosDir, file);
-      const content = fs.readFileSync(filepath, "utf-8");
-      
-      const truncated = content.length > 5000 ? content.substring(0, 5000) + "\n\n[...resumido...]" : content;
-      contexts.push(truncated);
-    }
-  } catch (error) {
-    console.error(`[context-plugin] Error reading previous contexts:`, error);
-  }
-
-  return contexts;
+  const messages = session.messages || [];
+  return {
+    sessionId: session.id || session.sessionID,
+    slug: session.slug,
+    title: session.title,
+    messageCount: messages.length,
+    messages: messages.map((m, i) => ({
+      index: i,
+      role: m.role,
+      type: m.type,
+      content: m.content || ''
+    }))
+  };
 }
 
-function cleanupOldContexts(contextosDir) {
-  if (!fs.existsSync(contextosDir)) {
-    return;
-  }
-
+function saveContext(directory, session, prefix = 'compact') {
   try {
-    const allFiles = fs.readdirSync(contextosDir)
-      .filter(f => f.endsWith(".md"))
-      .map(f => {
-        const filepath = path.join(contextosDir, f);
-        const stats = fs.statSync(filepath);
-        return { name: f, path: filepath, mtime: stats.mtime };
-      });
-
-    const now = Date.now();
-    const retentionMs = RETENTION_DAYS * 24 * 60 * 60 * 1000;
+    const ctxDir = ensureContextosDir(directory);
+    const timestamp = getTimestamp();
+    const filename = `${prefix}-${timestamp}.md`;
+    const filepath = path.join(ctxDir, filename);
     
-    const filesToDelete = allFiles.filter(file => {
-      const age = now - file.mtime.getTime();
-      return age > retentionMs;
+    const summary = extractSessionSummary(session);
+    
+    let content = `# Session Context - ${prefix.toUpperCase()}\n\n`;
+    content += `**Session ID:** ${summary.sessionId}\n`;
+    content += `**Slug:** ${summary.slug}\n`;
+    content += `**Title:** ${summary.title}\n`;
+    content += `**Timestamp:** ${new Date().toISOString()}\n`;
+    content += `**Message Count:** ${summary.messageCount}\n\n`;
+    content += `---\n\n`;
+    content += `## Messages\n\n`;
+    
+    summary.messages.forEach((msg) => {
+      const preview = msg.content.length > 2000 ? msg.content.slice(0, 2000) + '\n\n*(truncated)*' : msg.content;
+      content += `### Message ${msg.index} [${msg.role}]\n\n`;
+      content += `${preview}\n\n`;
     });
-
-    if (allFiles.length - filesToDelete.length > MAX_CONTEXT_FILES) {
-      const sortedByAge = allFiles
-        .filter(f => !filesToDelete.find(d => d.name === f.name))
-        .sort((a, b) => a.mtime - b.mtime);
-      
-      const additionalToDelete = sortedByAge.slice(0, sortedByAge.length - MAX_CONTEXT_FILES);
-      filesToDelete.push(...additionalToDelete);
-    }
-
-    for (const file of filesToDelete) {
-      fs.unlinkSync(file.path);
-      debugLog(`[context-plugin] Deleted old context: ${file.name}`);
-    }
-  } catch (error) {
-    console.error(`[context-plugin] Error cleaning up old contexts:`, error);
-  }
-}
-
-function saveContextToFile(contextosDir, sessionID, messages, type = "auto", client) {
-  try {
-    const timestamp = formatTimestamp(new Date());
-    const filename = formatFilename(timestamp, type);
-    const filepath = path.join(contextosDir, filename);
-
-    if (!validatePath(contextosDir, filepath)) {
-      console.error(`[context-plugin] Invalid path detected: ${filepath}`);
-      return null;
-    }
-
-    const typeLabels = {
-      compact: "Compactação",
-      session_end: "Fim de Sessão",
-      auto: "Automático"
-    };
-
-    const lines = [
-      `# ${typeLabels[type]} - ${timestamp}`,
-      "",
-      `**Tipo:** ${typeLabels[type]}`,
-      `**ID:** ${sessionID ? sessionID.substring(0, 8) : 'unknown'}...`,
-      `**Data:** ${new Date().toLocaleString("pt-BR")}`,
-      "",
-      "## Histórico (apenas mensagens relevantes)",
-      ""
-    ];
-
-    // Filter messages - only save user messages and assistant text responses
-    const significantMessages = messages.filter(msg => {
-      const role = msg.info?.role || "unknown";
-      if (role === "user") return true;
-      if (role === "assistant") {
-        const hasToolResponse = msg.parts?.some(p => p.type === "tool-result" || p.type === "tool_call");
-        return !hasToolResponse;
-      }
-      return false;
-    });
-
-    for (const msg of significantMessages) {
-      const role = msg.info?.role || "unknown";
-      let content = "";
-
-      if (msg.parts && Array.isArray(msg.parts)) {
-        for (const part of msg.parts) {
-          if (part.type === "text" && part.text) {
-            const filtered = filterSensitiveData(part.text);
-            content += filtered.length > 2000 ? filtered.substring(0, 2000) + "\n\n[...truncado...]" : filtered;
-          }
-        }
-      }
-
-      if (content) {
-        lines.push(`### ${role.charAt(0).toUpperCase() + role.slice(1)}`);
-        lines.push("");
-        lines.push(content.trim());
-        lines.push("");
-        lines.push("---");
-        lines.push("");
-      }
-    }
-
-    lines.push(`**Total:** ${significantMessages.length} mensagens significativas`);
-    lines.push(`**Original:** ${messages ? messages.length : 0} mensagens`);
-
-    const fileContent = lines.join("\n");
-
-    ensureDirectoryExists(contextosDir);
-    fs.writeFileSync(filepath, fileContent, { encoding: "utf-8", mode: 0o600 });
-
-    debugLog(`[context-plugin] ${typeLabels[type]} salvo: ${filepath} (${significantMessages.length}/${messages ? messages.length : 0} msgs)`);
+    
+    fs.writeFileSync(filepath, content);
+    debugLog(`[context-plugin] Saved context to: ${filepath}`);
+    console.log(`[context-plugin] Context saved: ${filename}`);
+    
     return filepath;
   } catch (error) {
-    console.error(`[context-plugin] Error saving context:`, error);
     debugLog(`[context-plugin] Error saving context: ${error.message}`);
+    console.error(`[context-plugin] Error saving context: ${error.message}`);
     return null;
   }
 }
 
-function loadPreviousContextsAsText(contextosDir) {
-  const contexts = readPreviousContexts(contextosDir);
-  
-  if (contexts.length === 0) {
-    return "";
+function loadPreviousContexts(directory, limit = 5) {
+  try {
+    const ctxDir = path.join(directory, CONTEXTOS_DIR);
+    if (!fs.existsSync(ctxDir)) {
+      return [];
+    }
+    
+    const files = fs.readdirSync(ctxDir)
+      .filter(f => f.endsWith('.md'))
+      .sort()
+      .reverse()
+      .slice(0, limit);
+    
+    const contexts = files.map(file => {
+      const filepath = path.join(ctxDir, file);
+      const content = fs.readFileSync(filepath, 'utf-8');
+      return { file, content };
+    });
+    
+    debugLog(`[context-plugin] Loaded ${contexts.length} previous contexts`);
+    return contexts;
+  } catch (error) {
+    debugLog(`[context-plugin] Error loading contexts: ${error.message}`);
+    return [];
   }
-
-  const header = [
-    "",
-    "---",
-    "## Contextos Anteriores (resumo das últimas sessões)",
-    "",
-    "> **Nota:** Use este contexto para continuar de onde parou. Seja específico nas respostas.",
-    "",
-  ];
-
-  const footer = ["", "---", ""];
-
-  return header.join("\n") + contexts.join("\n\n") + footer.join("\n");
 }
 
-// Main plugin function
+function buildContextInjection(contexts) {
+  if (contexts.length === 0) return '';
+  
+  let injection = `\n\n---\n## Previous Session Contexts\n\n`;
+  injection += `*The following contexts from previous sessions are available for reference:*\n\n`;
+  
+  contexts.forEach(ctx => {
+    injection += `### From: ${ctx.file}\n`;
+    injection += `${ctx.content}\n\n`;
+    injection += `---\n\n`;
+  });
+  
+  return injection;
+}
+
+let currentSessionId = null;
+let hasInjectedContext = false;
+let lastSession = null;
+
 export default async (input) => {
   const { directory, client } = input;
-  const contextosDir = getContextosDir(directory);
-
-  const logMsg = `[context-plugin] Plugin loaded for directory: ${directory}`;
-  console.log(logMsg);
-  debugLog(logMsg);
-
+  
+  debugLog(`[context-plugin] Loaded for: ${directory}`);
+  console.log(`[context-plugin] Context Plugin loaded`);
+  
+  ensureContextosDir(directory);
+  
   return {
-    "experimental.compaction.autocontinue": async (compactionInput, output) => {
-      const { sessionID } = compactionInput;
+    "event": async (eventInput) => {
+      const event = eventInput?.event || eventInput;
+      const eventType = event?.type;
       
-      console.log(`[context-plugin] Compaction triggered for session: ${sessionID}`);
-
-      try {
-        const session = await client.sessions.get({ sessionID });
-        const messages = session.messages || [];
-
-        if (messages.length > 0) {
-          const savedPath = saveContextToFile(contextosDir, sessionID, messages, "compact", client);
-          if (savedPath) {
-            console.log(`[context-plugin] Compact context saved successfully`);
-          }
+      if (!eventType) return;
+      
+      if (eventType === "session.created") {
+        currentSessionId = event?.sessionId || event?.sessionID || event?.session?.id;
+        hasInjectedContext = false;
+        lastSession = null;
+        debugLog(`[context-plugin] Session created: ${currentSessionId}`);
+      }
+      
+      if (eventType === "session.updated") {
+        const info = event?.properties?.info;
+        if (info) {
+          if (!lastSession) lastSession = {};
+          Object.assign(lastSession, info);
+          debugLog(`[context-plugin] Session metadata updated`);
         }
-      } catch (error) {
-        console.error(`[context-plugin] Error fetching session messages:`, error);
       }
-    },
-
-    "experimental.chat.messages.transform": async (chatInput, output) => {
-      const { messages } = chatInput;
-
-      console.log(`[context-plugin] [HOOK FIRED] experimental.chat.messages.transform (msg count: ${messages.length})`);
-
-      if (messages.length !== 1) {
-        console.log(`[context-plugin] Skipping context injection: ${messages.length} messages`);
-        return;
-      }
-
-      const previousContexts = loadPreviousContextsAsText(contextosDir);
-
-      if (previousContexts && messages.length > 0) {
-        const firstUserIndex = messages.findIndex(m => m.info?.role === "user");
+      
+      if (eventType === "message.updated" || eventType === "message.created") {
+        const msgInfo = event?.properties?.info;
+        const msgId = msgInfo?.id;
         
-        if (firstUserIndex !== -1) {
-          const firstMsg = messages[firstUserIndex];
-          const currentContent = firstMsg.parts?.find(p => p.type === "text")?.text || "";
+        if (msgId && msgInfo?.role) {
+          if (!lastSession) lastSession = { messages: [] };
+          if (!lastSession.messages) lastSession.messages = [];
           
-          const contextPart = firstMsg.parts?.find(p => p.type === "text");
-          if (contextPart) {
-            contextPart.text = `## Contexto de Sessões Anteriores (RESUMO)
-
-${previousContexts}
-
----
-
-### Instruções:
-- **NÃO** leia todo o código do projeto
-- **NÃO** liste arquivos desnecessários
-- Use o contexto acima APENAS como referência histórica
-- Seja específico e direto nas respostas
-- Peça esclarecimentos se necessário
-
----
-
-## Sua Mensagem Atual:
-
-${currentContent}`;
+          const existingIdx = lastSession.messages.findIndex(m => m.id === msgId);
+          if (existingIdx === -1) {
+            lastSession.messages.push({ ...msgInfo, content: '' });
+            debugLog(`[context-plugin] Message added: ${lastSession.messages.length} total`);
+          } else {
+            Object.assign(lastSession.messages[existingIdx], msgInfo);
           }
         }
       }
-    },
-
-    "command.execute.before": async (cmdInput, output) => {
-      if (cmdInput.command === "compact" || cmdInput.command === "save-context") {
-        console.log(`[context-plugin] ${cmdInput.command} command detected - context will be saved`);
-      }
-    },
-
-    "event": async ({ event }) => {
-      const eventLog = `[context-plugin] Event received: ${event.type}`;
-      console.log(eventLog);
-      debugLog(eventLog);
       
-      // Log full event structure for debugging (first time only)
-      if (!window._eventLogged) {
-        window._eventLogged = true;
-        debugLog(`[context-plugin] Event structure: ${JSON.stringify(Object.keys(event))}`);
-      }
-      
-      // Try to get session ID from different possible locations
-      const sessionId = event.sessionId || event.session?.id || event.sessionID || currentSessionId;
-      
-      if (event.type === "session.created") {
-        const logMsg = `[context-plugin] Session created: ${sessionId || 'unknown'}`;
-        console.log(logMsg);
-        debugLog(logMsg);
-        if (sessionId) currentSessionId = sessionId;
-      }
-      
-      // Save on session.idle (when user stops interacting)
-      if (event.type === "session.idle") {
-        const logMsg = `[context-plugin] Session idle: ${sessionId || 'unknown'}`;
-        console.log(logMsg);
-        debugLog(logMsg);
+      if (eventType === "message.part.delta") {
+        const msgId = event?.properties?.messageID;
+        const delta = event?.properties?.delta;
         
-        // For idle events, we can't easily get messages without client
-        // So we'll just log for now
-        if (!sessionId) {
-          debugLog(`[context-plugin] No session ID available for idle event`);
+        if (msgId && delta && lastSession?.messages) {
+          const msg = lastSession.messages.find(m => m.id === msgId);
+          if (msg) {
+            msg.content = (msg.content || '') + delta;
+          }
         }
       }
       
-      // Save on session.deleted (when session ends)
-      if (event.type === "session.deleted") {
-        const logMsg = `[context-plugin] Session deleted: ${sessionId || 'unknown'}`;
-        console.log(logMsg);
-        debugLog(logMsg);
+      if (eventType === "message.part.updated") {
+        const msgId = event?.properties?.part?.messageID || event?.properties?.messageID;
+        const text = event?.properties?.part?.text;
         
-        // Similar to idle, we need client to get messages
-        if (!sessionId) {
-          debugLog(`[context-plugin] No session ID available for deleted event`);
+        if (msgId && text && lastSession?.messages) {
+          const msg = lastSession.messages.find(m => m.id === msgId);
+          if (msg && !msg.content) {
+            msg.content = text;
+            debugLog(`[context-plugin] Message content from part.updated: ${text.length} chars`);
+          }
         }
       }
+      
+      if (eventType === "command.execute.before") {
+        const command = event?.command || event?.properties?.command || event?.properties?.name;
+        if (command === '/compact' || command === 'compact') {
+          debugLog('[context-plugin] /compact command detected');
+        }
+      }
+      
+      if (eventType === "session.compacted" || eventType === "experimental.compaction.autocontinue") {
+        debugLog('[context-plugin] session.compacted event received - saving context');
+        if (lastSession) {
+          saveContext(directory, lastSession, 'compact');
+        } else {
+          debugLog('[context-plugin] No lastSession available for compact save');
+        }
+      }
+      
+      if (eventType === "session.end" || eventType === "server.instance.disposed") {
+        debugLog('[context-plugin] Session ending - saving final context');
+        if (lastSession) {
+          saveContext(directory, lastSession, 'saida');
+        }
+      }
+    },
+    
+    "experimental.chat.messages.transform": async (transformInput) => {
+      const messages = transformInput?.messages || transformInput;
+      
+      if (!messages || messages.length === 0) {
+        return messages;
+      }
+      
+      const isFirstMessage = messages.length === 1 && !hasInjectedContext;
+      
+      if (isFirstMessage) {
+        debugLog('[context-plugin] First message detected - injecting context');
+        const contexts = loadPreviousContexts(directory, 5);
+        
+        if (contexts.length > 0) {
+          const injection = buildContextInjection(contexts);
+          const firstMsg = messages[0];
+          
+          if (firstMsg.content) {
+            firstMsg.content = firstMsg.content + injection;
+            hasInjectedContext = true;
+            debugLog(`[context-plugin] Injected ${contexts.length} contexts into first message`);
+          }
+        }
+      }
+      
+      return messages;
     }
   };
 };
