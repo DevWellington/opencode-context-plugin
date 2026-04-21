@@ -53,17 +53,23 @@ let currentConfig = { ...defaultConfig };
 /**
  * Load configuration from opencode.json in the project directory
  * Merges with defaults and handles missing file gracefully
+ * Supports both flat format and nested contextPlugin format
  */
 export async function loadConfig(directory) {
   const configPath = path.join(directory, 'opencode.json');
-  
+
   try {
     const content = await fs.readFile(configPath, 'utf-8');
     const userConfig = JSON.parse(content);
-    
-    // Extract contextPlugin section if present
-    const pluginConfig = userConfig.contextPlugin || userConfig;
-    
+
+    // Support both formats:
+    // 1. Flat: { "maxContexts": 5, ... }
+    // 2. Nested: { "contextPlugin": { "maxContexts": 5, ... } }
+    let pluginConfig = userConfig;
+    if (userConfig.contextPlugin && typeof userConfig.contextPlugin === 'object') {
+      pluginConfig = userConfig.contextPlugin;
+    }
+
     // Merge with defaults
     currentConfig = {
       ...defaultConfig,

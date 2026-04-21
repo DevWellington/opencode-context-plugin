@@ -1,1 +1,8 @@
-{}
+{
+  "userIgnoreFilters": [
+    "node_modules/"
+  ],
+  "showUnsupportedFiles": true,
+  "alwaysUpdateLinks": true,
+  "uriCallbacks": true
+}
