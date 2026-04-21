@@ -354,3 +354,6 @@ export default async (input) => {
     }
   };
 };
+
+// Export helper functions for testing and external use
+export { ensureHierarchicalDir, ensureContextSessionDir, atomicWrite, saveContext, loadPreviousContexts };
