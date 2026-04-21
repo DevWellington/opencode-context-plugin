@@ -1,0 +1,49 @@
+{
+  "name": "basic",
+  "description": "Basic template for any project type",
+  "type": "generic",
+  "createdAt": "2026-04-01T00:00:00Z",
+  "structure": {
+    "folders": [
+      ".opencode",
+      ".opencode/context-session",
+      ".opencode/context-session/reports"
+    ],
+    "files": []
+  },
+  "config": {
+    "opencode": {
+      "contextSession": {
+        "enabled": true,
+        "maxContexts": 5,
+        "autoInject": false
+      }
+    }
+  },
+  "hooks": [
+    {
+      "event": "session.compacted",
+      "action": "saveContext",
+      "description": "Save context after session compaction"
+    },
+    {
+      "event": "session.end",
+      "action": "generateReport",
+      "description": "Generate daily report on session end"
+    }
+  ],
+  "patterns": [
+    {
+      "pattern": "Folder hierarchy: YYYY/MM/WW/DD for temporal organization",
+      "weight": 8
+    },
+    {
+      "pattern": "Atomic writes prevent file corruption",
+      "weight": 9
+    },
+    {
+      "pattern": "Queue serialization prevents concurrent write conflicts",
+      "weight": 8
+    }
+  ]
+}

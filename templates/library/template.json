@@ -1,0 +1,53 @@
+{
+  "name": "library",
+  "description": "Library/module project template with examples folder",
+  "type": "library",
+  "createdAt": "2026-04-01T00:00:00Z",
+  "structure": {
+    "folders": [
+      ".opencode",
+      ".opencode/context-session",
+      ".opencode/context-session/reports",
+      "src",
+      "tests",
+      "examples",
+      "docs"
+    ],
+    "files": []
+  },
+  "config": {
+    "opencode": {
+      "contextSession": {
+        "enabled": true,
+        "maxContexts": 5,
+        "autoInject": false
+      }
+    }
+  },
+  "hooks": [
+    {
+      "event": "session.compacted",
+      "action": "saveContext",
+      "description": "Save context after session compaction"
+    },
+    {
+      "event": "session.compacted",
+      "action": "runTests",
+      "description": "Run tests after compaction to verify library integrity"
+    }
+  ],
+  "patterns": [
+    {
+      "pattern": "Public API via index exports",
+      "weight": 8
+    },
+    {
+      "pattern": "Version semver tagging",
+      "weight": 7
+    },
+    {
+      "pattern": "Atomic writes for changelog updates",
+      "weight": 6
+    }
+  ]
+}

@@ -1,0 +1,58 @@
+{
+  "name": "webapp",
+  "description": "Web application template with context injection enabled",
+  "type": "webapp",
+  "createdAt": "2026-04-01T00:00:00Z",
+  "structure": {
+    "folders": [
+      ".opencode",
+      ".opencode/context-session",
+      ".opencode/context-session/reports",
+      "src",
+      "tests",
+      "docs",
+      "public"
+    ],
+    "files": []
+  },
+  "config": {
+    "opencode": {
+      "contextSession": {
+        "enabled": true,
+        "maxContexts": 3,
+        "autoInject": true
+      }
+    }
+  },
+  "hooks": [
+    {
+      "event": "session.compacted",
+      "action": "saveContext",
+      "description": "Save context after session compaction"
+    },
+    {
+      "event": "session.end",
+      "action": "generateReport",
+      "description": "Generate daily report on session end"
+    },
+    {
+      "event": "session.idle",
+      "action": "autoInject",
+      "description": "Automatically inject context when session is idle"
+    }
+  ],
+  "patterns": [
+    {
+      "pattern": "Context injection for request scope",
+      "weight": 9
+    },
+    {
+      "pattern": "Session-based state management",
+      "weight": 7
+    },
+    {
+      "pattern": "Queue serialization for concurrent writes",
+      "weight": 7
+    }
+  ]
+}
