@@ -271,6 +271,8 @@ export const ContextPlugin: Plugin = async (input: PluginInput) => {
   const { directory, client } = input;
   const contextosDir = getContextosDir(directory);
 
+  console.log(`[context-plugin] Plugin loaded for directory: ${directory}`);
+
   return {
     // Hook into compaction completion to save context
     "experimental.compaction.autocontinue": async (compactionInput, output) => {
@@ -299,9 +301,12 @@ export const ContextPlugin: Plugin = async (input: PluginInput) => {
     "experimental.chat.messages.transform": async (chatInput, output) => {
       const { messages } = chatInput;
 
+      console.log(`[context-plugin] [HOOK FIRED] experimental.chat.messages.transform (msg count: ${messages.length})`);
+
       // Only inject context on the VERY first user message of a new session
       // This prevents token waste on every subsequent message
       if (messages.length !== 1) {
+        console.log(`[context-plugin] Skipping context injection: ${messages.length} messages`);
         return;
       }
 
@@ -340,11 +345,36 @@ ${currentContent}`;
       }
     },
 
-    // Also hook into command execution to capture /compact manually
+    // Also hook into command execution to capture /compact and /save-context
     "command.execute.before": async (cmdInput, output) => {
-      if (cmdInput.command === "compact") {
-        console.log(`[context-plugin] /compact command detected`);
+      if (cmdInput.command === "compact" || cmdInput.command === "save-context") {
+        console.log(`[context-plugin] ${cmdInput.command} command detected - context will be saved`);
         // Context will be saved via experimental.compaction.autocontinue hook
+      }
+    },
+
+    // Hook into session end/exit to save context when leaving opencode
+    // Note: This hook may not be supported in all OpenCode versions
+    "session.end": async (sessionInput, output) => {
+      const { sessionID } = sessionInput;
+      
+      console.log(`[context-plugin] Session ending: ${sessionID}`);
+
+      try {
+        const session = await client.sessions.get({ sessionID });
+        const messages = session.messages || [];
+
+        if (messages.length > 0) {
+          const savedPath = saveContextToFile(contextosDir, sessionID, messages, "session_end");
+          if (savedPath) {
+            console.log(`[context-plugin] Session end context saved: ${savedPath}`);
+          }
+        }
+        
+        // Security: Cleanup old contexts based on retention policy
+        cleanupOldContexts(contextosDir);
+      } catch (error) {
+        console.error(`[context-plugin] Error saving context on session end:`, error);
       }
     },
 
