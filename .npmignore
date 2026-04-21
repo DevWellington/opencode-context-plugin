@@ -1,0 +1,20 @@
+# Git
+.git/
+.gitignore
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Planning (used by GSD workflow, not needed in package)
+.planning/
+
+# Old/deprecated files
+old/
+
+# Development
+*.tgz
