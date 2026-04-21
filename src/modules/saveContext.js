@@ -130,6 +130,15 @@ export async function saveContext(directory, session, type = 'compact') {
     };
     await updateIntelligenceLearning(directory, learningSessionInfo);
     
+    // Update search index with new session (non-blocking, best effort)
+    try {
+      const { updateSearchIndex } = await import('./searchIndexer.js');
+      await updateSearchIndex(directory, filepath);
+    } catch (error) {
+      // Don't fail save if search index update fails
+      logger(`[saveContext] Search index update failed (non-fatal): ${error.message}`);
+    }
+    
     logger(`[Daily Summary] Updated with ${filename}`);
     
     return filepath;

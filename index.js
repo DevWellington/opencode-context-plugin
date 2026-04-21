@@ -371,6 +371,10 @@ class ContextPlugin {
 export { saveContext } from './src/modules/saveContext.js';
 export { getRelevantContexts, formatForInjection, injectContextPrompt } from './src/modules/contextInjector.js';
 
+// Search functionality exports
+export { buildSearchIndex, searchSessions, updateSearchIndex } from './src/modules/searchIndexer.js';
+export { executeSearch, parseSearchQuery } from './src/modules/searchQuery.js';
+
 // V2 Export format - { id, server } - server must be instantiable with `new`
 export default {
   id: "@devwellington/opencode-context-plugin",
