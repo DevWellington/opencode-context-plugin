@@ -4,7 +4,10 @@ import { getWeek } from "date-fns";
 import { getConfig } from '../config.js';
 import { createDebugLogger } from '../utils/debug.js';
 import { updateDailySummary, updateDaySummary, updateWeekSummary } from './summaries.js';
-import { updateIntelligenceLearning } from './intelligence.js';
+import { updateIntelligenceLearning as updateIntelligenceLearningMeta } from './intelligence.js';
+import { generateMonthlySummary } from '../agents/generateMonthly.js';
+import { generateAnnualSummary } from '../agents/generateAnnual.js';
+import { updateIntelligenceLearning } from '../agents/generateIntelligenceLearning.js';
 import { atomicWrite, getTimestamp } from '../utils/fileUtils.js';
 
 const logger = createDebugLogger('context-plugin');
@@ -128,8 +131,25 @@ export async function saveContext(directory, session, type = 'compact') {
       sessionId: summary.sessionId,
       messageCount: summary.messageCount
     };
-    await updateIntelligenceLearning(directory, learningSessionInfo);
-    
+    await updateIntelligenceLearningMeta(directory, learningSessionInfo);
+
+    // Regenerate all reports (non-blocking, best-effort)
+    // This runs after context save completes without blocking
+    setImmediate(async () => {
+      try {
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = `${year}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+        await Promise.all([
+          generateMonthlySummary(directory, month),
+          generateAnnualSummary(directory, year),
+          updateIntelligenceLearning(directory)
+        ]);
+      } catch (error) {
+        logger(`[saveContext] Report regeneration failed (non-fatal): ${error.message}`);
+      }
+    });
+
     // Update search index with new session (non-blocking, best effort)
     try {
       const { updateSearchIndex } = await import('./searchIndexer.js');
