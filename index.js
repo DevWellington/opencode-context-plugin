@@ -822,8 +822,8 @@ class ContextPlugin {
   }
 }
 
-// V2 Export format - { id, server }
+// V2 Export format - { id, server } - server must be instantiable with `new`
 export default {
   id: "@devwellington/opencode-context-plugin",
-  server: ContextPlugin
+  server: (input) => new ContextPlugin(input)
 };
