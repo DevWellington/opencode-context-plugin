@@ -353,52 +353,53 @@ ${currentContent}`;
       }
     },
 
-    // Hook into session end/exit to save context when leaving opencode
-    // Note: This hook may not be supported in all OpenCode versions
-    "session.end": async (sessionInput, output) => {
-      const { sessionID } = sessionInput;
-      
-      console.log(`[context-plugin] Session ending: ${sessionID}`);
-
-      try {
-        const session = await client.sessions.get({ sessionID });
-        const messages = session.messages || [];
-
-        if (messages.length > 0) {
-          const savedPath = saveContextToFile(contextosDir, sessionID, messages, "session_end");
-          if (savedPath) {
-            console.log(`[context-plugin] Session end context saved: ${savedPath}`);
-          }
-        }
-        
-        // Security: Cleanup old contexts based on retention policy
-        cleanupOldContexts(contextosDir);
-      } catch (error) {
-        console.error(`[context-plugin] Error saving context on session end:`, error);
+    // Universal event hook - catches ALL OpenCode events
+    // More reliable than individual hooks like session.end
+    "event": async ({ event }) => {
+      // Track session lifecycle events
+      if (event.type === "session.created") {
+        console.log(`[context-plugin] Session created: ${event.sessionId}`);
       }
-    },
-
-    // Hook into session end/exit to save context when leaving opencode
-    "session.end": async (sessionInput, output) => {
-      const { sessionID } = sessionInput;
       
-      console.log(`[context-plugin] Session ending: ${sessionID}`);
-
-      try {
-        const session = await client.sessions.get({ sessionID });
-        const messages = session.messages || [];
-
-        if (messages.length > 0) {
-          const savedPath = saveContextToFile(contextosDir, sessionID, messages, "session_end");
-          if (savedPath) {
-            console.log(`[context-plugin] Session end context saved: ${savedPath}`);
-          }
-        }
+      // Save context when session is deleted (user exits or closes session)
+      if (event.type === "session.deleted") {
+        console.log(`[context-plugin] Session deleted: ${event.sessionId}`);
         
-        // Security: Cleanup old contexts based on retention policy
-        cleanupOldContexts(contextosDir);
-      } catch (error) {
-        console.error(`[context-plugin] Error saving context on session end:`, error);
+        try {
+          const session = await client.sessions.get({ sessionID: event.sessionId });
+          const messages = session.messages || [];
+
+          if (messages.length > 0) {
+            const savedPath = saveContextToFile(contextosDir, event.sessionId, messages, "session_end");
+            if (savedPath) {
+              console.log(`[context-plugin] Session end context saved: ${savedPath}`);
+            }
+          }
+          
+          // Security: Cleanup old contexts based on retention policy
+          cleanupOldContexts(contextosDir);
+        } catch (error) {
+          console.error(`[context-plugin] Error saving context on session deleted:`, error);
+        }
+      }
+      
+      // Also save on idle timeout
+      if (event.type === "session.idle") {
+        console.log(`[context-plugin] Session idle: ${event.sessionId}`);
+        
+        try {
+          const session = await client.sessions.get({ sessionID: event.sessionId });
+          const messages = session.messages || [];
+
+          if (messages.length > 0) {
+            const savedPath = saveContextToFile(contextosDir, event.sessionId, messages, "auto");
+            if (savedPath) {
+              console.log(`[context-plugin] Idle session context saved: ${savedPath}`);
+            }
+          }
+        } catch (error) {
+          console.error(`[context-plugin] Error saving context on session idle:`, error);
+        }
       }
     }
   };
