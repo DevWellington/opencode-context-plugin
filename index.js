@@ -108,13 +108,25 @@ async function saveContext(directory, session, type = 'compact') {
     debugLog(`[context-plugin] Saved context to: ${filepath}`);
     console.log(`[context-plugin] Context saved: ${filename}`);
     
-    // Update day summary
-    await updateDaySummary(dirPath, { type, filename, year, month, day });
+    // Prepare session info for summaries
+    const sessionInfo = {
+      type,
+      filename,
+      timestamp: new Date().toISOString()
+    };
+    
+    // Update daily summary (at context-session root) and day summary (in hierarchical folder) in parallel
+    await Promise.all([
+      updateDailySummary(directory, sessionInfo),
+      updateDaySummary(dirPath, { type, filename, year, month, day })
+    ]);
     
     // Update week summary (idempotent, safe to call every time)
     await updateWeekSummary(directory, year, month, week);
     
-    return filepath;
+    debugLog(`[Daily Summary] Updated with ${filename}`);
+    
+    return { savedFilePath: filepath, summariesUpdated: true };
   } catch (error) {
     debugLog(`[context-plugin] Error saving context: ${error.message}`);
     console.error(`[context-plugin] Error saving context: ${error.message}`);
@@ -332,6 +344,9 @@ async function triggerPreExitCompression(sessionId, directory, client) {
   }
 }
 
+// Queue-based serialization for intelligence learning updates
+let learningWriteQueue = Promise.resolve();
+
 async function initializeIntelligenceLearning(baseDir) {
   const ctxDir = path.join(baseDir, CONTEXT_SESSION_DIR);
   const filePath = path.join(ctxDir, 'intelligence-learning.md');
@@ -418,6 +433,137 @@ async function initializeIntelligenceLearning(baseDir) {
     console.error(`[context-plugin] Failed to initialize intelligence learning: ${error.message}`);
     throw error;
   }
+}
+
+async function updateIntelligenceLearning(baseDir, sessionInfo) {
+  // Queue-based serialization to prevent concurrent write conflicts
+  learningWriteQueue = learningWriteQueue.then(async () => {
+    try {
+      // Handle null/undefined session info gracefully
+      if (!sessionInfo || !sessionInfo.type) {
+        debugLog(`[Intelligence] Invalid session info, skipping update`);
+        return;
+      }
+      
+      const ctxDir = path.join(baseDir, CONTEXT_SESSION_DIR);
+      const filePath = path.join(ctxDir, 'intelligence-learning.md');
+      
+      // Read existing content
+      let content;
+      try {
+        content = await fs.readFile(filePath, 'utf-8');
+      } catch (error) {
+        debugLog(`[Intelligence] Cannot read learning file, skipping update: ${error.message}`);
+        return;
+      }
+      
+      // Update Last Updated section
+      const lines = content.split('\n');
+      const updatedLines = [];
+      let inLastUpdatedSection = false;
+      let sessionsAnalyzed = 0;
+      
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        
+        // Track Last Updated section
+        if (line.startsWith('## Last Updated')) {
+          inLastUpdatedSection = true;
+          updatedLines.push(line);
+          continue;
+        }
+        
+        if (inLastUpdatedSection && line.startsWith('## ')) {
+          inLastUpdatedSection = false;
+        }
+        
+        // Update timestamp
+        if (inLastUpdatedSection && line.includes('**Timestamp:**')) {
+          updatedLines.push(`- **Timestamp:** ${sessionInfo.timestamp || new Date().toISOString()}`);
+          continue;
+        }
+        
+        // Update session count
+        if (inLastUpdatedSection && line.includes('**Sessions Analyzed:**')) {
+          const match = line.match(/Sessions Analyzed:\s*(\d+)/);
+          sessionsAnalyzed = match ? parseInt(match[1], 10) + 1 : 1;
+          updatedLines.push(`- **Sessions Analyzed:** ${sessionsAnalyzed}`);
+          continue;
+        }
+        
+        // Update session type
+        if (inLastUpdatedSection && line.includes('**Last Session Type:**')) {
+          updatedLines.push(`- **Last Session Type:** ${sessionInfo.type}`);
+          continue;
+        }
+        
+        updatedLines.push(line);
+      }
+      
+      content = updatedLines.join('\n');
+      
+      // Deduplicate: Check if this session already exists
+      if (sessionInfo.sessionId && content.includes(sessionInfo.sessionId)) {
+        debugLog(`[Intelligence] Session ${sessionInfo.sessionId} already recorded, skipping duplicate`);
+        return;
+      }
+      
+      // Append to Key Learnings section
+      const learningsMarker = '## Key Learnings from Latest Sessions';
+      const learningsIndex = content.indexOf(learningsMarker);
+      
+      if (learningsIndex === -1) {
+        debugLog(`[Intelligence] Key Learnings section not found, appending at end`);
+        // Append before the footer
+        const footerIndex = content.indexOf('---\n*Auto-generated');
+        if (footerIndex !== -1) {
+          const newEntry = `\n### Session ${sessionsAnalyzed} - ${sessionInfo.type.toUpperCase()}\n`;
+          newEntry += `- **Date:** ${sessionInfo.timestamp || new Date().toISOString()}\n`;
+          newEntry += `- **Session ID:** ${sessionInfo.sessionId || 'unknown'}\n`;
+          newEntry += `- **Messages:** ${sessionInfo.messageCount || 0} messages\n`;
+          newEntry += `- **File:** ${sessionInfo.filename || 'unknown'}\n\n`;
+          
+          content = content.slice(0, footerIndex) + newEntry + content.slice(footerIndex);
+        }
+      } else {
+        // Find the end of the Key Learnings section (before footer)
+        const sectionStart = learningsIndex + learningsMarker.length;
+        const footerIndex = content.indexOf('---\n*Auto-generated', sectionStart);
+        const insertPosition = footerIndex !== -1 ? footerIndex : content.length;
+        
+        let sectionContent = content.slice(sectionStart, insertPosition);
+        const entries = sectionContent.split('\n### Session').filter(s => s.trim().length > 0);
+        
+        // Limit to last 19 entries (adding 1 new = 20 total)
+        if (entries.length >= 20) {
+          entries.shift(); // Remove oldest
+        }
+        
+        // Add new entry
+        const newEntry = `\n### Session ${sessionsAnalyzed} - ${sessionInfo.type.toUpperCase()}\n`;
+        newEntry += `- **Date:** ${sessionInfo.timestamp || new Date().toISOString()}\n`;
+        newEntry += `- **Session ID:** ${sessionInfo.sessionId || 'unknown'}\n`;
+        newEntry += `- **Messages:** ${sessionInfo.messageCount || 0} messages\n`;
+        newEntry += `- **File:** ${sessionInfo.filename || 'unknown'}\n\n`;
+        
+        entries.push(newEntry);
+        
+        // Rebuild section
+        const updatedSection = learningsMarker + entries.join('\n### Session');
+        content = content.slice(0, sectionStart) + updatedSection + content.slice(insertPosition);
+      }
+      
+      // Atomic write
+      await atomicWrite(filePath, content);
+      debugLog(`[Intelligence] Updated learning file: ${filePath}`);
+    } catch (error) {
+      debugLog(`[Intelligence] Error updating learning file: ${error.message}`);
+      console.error(`[context-plugin] Intelligence learning update failed: ${error.message}`);
+      // Don't throw - fail gracefully to not break session saving
+    }
+  });
+  
+  await learningWriteQueue;
 }
 
 async function loadPreviousContexts(directory, limit = 5) {
@@ -674,4 +820,4 @@ export default async (input) => {
 };
 
 // Export helper functions for testing and external use
-export { ensureHierarchicalDir, ensureContextSessionDir, atomicWrite, saveContext, loadPreviousContexts, updateDaySummary, updateWeekSummary, updateDailySummary, triggerPreExitCompression, initializeIntelligenceLearning };
+export { ensureHierarchicalDir, ensureContextSessionDir, atomicWrite, saveContext, loadPreviousContexts, updateDaySummary, updateWeekSummary, updateDailySummary, triggerPreExitCompression, initializeIntelligenceLearning, updateIntelligenceLearning };
