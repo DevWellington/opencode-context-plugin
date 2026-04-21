@@ -2,6 +2,17 @@ import fs from "fs";
 import path from "path";
 import { type Plugin, type PluginInput } from "@opencode-ai/plugin";
 
+// Debug logging
+const LOG_FILE = path.join(process.env.HOME || '', '.opencode-context-plugin.log');
+function debugLog(message: string) {
+  try {
+    const timestamp = new Date().toISOString();
+    fs.appendFileSync(LOG_FILE, `[${timestamp}] ${message}\n`);
+  } catch (e) {
+    // Ignore log errors
+  }
+}
+
 interface SessionContext {
   timestamp: string;
   sessionID: string;
@@ -271,7 +282,9 @@ export const ContextPlugin: Plugin = async (input: PluginInput) => {
   const { directory, client } = input;
   const contextosDir = getContextosDir(directory);
 
-  console.log(`[context-plugin] Plugin loaded for directory: ${directory}`);
+  const logMsg = `[context-plugin] Plugin loaded for directory: ${directory}`;
+  console.log(logMsg);
+  debugLog(logMsg);
 
   return {
     // Hook into compaction completion to save context
@@ -356,14 +369,22 @@ ${currentContent}`;
     // Universal event hook - catches ALL OpenCode events
     // More reliable than individual hooks like session.end
     "event": async ({ event }) => {
+      const eventLog = `[context-plugin] Event received: ${event.type}`;
+      console.log(eventLog);
+      debugLog(eventLog);
+      
       // Track session lifecycle events
       if (event.type === "session.created") {
-        console.log(`[context-plugin] Session created: ${event.sessionId}`);
+        const logMsg = `[context-plugin] Session created: ${event.sessionId}`;
+        console.log(logMsg);
+        debugLog(logMsg);
       }
       
       // Save context when session is deleted (user exits or closes session)
       if (event.type === "session.deleted") {
-        console.log(`[context-plugin] Session deleted: ${event.sessionId}`);
+        const logMsg = `[context-plugin] Session deleted: ${event.sessionId}`;
+        console.log(logMsg);
+        debugLog(logMsg);
         
         try {
           const session = await client.sessions.get({ sessionID: event.sessionId });
@@ -372,20 +393,26 @@ ${currentContent}`;
           if (messages.length > 0) {
             const savedPath = saveContextToFile(contextosDir, event.sessionId, messages, "session_end");
             if (savedPath) {
-              console.log(`[context-plugin] Session end context saved: ${savedPath}`);
+              const saveLog = `[context-plugin] Session end context saved: ${savedPath}`;
+              console.log(saveLog);
+              debugLog(saveLog);
             }
           }
           
           // Security: Cleanup old contexts based on retention policy
           cleanupOldContexts(contextosDir);
         } catch (error) {
-          console.error(`[context-plugin] Error saving context on session deleted:`, error);
+          const errorLog = `[context-plugin] Error saving context on session deleted: ${error.message}`;
+          console.error(errorLog);
+          debugLog(errorLog);
         }
       }
       
       // Also save on idle timeout
       if (event.type === "session.idle") {
-        console.log(`[context-plugin] Session idle: ${event.sessionId}`);
+        const logMsg = `[context-plugin] Session idle: ${event.sessionId}`;
+        console.log(logMsg);
+        debugLog(logMsg);
         
         try {
           const session = await client.sessions.get({ sessionID: event.sessionId });
@@ -394,11 +421,15 @@ ${currentContent}`;
           if (messages.length > 0) {
             const savedPath = saveContextToFile(contextosDir, event.sessionId, messages, "auto");
             if (savedPath) {
-              console.log(`[context-plugin] Idle session context saved: ${savedPath}`);
+              const saveLog = `[context-plugin] Idle session context saved: ${savedPath}`;
+              console.log(saveLog);
+              debugLog(saveLog);
             }
           }
         } catch (error) {
-          console.error(`[context-plugin] Error saving context on session idle:`, error);
+          const errorLog = `[context-plugin] Error saving context on session idle: ${error.message}`;
+          console.error(errorLog);
+          debugLog(errorLog);
         }
       }
     }
