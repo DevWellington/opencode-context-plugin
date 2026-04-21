@@ -4,6 +4,7 @@ import { createDebugLogger } from '../utils/debug.js';
 import { atomicWrite } from '../utils/fileUtils.js';
 import { extractSessionContent, extractBugs, findPatterns } from './contentExtractor.js';
 import { updateGlobalIntelligence } from '../utils/globalIntelligence.js';
+import { getSyncStatus } from './remoteSync.js';
 
 const logger = createDebugLogger('intelligence');
 
@@ -90,6 +91,9 @@ export async function initializeIntelligenceLearning(baseDir) {
     
     content += `### Bug-Prone Areas\n`;
     content += `- [Auto-populated from cross-session analysis]\n\n`;
+
+    content += `## Remote Sync Status\n\n`;
+    content += `[Auto-populated when remote sync is configured]\n\n`;
     
     content += `## Key Learnings from Latest Sessions\n\n`;
     content += `[Appended on each trigger execution]\n\n`;
@@ -307,6 +311,11 @@ export async function updateIntelligenceLearning(baseDir, sessionInfo) {
       // Atomic write
       await atomicWrite(filePath, content);
       logger(`[Intelligence] Updated learning file: ${filePath}`);
+      
+      // Update remote sync status in learning file (fire-and-forget, don't block)
+      updateRemoteSyncStatus(filePath).catch(err => {
+        logger(`[Intelligence] Remote sync status update error (non-blocking): ${err.message}`);
+      });
       
       // Sync to global intelligence (fire-and-forget, don't block local updates)
       const projectName = path.basename(baseDir);
@@ -542,4 +551,63 @@ export async function updatePatternInsights(baseDir, patterns) {
   });
   
   await learningWriteQueue;
+}
+
+/**
+ * Update remote sync status section in intelligence learning file
+ * Only shows information if remote sync is configured
+ * 
+ * @param {string} filePath - Path to intelligence-learning.md file
+ */
+async function updateRemoteSyncStatus(filePath) {
+  try {
+    let content;
+    try {
+      content = await fs.readFile(filePath, 'utf-8');
+    } catch {
+      // File doesn't exist yet
+      return;
+    }
+
+    const status = await getSyncStatus();
+    
+    // Find Remote Sync Status section
+    const syncStatusMarker = '## Remote Sync Status';
+    const markerIndex = content.indexOf(syncStatusMarker);
+    
+    if (markerIndex === -1) {
+      // Section doesn't exist, skip
+      return;
+    }
+    
+    // Find the end of this section (next ## or footer)
+    let sectionEnd = content.indexOf('\n## ', markerIndex + 1);
+    if (sectionEnd === -1) sectionEnd = content.indexOf('\n---\n', markerIndex);
+    if (sectionEnd === -1) sectionEnd = content.length;
+    
+    // Build new section content
+    let newSection = `${syncStatusMarker}\n\n`;
+    
+    if (status.configured) {
+      newSection += `- **Provider:** ${status.configured ? 'configured' : 'not configured'}\n`;
+      newSection += `- **Last Sync:** ${status.lastSync || 'never'}\n`;
+      newSection += `- **Pending Changes:** ${status.pendingChanges ? 'yes' : 'no'}\n`;
+      if (status.errors && status.errors.length > 0) {
+        newSection += `- **Recent Errors:** ${status.errors.length}\n`;
+      }
+    } else {
+      newSection += `Remote sync is not configured.\n`;
+      newSection += `Configure in context-plugin.json to enable.\n`;
+    }
+    
+    newSection += `\n`;
+    
+    // Replace section content
+    content = content.slice(0, markerIndex) + newSection + content.slice(sectionEnd);
+    
+    await atomicWrite(filePath, content);
+    logger(`[Intelligence] Updated remote sync status: configured=${status.configured}`);
+  } catch (error) {
+    logger(`[Intelligence] Error updating remote sync status: ${error.message}`);
+  }
 }

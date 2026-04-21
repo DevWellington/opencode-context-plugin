@@ -43,5 +43,14 @@
     "weeklyDay": 0,
     "outputDir": ".opencode/context-session/reports",
     "includeStats": true
+  },
+  "remoteSync": {
+    "enabled": false,
+    "provider": "s3",
+    "endpoint": "",
+    "bucket": "",
+    "region": "us-east-1",
+    "prefix": "",
+    "credentials": {}
   }
 }

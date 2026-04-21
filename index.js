@@ -7,6 +7,7 @@ import { saveContext } from './src/modules/saveContext.js';
 import { initializeIntelligenceLearning } from './src/modules/intelligence.js';
 import { initializeGlobalIntelligence } from './src/utils/globalIntelligence.js';
 import { getRelevantContexts, formatForInjection } from './src/modules/contextInjector.js';
+import { syncToRemote, getSyncStatus, initializeRemoteSync } from './src/modules/remoteSync.js';
 
 const logger = createDebugLogger('context-plugin');
 
@@ -200,6 +201,11 @@ class ContextPlugin {
       initializeGlobalIntelligence().catch(err => {
         logger(`[context-plugin] Global intelligence init failed: ${err.message}`);
       });
+
+      // Initialize remote sync on startup
+      initializeRemoteSync().catch(err => {
+        logger(`[context-plugin] Remote sync init failed: ${err.message}`);
+      });
     }
     
     logger(`[context-plugin] ContextPlugin instantiated for: ${this.directory}`);
@@ -286,6 +292,14 @@ class ContextPlugin {
       } else {
         logger('[context-plugin] No lastSession available for compact save');
       }
+
+      // Remote sync trigger (fire-and-forget) after session.compacted
+      const config = getConfig();
+      if (config.remoteSync?.enabled) {
+        syncToRemote(this.directory).catch(err => {
+          logger(`[context-plugin] Remote sync failed (non-blocking): ${err.message}`);
+        });
+      }
     }
 
     if (eventType === "session.end" || eventType === "server.instance.disposed") {
@@ -300,6 +314,14 @@ class ContextPlugin {
         }
       } else {
         logger(`[context-plugin] No lastSession available for exit save`);
+      }
+
+      // Remote sync trigger (fire-and-forget) after session.end
+      const config = getConfig();
+      if (config.remoteSync?.enabled) {
+        syncToRemote(this.directory).catch(err => {
+          logger(`[context-plugin] Remote sync failed (non-blocking): ${err.message}`);
+        });
       }
     }
 
@@ -398,6 +420,9 @@ export { executeSearch, parseSearchQuery } from './src/modules/searchQuery.js';
 
 // Report generation exports
 export { generateWeeklyReport, generateMonthlyReport, generateActivityReport, saveReport } from './src/modules/reportGenerator.js';
+
+// Remote sync exports
+export { configureRemoteSync, syncToRemote, getSyncStatus, syncGlobalIntelligence, initializeRemoteSync } from './src/modules/remoteSync.js';
 
 // Agent system exports
 export { showHelp } from './src/agents/ocpHelp.js';
