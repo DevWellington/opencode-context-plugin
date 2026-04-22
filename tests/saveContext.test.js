@@ -48,6 +48,13 @@ jest.unstable_mockModule('../src/agents/generateIntelligenceLearning.js', () => 
   updateIntelligenceLearning: jest.fn().mockResolvedValue({ success: true, entries: 1 })
 }));
 
+jest.unstable_mockModule('../src/modules/state.js', () => ({
+  setLastSummarized: jest.fn().mockResolvedValue(undefined),
+  addToPendingQueue: jest.fn().mockResolvedValue(undefined),
+  getLastSummarized: jest.fn().mockResolvedValue(null),
+  markSummaryComplete: jest.fn().mockResolvedValue(undefined)
+}));
+
 const { extractSessionSummary, saveContext, ensureHierarchicalDir } = await import('../src/modules/saveContext.js');
 const { atomicWrite } = await import('../src/utils/fileUtils.js');
 const summaries = await import('../src/modules/summaries.js');
