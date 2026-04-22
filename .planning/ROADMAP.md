@@ -148,8 +148,22 @@ Plans:
 Plans:
 - [x] 07-01-PLAN.md: Create global intelligence learning file (completed)
 - [x] 07-02-PLAN.md: Implement cross-project context linking (completed)
-- [x] 07-03-PLAN.md: Add project templates from learnings (planned)
-- [x] 07-04-PLAN.md: Add remote storage sync (optional) (planned)
+- [x] 07-03-PLAN.md: Add project templates from learnings (completed)
+- [x] 07-04-PLAN.md: Add remote storage sync (optional) (completed)
+
+#### Phase 7.3: Smart Generation Triggers
+**Goal**: Only regenerate summaries when content exceeds threshold or meaningful changes occurred
+**Depends on**: Phase 7
+**Requirements**: SMART-01, SMART-02, SMART-03
+**Success Criteria** (what must be TRUE):
+  1. Skips regeneration when change < 5%
+  2. Only regenerates if new session added
+  3. Maintains backward compatibility
+
+Plans:
+- [x] 07.3-01-PLAN.md: Add shouldRegenerate() change detection (planned)
+- [x] 07.3-02-PLAN.md: Skip generation when no meaningful change (planned)
+- [x] 07.3-03-PLAN.md: Verify existing tests pass (planned)
 
 ---
 
