@@ -1,6 +1,6 @@
 {
   "name": "@devwellington/opencode-context-plugin",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "description": "OpenCode plugin that saves session context to .opencode/context-session/ after compaction and session end",
   "main": "index.js",
   "type": "module",
