@@ -61,6 +61,12 @@ export const defaultConfig = {
       high: ['bug', 'error', 'critical', 'security', 'architecture', 'refactor'],
       medium: ['feature', 'implement', 'test', 'config']
     }
+  },
+  protected: {
+    enabled: false,           // Master switch for protected patterns
+    patterns: [],             // Array of glob/regex patterns
+    mode: 'content',           // 'content' = skip from summaries, 'session' = preserve entire session
+    sessionsDir: '.opencode/context-session'  // Sessions directory to check
   }
 };
 
@@ -117,6 +123,17 @@ export async function loadConfig(directory) {
  */
 export function getConfig() {
   return { ...currentConfig };
+}
+
+/**
+ * Check if protected patterns are enabled and configured
+ * @returns {boolean}
+ */
+export function hasProtectedPatterns() {
+  const config = getConfig();
+  return config.protected?.enabled && 
+         Array.isArray(config.protected?.patterns) && 
+         config.protected.patterns.length > 0;
 }
 
 export { LOG_FILE, CONTEXT_SESSION_DIR };

@@ -52,5 +52,15 @@
     "region": "us-east-1",
     "prefix": "",
     "credentials": {}
+  },
+  "protected": {
+    "enabled": false,
+    "patterns": [
+      "**/secret/**",
+      "**/.env",
+      "exit-protected-*",
+      "compact-protected-*"
+    ],
+    "mode": "content"
   }
 }
