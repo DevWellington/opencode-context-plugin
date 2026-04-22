@@ -114,6 +114,18 @@ export function truncateToTokenLimit(content, maxTokens) {
 }
 
 /**
+ * Truncate content to fit within character budget
+ * @param {string} content - Content to truncate
+ * @param {number} maxChars - Maximum characters allowed
+ * @returns {string} - Truncated content with [truncated] marker if exceeded
+ */
+export function truncateToBudget(content, maxChars) {
+  if (!content || content.length <= maxChars) return content || '';
+  const truncated = content.slice(0, maxChars);
+  return truncated + ' [truncated]';
+}
+
+/**
  * Calculate token budget distribution across contexts
  * @param {number} totalBudget - Total token budget
  * @param {number} contextCount - Number of contexts to distribute
