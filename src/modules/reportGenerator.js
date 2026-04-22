@@ -393,7 +393,7 @@ export async function generateMonthlyReport(directory, monthYear, opencodeClient
   report += `title: "${monthName} ${year} Monthly Report"\n`;
   report += `created: "${new Date().toISOString()}"\n`;
   report += `period: "${year}-${monthStr}-01 to ${year}-${monthStr}-${new Date(year, month, 0).getDate()}"\n`;
-  report += `keywords: [monthly-report, ${monthName.toLowerCase()}, ${year}]\n`;
+  report += `keywords: [[monthly-report]] | [[${monthName.toLowerCase()}]] | [[${year}]]\n`;
   report += '---\n\n';
 
   report += `# Monthly Report - ${monthName} ${year}\n\n`;
@@ -612,7 +612,7 @@ export async function generateAnnualReport(directory, year, opencodeClient = nul
   report += `title: "${year} Annual Report"\n`;
   report += `created: "${new Date().toISOString()}"\n`;
   report += `year: "${year}"\n`;
-  report += `keywords: [annual-report, ${year}, yearly-summary]\n`;
+  report += `keywords: [[annual-report]] | [[${year}]] | [[yearly-summary]]\n`;
   report += '---\n\n';
 
   report += `# Annual Report - ${year}\n\n`;

@@ -460,7 +460,9 @@ function parseExistingEntries(content) {
  * Generate updated intelligence learning content
  */
 function generateIntelligenceContent(entries, latestEntry) {
-  const keywords = latestEntry.keywords?.join(' | ') || 'opencode-context-plugin | intelligence-learning';
+  const keywordsList = latestEntry.keywords?.length 
+    ? latestEntry.keywords.map(k => `[[${k}]]`).join(' | ')
+    : '[[opencode-context-plugin]] | [[intelligence-learning]]';
 
   // Extract structured content from all entries using contentExtractor patterns
   const allSessions = entries.flatMap(e => e.sessions || []);
@@ -483,7 +485,7 @@ function generateIntelligenceContent(entries, latestEntry) {
 
   let content = `---
 title: Intelligence Learning
-keywords: ${keywords}
+keywords: ${keywordsList}
 created: ${new Date().toISOString()}
 lastUpdated: ${new Date().toISOString()}
 ---

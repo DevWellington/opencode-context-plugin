@@ -25,6 +25,50 @@ Plugin para OpenCode que salva automaticamente o contexto da sessão em `.openco
 - **State Persistence**: Resume trabalho após reiniciar o plugin
 - **ocp_memory API**: Ferramentas para o agente gerenciar memórias cruzadas
 
+## Integração com Obsidian
+
+Este plugin instala automaticamente o **Show Hidden Files** para você visualizar a pasta `.opencode` no Obsidian.
+
+### Após instalar
+
+Ao executar `npm install`, você verá:
+
+```
+▞▀▖         ▞▀▖     ▌     
+▌ ▌▛▀▖▞▀▖▛▀▖▌  ▞▀▖▞▀▌▞▀▖  
+▌ ▌▙▄▘▛▀ ▌ ▌▌ ▖▌ ▌▌ ▌▛▀   
+▝▀ ▌  ▝▀▘▘ ▘▝▀ ▝▀ ▝▀▘▝▀▘  
+   ▞▀▖      ▐        ▐    
+   ▌  ▞▀▖▛▀▖▜▀ ▞▀▖▚▗▘▜▀   
+   ▌ ▖▌ ▌▌ ▌▐ ▖▛▀ ▗▚ ▐ ▖  
+   ▝▀ ▝▀ ▘ ▘ ▀ ▝▀▘▘ ▘ ▀   
+     ▛▀▖▜       ▗         
+     ▙▄▘▐ ▌ ▌▞▀▌▄ ▛▀▖     
+     ▌  ▐ ▌ ▌▚▄▌▐ ▌ ▌     
+     ▘   ▘▝▀▘▗▄▘▀▘▘ ▘    
+
+✅  Show Hidden Files installed globally
+✅  Show Hidden Files copied to project .obsidian
+
+┌────────────────────────────────────────────────────────────┐
+│  ⚠️  ACTION REQUIRED - Activate in Obsidian                 │
+│                                                             │
+│  1. Open Obsidian                                            │
+│  2. Settings → Community Plugins                           │
+│  3. Find "Show Hidden Files" in the list                   │
+│  4. Toggle to ENABLED                                      │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Ativar no Obsidian (apenas 1 vez)
+
+1. Abra o Obsidian
+2. **Settings** → **Community Plugins**
+3. Encontre **"Show Hidden Files"** na lista
+4. Ative (toggle)
+
+Após isso, a pasta `.opencode` aparecerá no explorador de arquivos do Obsidian! Isso é necessário apenas **uma vez** - depois funciona em todas as vaults.
+
 ## Estrutura de Arquivos
 
 ```

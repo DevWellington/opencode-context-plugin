@@ -38,7 +38,10 @@
     "test:coverage": "node --experimental-vm-modules node_modules/jest/bin/jest.js --coverage",
     "search": "node src/cli/search.js",
     "validate": "node scripts/validate-reports.js",
-    "postinstall": "node scripts/install-agents.js"
+    "postinstall": "node scripts/install-agents.js && node scripts/install-obsidian-plugin.js"
+  },
+  "bundledPlugins": {
+    "show-hidden-files": "./.obsidian/plugins/show-hidden-files"
   },
   "bin": {
     "context-search": "./src/cli/search.js",

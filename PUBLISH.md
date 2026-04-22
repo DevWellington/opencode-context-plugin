@@ -50,9 +50,44 @@ npm view @devwellington/opencode-context-plugin versions
 - [x] Publish no NPM
 - [x] Atualizar instalação global com `npm install -g`
 
+## Integração com Obsidian
+
+O plugin instala automaticamente o **Show Hidden Files** para exibir a pasta `.opencode` no Obsidian.
+
+### Saída do npm install
+
+```
+▞▀▖         ▞▀▖     ▌     
+▌ ▌▛▀▖▞▀▖▛▀▖▌  ▞▀▖▞▀▌▞▀▖  
+▌ ▌▙▄▘▛▀ ▌ ▌▌ ▖▌ ▌▌ ▌▛▀   
+▝▀ ▌  ▝▀▘▘ ▘▝▀ ▝▀ ▝▀▘▝▀▘  
+   ▞▀▖      ▐        ▐    
+   ▌  ▞▀▖▛▀▖▜▀ ▞▀▖▚▗▘▜▀   
+   ▌ ▖▌ ▌▌ ▌▐ ▖▛▀ ▗▚ ▐ ▖  
+   ▝▀ ▝▀ ▘ ▘ ▀ ▝▀▘▘ ▘ ▀   
+     ▛▀▖▜       ▗         
+     ▙▄▘▐ ▌ ▌▞▀▌▄ ▛▀▖     
+     ▌  ▐ ▌ ▌▚▄▌▐ ▌ ▌     
+     ▘   ▘▝▀▘▗▄▘▀▘▘ ▘    
+
+✅  Show Hidden Files installed globally
+✅  Show Hidden Files copied to project .obsidian
+
+⚠️  ACTION REQUIRED - Activate in Obsidian
+```
+
+### Ativar no Obsidian
+
+1. Abra o Obsidian → Settings → Community Plugins
+2. Ative **"Show Hidden Files"**
+3. A pasta `.opencode` aparece no explorador!
+
+Isso é necessário apenas **1 vez** - funciona em todas as vaults depois.
+
 ## Estrutura do Projeto
 
 ```
+opencode-context-plugin/
 opencode-context-plugin/
 ├── index.js              # Plugin principal (ESM, V2 export)
 ├── package.json          # Configuração npm

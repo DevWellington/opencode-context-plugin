@@ -84,7 +84,8 @@ export function extractKeywordsFromContent(content, maxKeywords = 20) {
 export function buildKeywords(context) {
   const { projectName, module, method, keywords = [] } = context;
   const allKeywords = [projectName, module, method, ...keywords];
-  return [...new Set(allKeywords.filter(Boolean))].join(' | ');
+  const unique = [...new Set(allKeywords.filter(Boolean))];
+  return unique.map(k => `[[${k}]]`).join(' | ');
 }
 
 /**
