@@ -2,10 +2,20 @@ import fs from "fs/promises";
 import path from "path";
 import { createDebugLogger } from '../utils/debug.js';
 import { atomicWrite } from '../utils/fileUtils.js';
+import { getConfig } from '../config.js';
 
 const logger = createDebugLogger('intelligence');
 
 const CONTEXT_SESSION_DIR = '.opencode/context-session';
+
+/**
+ * Check if session is high priority and should be preserved
+ * @param {Object} sessionData - Session object with priority field
+ * @returns {boolean}
+ */
+export function isHighPriority(sessionData) {
+  return sessionData.priority === 'high';
+}
 
 export async function initializeIntelligenceLearning(baseDir) {
   const ctxDir = path.join(baseDir, CONTEXT_SESSION_DIR);
@@ -81,6 +91,10 @@ export async function initializeIntelligenceLearning(baseDir) {
     
     content += `### Bug-Prone Areas\n`;
     content += `- [Auto-populated from cross-session analysis]\n\n`;
+
+    content += `## High-Priority Session Preservation\n\n`;
+    content += `Sessions marked as HIGH priority are preserved indefinitely:\n`;
+    content += `- [Auto-populated: list of high-priority session IDs and their key learnings]\n\n`;
 
     content += `## Remote Sync Status\n\n`;
     content += `[Auto-populated when remote sync is configured]\n\n`;
