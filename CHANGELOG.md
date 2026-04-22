@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.4.1] - 2026-04-22
+
+### Fixed
+- **Hierarchical flow paths**: `generateIntelligenceLearning.js` now reads from correct hierarchical paths (`YYYY/MM/WW/week-summary.md`)
+- **Emoji duplication**: `extractSection` regex fixed to properly strip emojis before re-adding
+- **formatDayContent**: Now strips existing bullet markers before adding emojis
+- **Test suite**: Fixed hardcoded date in `saveContext.test.js` - now uses dynamic date
+
+### Changed
+- **Report generation**: All 5 generators run sequentially (today → weekly → monthly → annual → intelligence)
+- **Content extraction**: Each level only reads from its scope (same day/week/month/year)
+
 ## [1.4.0] - 2026-04-22
 
 ### Added

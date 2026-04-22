@@ -3,7 +3,7 @@
 ## Pacote npm
 
 **Pacote:** `@devwellington/opencode-context-plugin`
-**Versão atual:** 1.4.0
+**Versão atual:** 1.4.1
 **NPM:** https://www.npmjs.com/package/@devwellington/opencode-context-plugin
 **GitHub:** https://github.com/DevWellington/opencode-context-plugin
 
@@ -19,10 +19,10 @@ npm test
 ### 2. Versionar e publicar
 
 ```bash
-# Patch (1.4.0 → 1.4.1) - bug fixes
+# Patch (1.4.1 → 1.4.2) - bug fixes
 npm version patch
 
-# Minor (1.4.0 → 1.5.0) - novas features
+# Minor (1.4.1 → 1.5.0) - novas features
 npm version minor
 
 # Publish
