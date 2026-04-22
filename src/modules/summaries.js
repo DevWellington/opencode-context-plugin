@@ -12,6 +12,58 @@ const logger = createDebugLogger('context-plugin');
 // Constants
 const CONTEXT_SESSION_DIR = '.opencode/context-session';
 
+/**
+ * Check if content change exceeds nudge threshold
+ * Returns { shouldRegenerate: boolean, savingsPercent: number, changePercent: number }
+ * 
+ * @param {string} oldContent - Existing content
+ * @param {string} newContent - New content to compare
+ * @param {number} threshold - Minimum change percentage to trigger regeneration (default: 0.05 = 5%)
+ * @returns {Object} { shouldRegenerate, savingsPercent, changePercent }
+ */
+export function shouldRegenerate(oldContent, newContent, threshold = 0.05) {
+  // No old content means always regenerate
+  if (!oldContent) {
+    return { shouldRegenerate: true, savingsPercent: 100, changePercent: 100 };
+  }
+  
+  const oldLen = oldContent.length;
+  const newLen = newContent.length;
+  
+  // No change
+  if (oldLen === newLen && oldContent === newContent) {
+    return { shouldRegenerate: false, savingsPercent: 0, changePercent: 0 };
+  }
+  
+  const changePercent = Math.abs(newLen - oldLen) / oldLen;
+  
+  return {
+    shouldRegenerate: changePercent > threshold,
+    savingsPercent: Math.round(changePercent * 100),
+    changePercent: Math.round(changePercent * 100)
+  };
+}
+
+/**
+ * Check if new session was added compared to existing summary
+ * Compares session entry count in the summary
+ * 
+ * @param {string} existingSummary - Existing summary content
+ * @param {Array} newSessions - Array of new session objects with filename property
+ * @returns {boolean} True if new sessions exist
+ */
+export function hasNewSessions(existingSummary, newSessions) {
+  if (!existingSummary || !newSessions || newSessions.length === 0) {
+    return newSessions && newSessions.length > 0;
+  }
+  
+  // Count entries in existing summary
+  const existingMatch = existingSummary.match(/- \[(\d{4}-\d{2}-\d{2})/g);
+  const existingCount = existingMatch ? existingMatch.length : 0;
+  
+  return newSessions.length > existingCount;
+}
+
 // In-memory lock for daily summary updates to prevent race conditions
 let dailySummaryLock = Promise.resolve();
 
