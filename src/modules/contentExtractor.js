@@ -810,3 +810,208 @@ export function classifySessionPriority(sessionContent) {
 
   return 'low';
 }
+
+/**
+ * Extract persistent patterns from intelligence-learning.md content
+ * Parses existing patterns with session counts, first/last seen dates, and pinned status
+ * 
+ * @param {string} intelligenceContent - Raw content of intelligence-learning.md
+ * @returns {Array} [{ pattern, type, sessions, sessionCount, firstSeen, lastSeen, pinned, lastValue }]
+ */
+export function extractPersistentPatterns(intelligenceContent) {
+  if (!intelligenceContent || typeof intelligenceContent !== 'string') {
+    return [];
+  }
+
+  const patterns = [];
+  const lines = intelligenceContent.split('\n');
+  
+  let currentSection = null;
+  let currentPattern = null;
+  let currentSessionCount = 1;
+  let currentFirstSeen = null;
+  let currentLastSeen = null;
+
+  // Parse section types from headers
+  const sectionTypeMap = {
+    '### Typical Session Duration': 'duration',
+    '### Common Commands': 'command',
+    '### Recurring Themes': 'goal_theme',
+    '### Related Files': 'file_pattern',
+    '### Bug-Prone Areas': 'bug_pattern',
+    '### Session Patterns': 'session_pattern'
+  };
+
+  for (const line of lines) {
+    // Check for section headers
+    const sectionMatch = line.match(/^###\s+(.+)/);
+    if (sectionMatch) {
+      // Save previous pattern
+      if (currentPattern) {
+        patterns.push(finishPattern(currentPattern, currentSessionCount, currentFirstSeen, currentLastSeen));
+      }
+      
+      currentSection = sectionMatch[1].trim();
+      currentPattern = null;
+      currentSessionCount = 1;
+      currentFirstSeen = null;
+      currentLastSeen = null;
+      continue;
+    }
+
+    // Check for pattern entries with session references
+    // Pattern format: "- pattern text (Sessions: N, Last: YYYY-MM-DD)"
+    // Or simple: "- pattern text"
+    // Match pattern text up to parenthesis, then optionally match (Sessions: N, Last: DATE)
+    const entryMatch = line.match(/^-\s+([^(]+?)\s*(?:\(([^)]+)\))?$/);
+    if (entryMatch && currentSection) {
+      // Save previous
+      if (currentPattern) {
+        patterns.push(finishPattern(currentPattern, currentSessionCount, currentFirstSeen, currentLastSeen));
+      }
+      
+      currentPattern = entryMatch[1].trim();
+      
+      // Parse metadata from entryMatch[2] (inside parentheses)
+      // Format: "Sessions: N, Last: YYYY-MM-DD" or just "Sessions: N"
+      const metadata = entryMatch[2];
+      if (metadata) {
+        const sessionsMatch = metadata.match(/Sessions?:?\s*(\d+)/i);
+        const lastMatch = metadata.match(/Last:?\s*(\d{4}-\d{2}-\d{2})/i);
+        currentSessionCount = sessionsMatch ? parseInt(sessionsMatch[1], 10) : 1;
+        currentFirstSeen = lastMatch ? lastMatch[1] : null;
+        currentLastSeen = lastMatch ? lastMatch[1] : null;
+      } else {
+        currentSessionCount = 1;
+        currentFirstSeen = null;
+        currentLastSeen = null;
+      }
+      continue;
+    }
+
+    // Continuation of previous pattern (indented content)
+    if (line.match(/^\s{2,}-\s+/) && currentPattern) {
+      const contText = line.trim().replace(/^-\s+/, '');
+      currentPattern += ' ' + contText;
+      continue;
+    }
+  }
+
+  // Don't forget last pattern
+  if (currentPattern) {
+    patterns.push(finishPattern(currentPattern, currentSessionCount, currentFirstSeen, currentLastSeen));
+  }
+
+  // Sort by session count descending
+  return patterns.sort((a, b) => b.sessionCount - a.sessionCount);
+}
+
+/**
+ * Build pattern object with computed fields
+ */
+function finishPattern(pattern, sessionCount, firstSeen, lastSeen) {
+  return {
+    pattern,
+    type: inferPatternType(pattern),
+    sessions: ['unknown'], // Placeholder - actual session IDs not stored in this format
+    sessionCount: sessionCount || 1,
+    firstSeen: firstSeen || new Date().toISOString().split('T')[0],
+    lastSeen: lastSeen || new Date().toISOString().split('T')[0],
+    pinned: (sessionCount || 1) >= 3,
+    lastValue: pattern
+  };
+}
+
+/**
+ * Infer pattern type from content
+ */
+function inferPatternType(pattern) {
+  const lower = pattern.toLowerCase();
+  if (lower.includes('command')) return 'command';
+  if (lower.includes('duration') || lower.includes('minute') || lower.includes('hour')) return 'duration';
+  if (lower.includes('bug') || lower.includes('error')) return 'bug_pattern';
+  if (lower.includes('file') || lower.includes('/')) return 'file_pattern';
+  // Recognize command-like patterns (npm, git, node, etc.)
+  if (/^(npm|git|node|yarn|pnpm|docker|kubectl|pytest|jest|pytest)\s/.test(pattern)) return 'command';
+  return 'general';
+}
+
+/**
+ * Normalize pattern text for deduplication comparison
+ * Uses first 50 chars, lowercase, trimmed
+ * 
+ * @param {string} pattern - Pattern text
+ * @returns {string} Normalized pattern key
+ */
+export function normalizePattern(pattern) {
+  if (!pattern) return '';
+  return pattern.toLowerCase().trim().slice(0, 50);
+}
+
+/**
+ * Deduplicate patterns by normalized key
+ * Returns unique patterns, keeping the one with highest session count
+ * 
+ * @param {Array} patterns - Array of pattern objects
+ * @returns {Array} Deduplicated patterns
+ */
+export function dedupePatterns(patterns) {
+  if (!Array.isArray(patterns) || patterns.length === 0) {
+    return [];
+  }
+
+  const seen = new Map();
+  
+  for (const p of patterns) {
+    const key = normalizePattern(p.pattern);
+    const existing = seen.get(key);
+    
+    if (!existing) {
+      seen.set(key, { ...p });
+    } else {
+      // Keep the one with higher session count
+      if (p.sessionCount > existing.sessionCount) {
+        seen.set(key, { ...p });
+      }
+      // Merge sessions if different
+      if (p.sessions) {
+        const mergedSessions = [...new Set([...existing.sessions, ...p.sessions])];
+        seen.get(key).sessions = mergedSessions;
+        // Keep the max sessionCount, not the array length
+        seen.get(key).sessionCount = Math.max(existing.sessionCount, p.sessionCount);
+      }
+    }
+  }
+  
+  return Array.from(seen.values())
+    .sort((a, b) => b.sessionCount - a.sessionCount);
+}
+
+/**
+ * Filter patterns excluding already-pinned ones
+ * Used to prevent recent patterns from duplicating pinned content
+ * 
+ * @param {Array} recentPatterns - Recent patterns to filter
+ * @param {Array} pinnedPatterns - Already pinned patterns
+ * @returns {Array} Filtered recent patterns
+ */
+export function filterPinnedFromRecent(recentPatterns, pinnedPatterns) {
+  if (!recentPatterns || recentPatterns.length === 0) {
+    return recentPatterns || [];
+  }
+  if (!pinnedPatterns || pinnedPatterns.length === 0) {
+    return recentPatterns;
+  }
+
+  const pinnedByKey = new Map(
+    pinnedPatterns.map(p => [normalizePattern(p.pattern), p])
+  );
+  
+  return recentPatterns.filter(p => {
+    const key = normalizePattern(p.pattern);
+    const pinnedPattern = pinnedByKey.get(key);
+    // Include if not in pinned set OR if session count increased beyond pinned
+    if (!pinnedPattern) return true;
+    return p.sessionCount > pinnedPattern.sessionCount;
+  });
+}

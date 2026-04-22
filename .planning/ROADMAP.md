@@ -167,6 +167,42 @@ Plans:
 
 ---
 
+### 📋 v2.1.4 Priority-Based Context (Phase 7.4)
+
+**Goal**: Add priority classification for sessions (low/medium/high) with preservation of high-priority content
+
+**Depends on**: Phase 7.3
+**Requirements**: PRIORITY-01, PRIORITY-02, PRIORITY-03
+**Success Criteria** (what must be TRUE):
+  1. Sessions classified as low/medium/high priority
+  2. High-priority sessions preserved in intelligence learning
+  3. Low-priority sessions auto-pruned after 30 days
+
+Plans:
+- [x] 07.4-01-PLAN.md: Add priority classification in contentExtractor.js
+- [x] 07.4-02-PLAN.md: Tag sessions with priority on save
+- [x] 07.4-03-PLAN.md: Preserve high-priority in intelligence learning
+
+---
+
+### 📋 v2.1.5 Layered Intelligence (Phase 7.5)
+
+**Goal**: Implement layered intelligence accumulation - preserve historical patterns instead of replacing
+
+**Depends on**: Phase 7.4
+**Requirements**: NESTED-01, NESTED-02, NESTED-03
+**Success Criteria** (what must be TRUE):
+  1. Persistent patterns pinned across sessions
+  2. Patterns seen in 3+ sessions get "pinned" status
+  3. Recent sessions section still maintained
+
+Plans:
+- [ ] 07.5-01-PLAN.md: Add extractPersistentPatterns() function
+- [ ] 07.5-02-PLAN.md: Integrate pattern pinning into intelligence learning
+- [ ] 07.5-03-PLAN.md: Add cross-summary deduplication
+
+---
+
 ### 📋 v1.2.1 Manual Context Injection (Phase 8)
 
 **Milestone Goal:** Add user-triggered manual context injection via /inject command and @ocp-inject agent

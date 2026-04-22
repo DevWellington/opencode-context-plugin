@@ -3,7 +3,7 @@
  */
 
 import { jest, describe, it, expect, beforeEach, afterEach } from '@jest/globals';
-import { extractSessionContent, extractBugs, inferMissingFields, findPatterns } from '../src/modules/contentExtractor.js';
+import { extractSessionContent, extractBugs, inferMissingFields, findPatterns, extractPersistentPatterns, normalizePattern, dedupePatterns, filterPinnedFromRecent } from '../src/modules/contentExtractor.js';
 
 describe('contentExtractor Module', () => {
   describe('extractSessionContent', () => {
@@ -566,6 +566,150 @@ Create user authentication system with JWT
       if (databasePattern) {
         expect(databasePattern.frequency).toBeGreaterThanOrEqual(2);
       }
+    });
+  });
+
+  describe('extractPersistentPatterns', () => {
+    it('returns empty array for empty content', () => {
+      expect(extractPersistentPatterns('')).toEqual([]);
+      expect(extractPersistentPatterns(null)).toEqual([]);
+      expect(extractPersistentPatterns(undefined)).toEqual([]);
+    });
+
+    it('parses patterns with session metadata', () => {
+      const content = `### Recurring Themes
+- api design (Sessions: 5, Last: 2026-04-20)
+- authentication flow (Sessions: 3, Last: 2026-04-19)
+`;
+      const patterns = extractPersistentPatterns(content);
+      expect(patterns).toHaveLength(2);
+      expect(patterns[0].pattern).toBe('api design');
+      expect(patterns[0].sessionCount).toBe(5);
+      expect(patterns[0].pinned).toBe(true); // 5 >= 3
+      expect(patterns[1].pinned).toBe(true); // 3 >= 3
+    });
+
+    it('parses simple patterns without session metadata', () => {
+      const content = `### Common Commands
+- git commit
+- npm test
+`;
+      const patterns = extractPersistentPatterns(content);
+      expect(patterns).toHaveLength(2);
+      expect(patterns[0].pattern).toBe('git commit');
+      expect(patterns[0].sessionCount).toBe(1);
+      expect(patterns[0].pinned).toBe(false); // 1 < 3
+    });
+
+    it('pins patterns with sessionCount >= 3', () => {
+      const content = `### Recurring Themes
+- frequent pattern (Sessions: 3)
+- rare pattern (Sessions: 2)
+`;
+      const patterns = extractPersistentPatterns(content);
+      expect(patterns.find(p => p.pattern.includes('frequent'))?.pinned).toBe(true);
+      expect(patterns.find(p => p.pattern.includes('rare'))?.pinned).toBe(false);
+    });
+
+    it('infers correct pattern types', () => {
+      const content = `### Bug-Prone Areas
+- authentication error
+
+### Common Commands
+- npm run dev
+`;
+      const patterns = extractPersistentPatterns(content);
+      const bugPattern = patterns.find(p => p.pattern.includes('authentication error'));
+      const commandPattern = patterns.find(p => p.pattern.includes('npm run dev'));
+      expect(bugPattern?.type).toBe('bug_pattern');
+      expect(commandPattern?.type).toBe('command');
+    });
+
+    it('sorts by session count descending', () => {
+      const content = `### Common Commands
+- rare cmd (Sessions: 1)
+- common cmd (Sessions: 10)
+- medium cmd (Sessions: 5)
+`;
+      const patterns = extractPersistentPatterns(content);
+      expect(patterns[0].sessionCount).toBe(10);
+      expect(patterns[1].sessionCount).toBe(5);
+      expect(patterns[2].sessionCount).toBe(1);
+    });
+
+    it('parses patterns with first and last seen dates', () => {
+      const content = `### Recurring Themes
+- api design (Sessions: 5, Last: 2026-04-20)
+`;
+      const patterns = extractPersistentPatterns(content);
+      expect(patterns[0].firstSeen).toBe('2026-04-20');
+      expect(patterns[0].lastSeen).toBe('2026-04-20');
+    });
+  });
+
+  describe('normalizePattern', () => {
+    it('normalizes pattern text to lowercase and truncates to 50 chars', () => {
+      expect(normalizePattern('  API Design Pattern  ')).toBe('api design pattern');
+      expect(normalizePattern('a'.repeat(60)).length).toBe(50);
+    });
+
+    it('handles empty/null patterns', () => {
+      expect(normalizePattern('')).toBe('');
+      expect(normalizePattern(null)).toBe('');
+    });
+  });
+
+  describe('dedupePatterns', () => {
+    it('returns empty array for empty input', () => {
+      expect(dedupePatterns([])).toEqual([]);
+      expect(dedupePatterns(null)).toEqual([]);
+    });
+
+    it('deduplicates patterns by normalized key', () => {
+      const patterns = [
+        { pattern: 'api design', sessionCount: 5, sessions: ['s1'] },
+        { pattern: 'API Design', sessionCount: 3, sessions: ['s2'] }
+      ];
+      const deduped = dedupePatterns(patterns);
+      expect(deduped).toHaveLength(1);
+      expect(deduped[0].sessionCount).toBe(5); // Higher count kept
+    });
+
+    it('keeps pattern with highest session count on conflict', () => {
+      const patterns = [
+        { pattern: 'api design', sessionCount: 3, sessions: ['s1'] },
+        { pattern: 'api design', sessionCount: 7, sessions: ['s2'] }
+      ];
+      const deduped = dedupePatterns(patterns);
+      expect(deduped[0].sessionCount).toBe(7);
+    });
+  });
+
+  describe('filterPinnedFromRecent', () => {
+    it('returns recent patterns unchanged if no pinned patterns', () => {
+      const recent = [{ pattern: 'api design', sessionCount: 5 }];
+      const filtered = filterPinnedFromRecent(recent, []);
+      expect(filtered).toHaveLength(1);
+    });
+
+    it('filters out patterns that are already pinned with lower count', () => {
+      const recent = [{ pattern: 'api design', sessionCount: 5 }];
+      const pinned = [{ pattern: 'api design', sessionCount: 5 }];
+      const filtered = filterPinnedFromRecent(recent, pinned);
+      expect(filtered).toHaveLength(0);
+    });
+
+    it('keeps recent pattern if session count increased beyond pinned', () => {
+      const recent = [{ pattern: 'api design', sessionCount: 6 }];
+      const pinned = [{ pattern: 'api design', sessionCount: 5 }];
+      const filtered = filterPinnedFromRecent(recent, pinned);
+      expect(filtered).toHaveLength(1);
+    });
+
+    it('handles empty/null inputs gracefully', () => {
+      expect(filterPinnedFromRecent([], [])).toEqual([]);
+      expect(filterPinnedFromRecent(null, [])).toEqual([]);
+      expect(filterPinnedFromRecent([], null)).toEqual([]);
     });
   });
 });
