@@ -16,6 +16,10 @@ import { getWeek } from 'date-fns';
 import { buildKeywords, addRelatedLinks, extractKeywordsFromContent, REPORT_PATHS, REPORTS_DIR, CONTEXT_SESSION_DIR, addKeywordNavigation, generateKeywordLinks } from './utils/linkBuilder.js';
 import { getConfig } from '../config.js';
 import { truncateToBudget } from '../modules/tokenLimit.js';
+import { shouldRegenerate } from '../modules/summaries.js';
+import { createDebugLogger } from '../utils/debug.js';
+
+const logger = createDebugLogger('context-plugin');
 
 /**
  * Scan week-summary.md files for a month
@@ -262,6 +266,22 @@ created: ${new Date().toISOString()}
 
   const filename = `monthly-${year}-${monthStr}.md`;
   const savePath = path.join(monthDir, filename);
+
+  // Check if regeneration is needed
+  let existingContent = '';
+  try {
+    existingContent = await fs.readFile(savePath, 'utf-8');
+  } catch {
+    // File doesn't exist
+  }
+
+  const { shouldRegenerate: needsRegen, changePercent } = shouldRegenerate(existingContent, fullReport);
+
+  if (!needsRegen) {
+    logger('[generateMonthly] Skipped - no meaningful change (change: ' + changePercent + '%)');
+    return existingContent;
+  }
+
   await fs.writeFile(savePath, fullReport, 'utf-8');
 
   return fullReport;

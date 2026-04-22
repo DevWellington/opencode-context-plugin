@@ -14,6 +14,10 @@ import { getWeek } from 'date-fns';
 import { formatFileHeader, addRelatedLinks, buildKeywords, extractKeywordsFromContent, REPORT_PATHS, addKeywordNavigation } from './utils/linkBuilder.js';
 import { getConfig } from '../config.js';
 import { truncateToBudget } from '../modules/tokenLimit.js';
+import { shouldRegenerate } from '../modules/summaries.js';
+import { createDebugLogger } from '../utils/debug.js';
+
+const logger = createDebugLogger('context-plugin');
 
 export async function generateTodaySummary(directory) {
   const config = getConfig();
@@ -86,8 +90,24 @@ export async function generateTodaySummary(directory) {
 
   const fullReport = header + body;
 
-  // Save to standard location
+  // Save to standard location - define path for existing file check
   const savePath = path.join(directory, REPORT_PATHS.today);
+
+  // Check if regeneration is needed
+  let existingContent = '';
+  try {
+    existingContent = await fs.readFile(savePath, 'utf-8');
+  } catch {
+    // File doesn't exist, need to regenerate
+  }
+  
+  const { shouldRegenerate: needsRegen, changePercent } = shouldRegenerate(existingContent, fullReport);
+  
+  if (!needsRegen) {
+    logger('[generateToday] Skipped - no meaningful change (change: ' + changePercent + '%)');
+    return existingContent;
+  }
+
   await fs.mkdir(path.dirname(savePath), { recursive: true });
   await fs.writeFile(savePath, fullReport, 'utf-8');
 

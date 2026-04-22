@@ -15,6 +15,10 @@ import fs from 'fs/promises';
 import { buildKeywords, addRelatedLinks, extractKeywordsFromContent, REPORTS_DIR, CONTEXT_SESSION_DIR, addKeywordNavigation, generateKeywordLinks } from './utils/linkBuilder.js';
 import { getConfig } from '../config.js';
 import { truncateToBudget } from '../modules/tokenLimit.js';
+import { shouldRegenerate } from '../modules/summaries.js';
+import { createDebugLogger } from '../utils/debug.js';
+
+const logger = createDebugLogger('context-plugin');
 
 /**
  * Scan monthly-YYYY-MM.md files for a year
@@ -283,7 +287,22 @@ created: ${new Date().toISOString()}
 
   const filename = `annual-${year}.md`;
   const savePath = path.join(annualDir, filename);
-  await fs.mkdir(path.dirname(savePath), { recursive: true });
+
+  // Check if regeneration is needed
+  let existingContent = '';
+  try {
+    existingContent = await fs.readFile(savePath, 'utf-8');
+  } catch {
+    // File doesn't exist
+  }
+
+  const { shouldRegenerate: needsRegen, changePercent } = shouldRegenerate(existingContent, fullReport);
+
+  if (!needsRegen) {
+    logger('[generateAnnual] Skipped - no meaningful change (change: ' + changePercent + '%)');
+    return existingContent;
+  }
+
   await fs.writeFile(savePath, fullReport, 'utf-8');
 
   return fullReport;
