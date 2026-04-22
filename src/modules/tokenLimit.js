@@ -66,6 +66,35 @@ export function countTokens(content, type = null) {
 }
 
 /**
+ * Count tokens in session messages
+ * @param {Array<{content: string, role: string, index?: number}>} messages - Session messages
+ * @returns {{ total: number, byRole: {user: number, assistant: number, system: number}, byMessage: Array<{index: number, role: string, tokens: number, preview: string}> }}
+ */
+export function countSessionTokens(messages) {
+  const result = { total: 0, byRole: { user: 0, assistant: 0, system: 0 }, byMessage: [] };
+  
+  if (!messages || messages.length === 0) return result;
+  
+  for (let i = 0; i < messages.length; i++) {
+    const msg = messages[i];
+    const content = msg.content || '';
+    const type = isCodeContent(content) ? 'code' : 'prose';
+    const tokens = countTokens(content, type);
+    
+    result.total += tokens;
+    result.byRole[msg.role] = (result.byRole[msg.role] || 0) + tokens;
+    result.byMessage.push({
+      index: msg.index ?? i,
+      role: msg.role,
+      tokens,
+      preview: content.slice(0, 50)
+    });
+  }
+  
+  return result;
+}
+
+/**
  * Truncate content to fit within token limit
  * @param {string} content - Content to truncate
  * @param {number} maxTokens - Maximum tokens allowed
