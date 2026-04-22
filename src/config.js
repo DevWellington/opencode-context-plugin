@@ -44,6 +44,12 @@ export const defaultConfig = {
     weeklyDay: 0,
     outputDir: ".opencode/context-session/reports",
     includeStats: true
+  },
+  budget: {
+    daySummary: 5000,
+    weekSummary: 3000,
+    monthlySummary: 2000,
+    annualSummary: 1000
   }
 };
 
