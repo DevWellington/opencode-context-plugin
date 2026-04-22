@@ -160,6 +160,9 @@ npm install
 # Execute testes
 npm test
 
+# Validação (compara agentes vs gatilhos de compact/exit)
+npm run validate
+
 # Publique
 npm version patch && npm publish --access public
 ```
