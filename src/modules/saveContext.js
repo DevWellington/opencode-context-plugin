@@ -3,8 +3,9 @@ import path from "path";
 import { getWeek } from "date-fns";
 import { getConfig } from '../config.js';
 import { createDebugLogger } from '../utils/debug.js';
-import { updateDailySummary, updateDaySummary, updateWeekSummary } from './summaries.js';
-import { updateIntelligenceLearning as updateIntelligenceLearningMeta } from './intelligence.js';
+import { updateDaySummary, updateWeekSummary } from './summaries.js';
+import { generateTodaySummary } from '../agents/generateToday.js';
+import { generateWeeklySummary } from '../agents/generateWeekly.js';
 import { generateMonthlySummary } from '../agents/generateMonthly.js';
 import { generateAnnualSummary } from '../agents/generateAnnual.js';
 import { updateIntelligenceLearning } from '../agents/generateIntelligenceLearning.js';
@@ -123,55 +124,9 @@ messageCount: ${summary.messageCount}
       await invalidateCache();
     }
     
-    // Prepare session info for summaries
-    const sessionInfo = {
-      type,
-      filename,
-      timestamp: new Date().toISOString()
-    };
-    
-    // Update daily summary (at context-session root) and day summary (in hierarchical folder) in parallel
-    // These are already debounced in the summaries module
-    await Promise.all([
-      updateDailySummary(directory, sessionInfo),
-      updateDaySummary(dirPath, { type, filename, year, month, day })
-    ]);
-    
-    // Update week summary (idempotent, safe to call every time)
-    // This is already debounced in the summaries module
-    await updateWeekSummary(directory, year, month, week);
-    
-    // Update intelligence learning file
-    const learningSessionInfo = {
-      type,
-      filename,
-      timestamp: new Date().toISOString(),
-      sessionId: summary.sessionId,
-      messageCount: summary.messageCount,
-      title: summary.title
-    };
-    await updateIntelligenceLearningMeta(directory, learningSessionInfo);
-
-    // Regenerate all reports (non-blocking, fire-and-forget)
-    // Start async operations without awaiting - they run in background
-    const reportDate = new Date();
-    const reportYear = reportDate.getFullYear();
-    const reportMonth = `${reportYear}-${String(reportDate.getMonth() + 1).padStart(2, '0')}`;
-    logger(`[saveContext] Starting report regeneration: ${directory}, month: ${reportMonth}`);
-    console.log(`[saveContext] Starting report regeneration: ${directory}, month: ${reportMonth}`);
-    Promise.all([
-      generateMonthlySummary(directory, reportMonth),
-      generateAnnualSummary(directory, reportYear),
-      updateIntelligenceLearning(directory)
-    ])
-      .then(() => {
-        console.log(`[saveContext] Report regeneration completed`);
-        logger(`[saveContext] Report regeneration completed`);
-      })
-      .catch(error => {
-        console.error(`[saveContext] Report regeneration ERROR: ${error.message}`, error);
-        logger(`[saveContext] Report regeneration ERROR: ${error.message}`);
-      });
+    // Update day summary in hierarchical folder (not debounced, fast operation)
+    // This writes to: context-session/YYYY/MM/WW/DD/day-summary.md
+    await updateDaySummary(dirPath, { type, filename, year, month, day });
 
     // Update search index with new session (non-blocking, best effort)
     try {
@@ -181,7 +136,37 @@ messageCount: ${summary.messageCount}
       // Don't fail save if search index update fails
       logger(`[saveContext] Search index update failed (non-fatal): ${error.message}`);
     }
-    
+
+    // Regenerate all reports - SEQUENTIAL hierarchical order
+    // Each report aggregates the previous level's data:
+    // today → weekly → monthly → annual → intelligence
+    const reportDate = new Date();
+    const reportYear = reportDate.getFullYear();
+    const reportMonth = `${reportYear}-${String(reportDate.getMonth() + 1).padStart(2, '0')}`;
+    logger(`[saveContext] Starting report regeneration: ${directory}, month: ${reportMonth}`);
+    console.log(`[saveContext] Starting report regeneration: ${directory}, month: ${reportMonth}`);
+
+    console.log('[saveContext] SEQUENTIAL GENERATION START - this line must appear');
+    logger(`[saveContext] SEQUENTIAL GENERATION START - this line must appear`);
+
+    logger(`[saveContext] [1/5] Generating today summary...`);
+    await generateTodaySummary(directory);
+
+    logger(`[saveContext] [2/5] Generating weekly summary...`);
+    await generateWeeklySummary(directory);
+
+    logger(`[saveContext] [3/5] Generating monthly summary...`);
+    await generateMonthlySummary(directory, reportMonth);
+
+    logger(`[saveContext] [4/5] Generating annual summary...`);
+    await generateAnnualSummary(directory, reportYear);
+
+    logger(`[saveContext] [5/5] Updating intelligence learning...`);
+    await updateIntelligenceLearning(directory);
+
+    console.log(`[saveContext] Report regeneration completed`);
+    logger(`[saveContext] Report regeneration completed`);
+
     logger(`[Daily Summary] Updated with ${filename}`);
     
     return filepath;

@@ -24,8 +24,8 @@ describe('Config Module', () => {
   });
 
   describe('loadConfig()', () => {
-    it('should load valid opencode.json and merge with defaults', async () => {
-      const configPath = path.join(tempDir, 'opencode.json');
+    it('should load valid context-plugin.json and merge with defaults', async () => {
+      const configPath = path.join(tempDir, 'context-plugin.json');
       await fs.writeFile(configPath, JSON.stringify({
         contextPlugin: {
           maxContexts: 10,
@@ -44,14 +44,14 @@ describe('Config Module', () => {
       expect(config.logLevel).toBe('info');
     });
 
-    it('should use defaults when opencode.json is missing', async () => {
+    it('should use defaults when context-plugin.json is missing', async () => {
       const config = await loadConfig(tempDir);
 
       expect(config).toEqual(defaultConfig);
     });
 
     it('should handle malformed JSON gracefully', async () => {
-      const configPath = path.join(tempDir, 'opencode.json');
+      const configPath = path.join(tempDir, 'context-plugin.json');
       await fs.writeFile(configPath, 'not valid json');
 
       const config = await loadConfig(tempDir);
@@ -61,7 +61,7 @@ describe('Config Module', () => {
     });
 
     it('should handle top-level config without contextPlugin wrapper', async () => {
-      const configPath = path.join(tempDir, 'opencode.json');
+      const configPath = path.join(tempDir, 'context-plugin.json');
       await fs.writeFile(configPath, JSON.stringify({
         maxContexts: 3,
         logLevel: 'debug'
@@ -88,7 +88,7 @@ describe('Config Module', () => {
     });
 
     it('should return config after loadConfig has been called', async () => {
-      const configPath = path.join(tempDir, 'opencode.json');
+      const configPath = path.join(tempDir, 'context-plugin.json');
       await fs.writeFile(configPath, JSON.stringify({
         contextPlugin: {
           maxContexts: 7

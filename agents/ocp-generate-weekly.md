@@ -1,7 +1,6 @@
 ---
-description: Generate weekly context summary with daily breakdown
+description: Generate weekly context summary by aggregating daily summaries (week-summary.md reads from day-summary.md)
 usage: '@ocp-generate-weekly [date]'
----
 
 import { generateWeeklySummary } from '@devwellington/opencode-context-plugin';
 
@@ -11,7 +10,7 @@ export default async function({ session, args }) {
   
   try {
     const result = await generateWeeklySummary(directory, date);
-    return `✅ Weekly summary generated successfully!\n\n${result}`;
+    return `✅ Weekly summary generated to week-summary.md!\n\n${result}`;
   } catch (error) {
     return `❌ Error generating weekly summary: ${error.message}`;
   }

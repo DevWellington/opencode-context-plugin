@@ -12,13 +12,13 @@ import path from 'path';
 import fs from 'fs/promises';
 import { getWeek } from 'date-fns';
 import { buildKeywords, addRelatedLinks, extractKeywordsFromContent, REPORT_PATHS, REPORTS_DIR, CONTEXT_SESSION_DIR, addKeywordNavigation, generateKeywordLinks } from './utils/linkBuilder.js';
-import { extractSessionContent, extractBugs } from '../modules/contentExtractor.js';
 
 /**
- * Scan all session files in a week directory and extract content
+ * Scan day-summary.md files in a week directory and extract content
+ * Reads from day summaries (hierarchical flow), NOT raw session files
  */
-async function scanWeekSessions(weekDir) {
-  const allSessions = [];
+async function scanWeekDaySummaries(weekDir) {
+  const daySummaries = [];
   
   try {
     const dayDirs = await fs.readdir(weekDir, { withFileTypes: true });
@@ -27,180 +27,174 @@ async function scanWeekSessions(weekDir) {
       if (!dayDir.isDirectory() || !/^\d{2}$/.test(dayDir.name)) continue;
       
       const dayPath = path.join(weekDir, dayDir.name);
+      const daySummaryPath = path.join(dayPath, 'day-summary.md');
       
       try {
-        const files = await fs.readdir(dayPath);
+        const content = await fs.readFile(daySummaryPath, 'utf-8');
         
-        for (const file of files) {
-          if ((file.startsWith('exit-') || file.startsWith('compact-')) && file.endsWith('.md')) {
-            const content = await fs.readFile(path.join(dayPath, file), 'utf-8');
-            const extracted = extractSessionContent(content);
-            const bugs = extractBugs(content);
-            allSessions.push({
-              filename: file,
-              day: dayDir.name,
-              content,
-              extracted,
-              bugs
-            });
-          }
-        }
+        // Count sessions from the day summary
+        const compactMatch = content.match(/Compacts: (\d+)/);
+        const exitMatch = content.match(/Exits: (\d+)/);
+        
+        // Extract structured sections
+        const goals = extractSection(content, '## Goals');
+        const accomplishments = extractSection(content, '## Accomplishments');
+        const discoveries = extractSection(content, '## Discoveries');
+        const bugsFixed = extractSection(content, '## Bugs Fixed');
+        const files = extractSection(content, '## Relevant Files');
+        
+        daySummaries.push({
+          day: dayDir.name,
+          dateStr: extractDateStr(content),
+          content,
+          goals,
+          accomplishments,
+          discoveries,
+          bugsFixed,
+          files,
+          compactCount: parseInt(compactMatch?.[1] || '0', 10),
+          exitCount: parseInt(exitMatch?.[1] || '0', 10)
+        });
       } catch {
-        // Skip unreadable directories
+        // No day summary for this day
       }
     }
   } catch {
     // Week directory doesn't exist
   }
   
-  return allSessions;
+  return daySummaries;
 }
 
 /**
- * Aggregate accomplishments from sessions
+ * Extract date string from day summary content
  */
-function aggregateWeekAccomplishments(sessions) {
-  const accomplishments = [];
-  const seen = new Set();
+function extractDateStr(content) {
+  const match = content.match(/\*\*Date:\*\* (\d{4}-\d{2}-\d{2})/);
+  return match?.[1] || 'unknown';
+}
+
+/**
+ * Extract section content from day summary
+ * Strips emojis and bullet markers to get clean text
+ */
+function extractSection(content, sectionHeading) {
+  const lines = content.split('\n');
+  const results = [];
+  let inSection = false;
   
-  for (const session of sessions) {
-    if (session.extracted.accomplished) {
-      const key = session.extracted.accomplished.slice(0, 50).toLowerCase().trim();
-      if (!seen.has(key) && key.length > 5) {
-        seen.add(key);
-        accomplishments.push({
-          text: session.extracted.accomplished,
-          day: session.day
-        });
+  for (const line of lines) {
+    if (line.startsWith(sectionHeading)) {
+      inSection = true;
+      continue;
+    }
+    if (inSection) {
+      if (line.startsWith('## ') || line.startsWith('# ')) {
+        break;
+      }
+      if (line.trim().startsWith('- ')) {
+        // Strip emoji prefixes and bullet markers to get clean text
+        let text = line.trim().substring(2).trim();
+        // Remove emoji prefixes (with or without dash): "✅ - ", "💡 ", "✅"
+        text = text.replace(/^[✅💡🐛🔧📝🔍📦🚪][\s-–]*/, '');
+        // Remove any remaining bullet markers
+        text = text.replace(/^[-*]\s*/, '');
+        if (text.length > 0) {
+          results.push(text);
+        }
       }
     }
   }
   
-  return accomplishments;
+  return results;
 }
 
 /**
- * Aggregate bugs from sessions
+ * Format weekly content with aggregated sections from day summaries
+ * Content hierarchy: day (largest) > week > month > annual (smallest)
  */
-function aggregateWeekBugs(sessions) {
-  const bugs = [];
-  
-  for (const session of sessions) {
-    for (const bug of session.bugs) {
-      if (bug.solution) {
-        bugs.push({
-          ...bug,
-          day: session.day
-        });
-      }
-    }
-  }
-  
-  return bugs;
-}
-
-/**
- * Format weekly content with structured sections
- */
-function formatWeeklyContent(year, weekStr, sessions, dailyFiles) {
-  const accomplishments = aggregateWeekAccomplishments(sessions);
-  const bugs = aggregateWeekBugs(sessions);
-  const allGoals = sessions.filter(s => s.extracted.goal).map(s => ({ text: s.extracted.goal, day: s.day }));
-  const allDiscoveries = sessions.filter(s => s.extracted.discoveries).map(s => ({ text: s.extracted.discoveries, day: s.day }));
-  
-  // Collect all relevant files
-  const fileSet = new Set();
-  for (const session of sessions) {
-    for (const file of session.extracted.relevantFiles || []) {
-      if (file) fileSet.add(file);
-    }
-  }
-  
+function formatWeeklyContent(year, weekStr, daySummaries) {
   let content = `## Weekly Summary - ${year}-${weekStr}\n\n`;
-  content += `- **Total Days with Sessions:** ${dailyFiles.length}\n`;
-  content += `- **Total Sessions:** ${sessions.length}\n\n`;
   
-  // Goals section
+  const totalSessions = daySummaries.reduce((sum, d) => sum + d.compactCount + d.exitCount, 0);
+  const totalDays = daySummaries.length;
+  
+  content += `- **Total Days with Sessions:** ${totalDays}\n`;
+  content += `- **Total Sessions:** ${totalSessions}\n\n`;
+  
+  // Aggregate Goals from all days
+  const allGoals = daySummaries.flatMap(d => d.goals);
   if (allGoals.length > 0) {
     content += `## Goals\n\n`;
-    // Deduplicate by first 50 chars
     const seenGoals = new Set();
     for (const goal of allGoals) {
-      const key = goal.text.slice(0, 50).toLowerCase().trim();
+      const key = goal.slice(0, 50).toLowerCase().trim();
       if (!seenGoals.has(key) && key.length > 5) {
         seenGoals.add(key);
-        content += `- ${goal.text} (${goal.day})\n`;
+        content += `- ${goal}\n`;
       }
     }
     content += '\n';
   }
   
-  // Accomplishments section
-  if (accomplishments.length > 0) {
+  // Aggregate Accomplishments from all days
+  const allAccomplishments = daySummaries.flatMap(d => d.accomplishments);
+  if (allAccomplishments.length > 0) {
     content += `## Accomplishments\n\n`;
-    for (const acc of accomplishments) {
-      const lines = acc.text.split('\n').filter(l => l.trim());
-      for (const line of lines) {
-        content += `- ✅ ${line}`;
-        if (acc.day) content += ` (${acc.day})`;
-        content += '\n';
+    const seenAccomplishments = new Set();
+    for (const acc of allAccomplishments) {
+      const key = acc.slice(0, 50).toLowerCase().trim();
+      if (!seenAccomplishments.has(key) && key.length > 5) {
+        seenAccomplishments.add(key);
+        content += `- ✅ ${acc}\n`;
       }
     }
     content += '\n';
   }
   
-  // Discoveries section
+  // Aggregate Discoveries from all days
+  const allDiscoveries = daySummaries.flatMap(d => d.discoveries);
   if (allDiscoveries.length > 0) {
     content += `## Discoveries\n\n`;
-    const seenDisc = new Set();
+    const seenDiscoveries = new Set();
     for (const disc of allDiscoveries) {
-      const key = disc.text.slice(0, 50).toLowerCase().trim();
-      if (!seenDisc.has(key) && key.length > 5) {
-        seenDisc.add(key);
-        content += `- 💡 ${disc.text}\n`;
+      const key = disc.slice(0, 50).toLowerCase().trim();
+      if (!seenDiscoveries.has(key) && key.length > 5) {
+        seenDiscoveries.add(key);
+        content += `- 💡 ${disc}\n`;
       }
     }
     content += '\n';
   }
   
-  // Bugs Fixed section
-  if (bugs.length > 0) {
+  // Aggregate Bugs Fixed from all days
+  const allBugs = daySummaries.flatMap(d => d.bugsFixed);
+  if (allBugs.length > 0) {
     content += `## Bugs Fixed\n\n`;
-    for (const bug of bugs) {
-      content += `- **${bug.symptom}:** ${bug.solution}`;
-      if (bug.day) content += ` (${bug.day})`;
-      content += '\n';
+    for (const bug of allBugs) {
+      content += `- ${bug}\n`;
     }
     content += '\n';
   }
   
-  // Relevant Files section
-  if (fileSet.size > 0) {
+  // Aggregate Relevant Files from all days
+  const allFiles = daySummaries.flatMap(d => d.files);
+  if (allFiles.length > 0) {
     content += `## Relevant Files\n\n`;
-    for (const file of fileSet) {
+    const uniqueFiles = [...new Set(allFiles)];
+    for (const file of uniqueFiles) {
       content += `- ${file}\n`;
     }
     content += '\n';
   }
   
   // Day-by-Day Summary
-  if (dailyFiles.length > 0) {
+  if (daySummaries.length > 0) {
     content += `## Day-by-Day Summary\n\n`;
-    for (const { day, dateStr, compacts, exits } of dailyFiles) {
-      content += `### Day ${day} (${dateStr})\n`;
-      content += `- Sessions: ${compacts + exits} (Exit: ${exits}, Compact: ${compacts})\n`;
-      
-      // Find top accomplishments for this day
-      const dayAccomplishments = sessions
-        .filter(s => s.day === day && s.extracted.accomplished)
-        .slice(0, 2);
-      
-      for (const acc of dayAccomplishments) {
-        const firstLine = acc.extracted.accomplished.split('\n')[0].trim();
-        content += `  - ✅ ${firstLine}\n`;
-      }
-      
-      content += '\n';
+    for (const day of daySummaries) {
+      content += `### Day ${day.day} (${day.dateStr})\n`;
+      content += `- Sessions: ${day.compactCount + day.exitCount} (Exit: ${day.exitCount}, Compact: ${day.compactCount})\n`;
+      content += `- [[${day.day}/day-summary.md]]\n\n`;
     }
   }
   
@@ -216,35 +210,11 @@ export async function generateWeeklySummary(directory, weekDate) {
 
   const weekDir = path.join(directory, CONTEXT_SESSION_DIR, String(year), month, weekStr);
 
-  // Scan all session files in the week directory for content extraction
-  const sessions = await scanWeekSessions(weekDir);
+  // Read day-summary.md files from each day in the week (hierarchical flow)
+  const daySummaries = await scanWeekDaySummaries(weekDir);
 
-  // Collect daily file info for day-by-day breakdown
-  const weekStartDay = date.getDate() - (date.getDay() || 7) + 1;
-  const dailyFiles = [];
-
-  for (let dayOffset = 0; dayOffset < 7; dayOffset++) {
-    const dayOfMonth = weekStartDay + dayOffset;
-    const dayStr = String(dayOfMonth).padStart(2, '0');
-    const dayDir = path.join(weekDir, dayStr);
-    const dailyPath = path.join(dayDir, 'day-summary.md');
-
-    try {
-      const content = await fs.readFile(dailyPath, 'utf-8');
-      const dateMatch = content.match(/\*\*Date:\*\* (\d{4}-\d{2}-\d{2})/);
-      const sessionMatches = content.match(/\[.*?\] (📦|🚪)/g) || [];
-      const compacts = sessionMatches.filter(m => m.includes('📦')).length;
-      const exits = sessionMatches.filter(m => m.includes('🚪')).length;
-      const dayDate = dateMatch?.[1] || `Day ${dayStr}`;
-
-      dailyFiles.push({ day: dayStr, dateStr: dayDate, compacts, exits });
-    } catch {
-      // No summary for this day yet
-    }
-  }
-
-  // Build content with extracted data
-  const bodyContent = formatWeeklyContent(year, weekStr, sessions, dailyFiles);
+  // Build content with aggregated data from day summaries
+  const bodyContent = formatWeeklyContent(year, weekStr, daySummaries);
 
   // Extract keywords from content
   const contentKeywords = extractKeywordsFromContent(bodyContent, 20);
@@ -262,7 +232,7 @@ created: ${new Date().toISOString()}
 
 `;
 
-  const body = bodyContent;
+  let body = bodyContent;
 
   body += addRelatedLinks([
     'intelligence-learning.md',

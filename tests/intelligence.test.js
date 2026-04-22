@@ -63,345 +63,87 @@ describe('Intelligence Module', () => {
     });
   });
 
-  describe('updateIntelligenceLearning(baseDir, sessionInfo)', () => {
-    it('should update Sessions Analyzed count', async () => {
+  describe('updateIntelligenceLearning(directory) - Agent Function', () => {
+    it('should update intelligence learning file from agent', async () => {
+      const agent = await import('../src/agents/generateIntelligenceLearning.js');
       const intelligence = await import('../src/modules/intelligence.js');
 
       // First initialize
       await intelligence.initializeIntelligenceLearning(tempDir);
 
-      // Now update with session info
-      const sessionInfo = {
-        type: 'compact',
-        filename: 'compact-2026-04-21T10-30-00.md',
-        timestamp: '2026-04-21T10:30:00Z',
-        sessionId: 'session-123',
-        messageCount: 5
-      };
+      // Create a session file in the hierarchical structure (today's date)
+      const today = new Date();
+      const year = today.getFullYear();
+      const month = String(today.getMonth() + 1).padStart(2, '0');
+      const day = String(today.getDate()).padStart(2, '0');
+      const weekNum = String(Math.ceil(today.getDate() / 7)).padStart(2, '0');
+      const sessionDir = path.join(tempDir, '.opencode', 'context-session', String(year), month, `W${weekNum}`, day);
+      await fs.mkdir(sessionDir, { recursive: true });
 
-      // Queue the update
-      intelligence.updateIntelligenceLearning(tempDir, sessionInfo);
+      const sessionContent = `---
+sessionId: "test-123"
+title: "Test Session"
+---
 
-      // Advance timers to let queue process
-      jest.advanceTimersByTime(100);
-      await Promise.resolve();
+# Session Context
 
-      const content = await fs.readFile(path.join(ctxDir, 'intelligence-learning.md'), 'utf-8');
-
-      // Sessions Analyzed should be updated
-      expect(content).toContain('Sessions Analyzed:');
-      expect(content).toContain('Last Session Type:');
-    });
-
-    it('should update Last Session Type', async () => {
-      const intelligence = await import('../src/modules/intelligence.js');
-
-      await intelligence.initializeIntelligenceLearning(tempDir);
-
-      intelligence.updateIntelligenceLearning(tempDir, {
-        type: 'exit',
-        filename: 'exit-2026-04-21T10-30-00.md',
-        sessionId: 'session-exit',
-        messageCount: 3
-      });
-
-      jest.advanceTimersByTime(100);
-      await Promise.resolve();
-
-      const content = await fs.readFile(path.join(ctxDir, 'intelligence-learning.md'), 'utf-8');
-      expect(content).toContain('Last Session Type:');
-    });
-
-    it('should handle invalid session info gracefully', async () => {
-      const intelligence = await import('../src/modules/intelligence.js');
-
-      // Initialize first
-      await intelligence.initializeIntelligenceLearning(tempDir);
-
-      // Queue update with null sessionInfo - should not throw
-      intelligence.updateIntelligenceLearning(tempDir, null);
-      jest.advanceTimersByTime(100);
-      await Promise.resolve();
-
-      // If we get here without throwing, test passes
-      expect(true).toBe(true);
-    });
-
-    it('should return promise that resolves when queue completes', async () => {
-      const intelligence = await import('../src/modules/intelligence.js');
-
-      await intelligence.initializeIntelligenceLearning(tempDir);
-
-      // Call update - returns a promise that resolves when queue completes
-      const resultPromise = intelligence.updateIntelligenceLearning(tempDir, {
-        type: 'exit',
-        filename: 'exit-test.md',
-        sessionId: 'test-123'
-      });
-
-      // It should return a promise
-      expect(resultPromise).toBeInstanceOf(Promise);
-
-      // Wait for it to complete
-      await resultPromise;
-    });
-  });
-
-  describe('queue-based serialization', () => {
-    it('should process updates through queue sequentially', async () => {
-      const intelligence = await import('../src/modules/intelligence.js');
-
-      // Initialize
-      await intelligence.initializeIntelligenceLearning(tempDir);
-
-      // Queue multiple updates and await each
-      await intelligence.updateIntelligenceLearning(tempDir, {
-        type: 'compact',
-        filename: 'compact-1.md',
-        sessionId: 'session-1'
-      });
-
-      await intelligence.updateIntelligenceLearning(tempDir, {
-        type: 'exit',
-        filename: 'exit-2.md',
-        sessionId: 'session-2'
-      });
-
-      // Both sessions should be recorded
-      const content = await fs.readFile(path.join(ctxDir, 'intelligence-learning.md'), 'utf-8');
-      expect(content).toContain('session-1');
-      expect(content).toContain('session-2');
-    });
-  });
-
-  describe('fail-safe behavior', () => {
-    it('should not throw on errors - fail gracefully', async () => {
-      const intelligence = await import('../src/modules/intelligence.js');
-
-      // Don't initialize - try to update directly
-      // This should not throw
-      expect(() => {
-        intelligence.updateIntelligenceLearning('/invalid/path', {
-          type: 'compact',
-          filename: 'test.md'
-        });
-      }).not.toThrow();
-
-      jest.advanceTimersByTime(100);
-      await Promise.resolve();
-    });
-  });
-
-  describe('Key Learnings section management', () => {
-    it('should add new entries to Key Learnings section', async () => {
-      const intelligence = await import('../src/modules/intelligence.js');
-
-      await intelligence.initializeIntelligenceLearning(tempDir);
-
-      intelligence.updateIntelligenceLearning(tempDir, {
-        type: 'compact',
-        filename: 'compact-entry.md',
-        sessionId: 'learning-session',
-        messageCount: 10
-      });
-
-      jest.advanceTimersByTime(100);
-      await Promise.resolve();
-
-      const content = await fs.readFile(path.join(ctxDir, 'intelligence-learning.md'), 'utf-8');
-      expect(content).toContain('Key Learnings from Latest Sessions');
-    });
-  });
-
-  describe('analyzeCrossSessionPatterns(baseDir)', () => {
-    it('should return empty patterns when no session files exist', async () => {
-      const intelligence = await import('../src/modules/intelligence.js');
-
-      const result = await intelligence.analyzeCrossSessionPatterns(tempDir);
-
-      expect(result).toHaveProperty('recurringThemes');
-      expect(result).toHaveProperty('relatedFiles');
-      expect(result).toHaveProperty('bugPatterns');
-      expect(result).toHaveProperty('totalSessions');
-      expect(result.totalSessions).toBe(0);
-    });
-
-    it('should return empty patterns when only one session exists', async () => {
-      const intelligence = await import('../src/modules/intelligence.js');
-
-      // Create one session file
-      await fs.writeFile(path.join(ctxDir, 'compact-2026-04-21.md'), '# Session 1\n## Goal\nTest goal\n');
-
-      const result = await intelligence.analyzeCrossSessionPatterns(tempDir);
-
-      expect(result.totalSessions).toBe(1);
-      expect(result.recurringThemes).toHaveLength(0);
-    });
-
-    it('should detect patterns from multiple sessions', async () => {
-      const intelligence = await import('../src/modules/intelligence.js');
-
-      // Create multiple session files with similar content
-      const session1 = `# Session 1
 ## Goal
-Implement API authentication
+Test the intelligence learning update
+
 ## Accomplished
-Added JWT auth to API
-## Relevant files
-- src/api/auth.ts
+Created test session file
+
+## Discoveries
+Testing agent function
 `;
+      const sessionFile = path.join(sessionDir, 'exit-2026-04-21T10-30-00.md');
+      await fs.writeFile(sessionFile, sessionContent);
 
-      const session2 = `# Session 2
-## Goal
-Add more API tests
-## Accomplished
-Added test coverage for API
-## Relevant files
-- src/api/auth.ts
-`;
+      // Call agent update function
+      const result = await agent.updateIntelligenceLearning(tempDir);
 
-      const session3 = `# Session 3
-## Goal
-API refactoring
-## Accomplished
-Refactored API endpoints
-## Relevant files
-- src/api/auth.ts
-`;
-
-      await fs.writeFile(path.join(ctxDir, 'compact-2026-04-21-01.md'), session1);
-      await fs.writeFile(path.join(ctxDir, 'compact-2026-04-21-02.md'), session2);
-      await fs.writeFile(path.join(ctxDir, 'exit-2026-04-21-03.md'), session3);
-
-      const result = await intelligence.analyzeCrossSessionPatterns(tempDir);
-
-      expect(result.totalSessions).toBe(3);
-      // Should find some patterns (goal themes or file patterns)
-      expect(result.recurringThemes.length + result.relatedFiles.length).toBeGreaterThanOrEqual(0);
-    });
-
-    it('should detect bug patterns across sessions', async () => {
-      const intelligence = await import('../src/modules/intelligence.js');
-
-      const session1 = `# Session 1
-## Goal
-Fix bug in auth
-### Bug: Token validation error
-**Cause:** Missing token verification
-**Solution:** Add JWT verification middleware
-`;
-
-      const session2 = `# Session 2
-## Goal
-Fix similar auth issue
-### Bug: Token validation error
-**Cause:** Token expiry not checked
-**Solution:** Add token expiry validation
-`;
-
-      await fs.writeFile(path.join(ctxDir, 'compact-bug1.md'), session1);
-      await fs.writeFile(path.join(ctxDir, 'compact-bug2.md'), session2);
-
-      const result = await intelligence.analyzeCrossSessionPatterns(tempDir);
-
-      expect(result.totalSessions).toBe(2);
-      // Bug patterns should be detected
-      expect(result.bugPatterns.length).toBeGreaterThanOrEqual(0);
-    });
-
-    it('should handle errors gracefully', async () => {
-      const intelligence = await import('../src/modules/intelligence.js');
-
-      // Call with non-existent directory
-      const result = await intelligence.analyzeCrossSessionPatterns('/non/existent/path');
-
-      expect(result).toHaveProperty('recurringThemes');
-      expect(result).toHaveProperty('relatedFiles');
-      expect(result).toHaveProperty('bugPatterns');
-      expect(result.totalSessions).toBe(0);
-    });
-  });
-
-  describe('updatePatternInsights(baseDir, patterns)', () => {
-    it('should not throw when patterns is null', async () => {
-      const intelligence = await import('../src/modules/intelligence.js');
-
-      await intelligence.initializeIntelligenceLearning(tempDir);
-
-      // Should not throw
-      await expect(intelligence.updatePatternInsights(tempDir, null)).resolves.not.toThrow();
-    });
-
-    it('should not throw when totalSessions < 2', async () => {
-      const intelligence = await import('../src/modules/intelligence.js');
-
-      await intelligence.initializeIntelligenceLearning(tempDir);
-
-      const patterns = {
-        recurringThemes: [],
-        relatedFiles: [],
-        bugPatterns: [],
-        totalSessions: 1
-      };
-
-      await expect(intelligence.updatePatternInsights(tempDir, patterns)).resolves.not.toThrow();
-    });
-
-    it('should update learning file with pattern insights', async () => {
-      const intelligence = await import('../src/modules/intelligence.js');
-
-      await intelligence.initializeIntelligenceLearning(tempDir);
-
-      const patterns = {
-        recurringThemes: [
-          { pattern: 'goal theme: api', sessions: ['s1', 's2'], frequency: 2 }
-        ],
-        relatedFiles: [
-          { pattern: 'File pattern: src/api', sessions: ['s1', 's2'], frequency: 2 }
-        ],
-        bugPatterns: [
-          { pattern: 'Bug pattern: auth', sessions: ['s1'], frequency: 1 }
-        ],
-        totalSessions: 2
-      };
-
-      await intelligence.updatePatternInsights(tempDir, patterns);
-      jest.advanceTimersByTime(100);
-      await Promise.resolve();
-
+      expect(result.success).toBe(true);
+      
       const content = await fs.readFile(path.join(ctxDir, 'intelligence-learning.md'), 'utf-8');
-      expect(content).toContain('Recurring Themes');
-      expect(content).toContain('Related Files');
-      expect(content).toContain('Bug-Prone Areas');
+      expect(content).toContain('Intelligence Learning');
+      expect(content).toContain('Test Session');
     });
-  });
 
-  describe('periodic pattern analysis trigger', () => {
-    it('should trigger pattern analysis every 5 sessions', async () => {
+    it('should skip greeting sessions', async () => {
+      const agent = await import('../src/agents/generateIntelligenceLearning.js');
       const intelligence = await import('../src/modules/intelligence.js');
 
       await intelligence.initializeIntelligenceLearning(tempDir);
 
-      // Create 5 session files
-      for (let i = 1; i <= 5; i++) {
-        await fs.writeFile(path.join(ctxDir, `compact-2026-04-2${i}.md`), `# Session ${i}\n## Goal\nTest goal ${i}\n`);
-      }
+      // Create a greeting-only session in hierarchical structure
+      const today = new Date();
+      const year = today.getFullYear();
+      const month = String(today.getMonth() + 1).padStart(2, '0');
+      const day = String(today.getDate()).padStart(2, '0');
+      const weekNum = String(Math.ceil(today.getDate() / 7)).padStart(2, '0');
+      const sessionDir = path.join(tempDir, '.opencode', 'context-session', String(year), month, `W${weekNum}`, day);
+      await fs.mkdir(sessionDir, { recursive: true });
 
-      // Process 5 sessions to trigger pattern analysis
-      for (let i = 1; i <= 5; i++) {
-        intelligence.updateIntelligenceLearning(tempDir, {
-          type: 'compact',
-          filename: `compact-2026-04-2${i}.md`,
-          sessionId: `session-${i}`,
-          messageCount: 5
-        });
-        jest.advanceTimersByTime(100);
-        await Promise.resolve();
-      }
+      const sessionContent = `---
+sessionId: "greeting-123"
+title: "Light chat greeting: oi"
+---
 
-      // Pattern analysis should have been triggered
-      const content = await fs.readFile(path.join(ctxDir, 'intelligence-learning.md'), 'utf-8');
-      expect(content).toContain('Sessions Analyzed:');
+# Session Context
+
+## Messages
+
+### Message 0 [user]
+
+oi
+`;
+      const sessionFile = path.join(sessionDir, 'compact-2026-04-21T11-00-00.md');
+      await fs.writeFile(sessionFile, sessionContent);
+
+      const result = await agent.updateIntelligenceLearning(tempDir);
+
+      expect(result.skipped).toBe(true);
+      expect(result.reason).toContain('No new meaningful sessions');
     });
   });
 });

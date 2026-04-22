@@ -74,11 +74,11 @@ describe('reportGenerator Module', () => {
       expect(report).not.toContain('**Average Messages/Session:**');
     });
 
-    it('should include Week-by-Week Breakdown section', async () => {
+    it('should have Week-by-Week Summary section', async () => {
       const { generateMonthlyReport } = await import('../src/modules/reportGenerator.js');
       const report = await generateMonthlyReport(tempDir, '2026-04');
 
-      expect(report).toContain('## Week-by-Week Breakdown');
+      expect(report).toContain('## Week-by-Week Summary');
     });
 
     it('should have proper frontmatter for AI parsing', async () => {
@@ -92,23 +92,39 @@ describe('reportGenerator Module', () => {
     });
 
     it('should extract and display accomplishments from sessions when available', async () => {
-      // Create a mock session file
-      const sessionPath = path.join(ctxDir, 'exit-2026-04-07-1.md');
-      const sessionContent = `---
-title: Test Session
-date: 2026-04-07
+      // Create a week-summary.md file with accomplishment content
+      const weekDir = path.join(ctxDir, '2026', '04', 'W16');
+      await fs.mkdir(weekDir, { recursive: true });
+      
+      const weekSummaryPath = path.join(weekDir, 'week-summary.md');
+      const weekSummaryContent = `---
+title: Week 16 Summary
 ---
 
-## Goal
-Implement user authentication
+# Week W16 Summary
 
-## Accomplished
-Added JWT token validation and created login endpoint
+**Period:** 2026-04
+**Week:** W16
+**Total Sessions:** 1 (Compacts: 0, Exits: 1)
+
+## Goals
+
+- Implement user authentication
+
+## Accomplishments
+
+- ✅ Added JWT token validation and created login endpoint
 
 ## Discoveries
-Found race condition in token refresh
+
+- Found race condition in token refresh
+
+## Relevant Files
+
+- src/auth/jwt.js
+- src/routes/login.js
 `;
-      await fs.writeFile(sessionPath, sessionContent);
+      await fs.writeFile(weekSummaryPath, weekSummaryContent);
 
       const { generateMonthlyReport } = await import('../src/modules/reportGenerator.js');
       const report = await generateMonthlyReport(tempDir, '2026-04');
@@ -220,27 +236,31 @@ Q2 accomplishment
       expect(report).toContain('---');
     });
 
-    it('should include Files Modified section', async () => {
-      // Create a session with relevant files
-      const sessionPath = path.join(ctxDir, 'exit-2026-04-07-1.md');
-      const sessionContent = `---
-title: Test Session
+    it('should include Relevant Files section', async () => {
+      // Create a week-summary.md file with relevant files content
+      const weekDir = path.join(ctxDir, '2026', '04', 'W16');
+      await fs.mkdir(weekDir, { recursive: true });
+      
+      const weekSummaryPath = path.join(weekDir, 'week-summary.md');
+      const weekSummaryContent = `---
+title: Week 16 Summary
 ---
 
-## Goal
-Test work
-## Accomplished
-Completed test
+# Week W16 Summary
+
+**Total Sessions:** 1
+
 ## Relevant Files
+
 - src/test/file.js
 - src/test/other.ts
 `;
-      await fs.writeFile(sessionPath, sessionContent);
+      await fs.writeFile(weekSummaryPath, weekSummaryContent);
 
       const { generateMonthlyReport } = await import('../src/modules/reportGenerator.js');
       const report = await generateMonthlyReport(tempDir, '2026-04');
 
-      expect(report).toContain('## Files Modified');
+      expect(report).toContain('## Relevant Files');
       expect(report).toContain('src/test/file.js');
     });
   });

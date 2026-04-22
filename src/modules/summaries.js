@@ -133,7 +133,11 @@ function formatDayContent(dateStr, sessionsData) {
       // Handle multiline content
       const lines = acc.text.split('\n').filter(l => l.trim());
       for (const line of lines) {
-        content += `- ✅ ${line}\n`;
+        // Strip existing bullet marker if present
+        let cleanLine = line.replace(/^[-*]\s*/, '').trim();
+        if (cleanLine.length > 0) {
+          content += `- ✅ ${cleanLine}\n`;
+        }
       }
     }
     content += '\n';
@@ -143,7 +147,11 @@ function formatDayContent(dateStr, sessionsData) {
   if (uniqueDiscoveries.length > 0) {
     content += `## Discoveries\n\n`;
     for (const disc of uniqueDiscoveries) {
-      content += `- 💡 ${disc.text}\n`;
+      // Strip existing bullet marker if present
+      let cleanText = disc.text.replace(/^[-*]\s*/, '').trim();
+      if (cleanText.length > 0) {
+        content += `- 💡 ${cleanText}\n`;
+      }
     }
     content += '\n';
   }
@@ -286,6 +294,8 @@ async function updateDaySummary(dirPath, sessionInfo) {
 
 /**
  * Update week summary aggregating all days in the week
+ * Reads from day-summary.md files (NOT raw session files)
+ * The content hierarchy: day > week > month > annual (descending size)
  */
 async function updateWeekSummaryImpl(baseDir, year, month, week) {
   try {
@@ -305,40 +315,168 @@ async function updateWeekSummaryImpl(baseDir, year, month, week) {
       return;
     }
     
-    // Generate week summary from day folders
-    let content = `# Week ${week} Summary\n\n`;
-    content += `**Period:** ${year}-${month}\n`;
-    content += `**Week:** ${week}\n\n`;
-    content += `## Days\n\n`;
+    // Read content from each day-summary.md file
+    const daySummaries = [];
+    let totalCompacts = 0;
+    let totalExits = 0;
     
     for (const dayDir of dayDirs) {
       const dayPath = path.join(weekDir, dayDir);
-      let files = [];
+      const daySummaryPath = path.join(dayPath, 'day-summary.md');
+      
       try {
-        files = await fs.readdir(dayPath);
+        const content = await fs.readFile(daySummaryPath, 'utf-8');
+        
+        // Count sessions from the day summary
+        const compactMatches = content.match(/Compacts: (\d+)/) || [];
+        const exitMatches = content.match(/Exits: (\d+)/) || [];
+        totalCompacts += parseInt(compactMatches[1] || 0, 10);
+        totalExits += parseInt(exitMatches[1] || 0, 10);
+        
+        // Extract structured sections from day-summary.md
+        const goals = extractSection(content, '## Goals');
+        const accomplishments = extractSection(content, '## Accomplishments');
+        const discoveries = extractSection(content, '## Discoveries');
+        const bugsFixed = extractSection(content, '## Bugs Fixed');
+        const files = extractSection(content, '## Relevant Files');
+        
+        daySummaries.push({
+          day: dayDir,
+          content,
+          goals,
+          accomplishments,
+          discoveries,
+          bugsFixed,
+          files
+        });
       } catch (e) {
-        continue;
+        // No summary for this day yet
       }
-      
-      const compacts = files.filter(f => f.startsWith('compact-')).length;
-      const exits = files.filter(f => f.startsWith('exit-')).length;
-      const summaries = files.filter(f => f.endsWith('-summary.md')).length;
-      
-      content += `### Day ${dayDir}\n\n`;
-      content += `- 📦 Compact files: ${compacts}\n`;
-      content += `- 🚪 Exit files: ${exits}\n`;
-      content += `- 📄 Summary files: ${summaries}\n\n`;
     }
     
-    content += `## Summary\n\n`;
-    content += `Total days with sessions: ${dayDirs.length}\n`;
+    // Generate week summary with aggregated content
+    let content = `# Week ${week} Summary\n\n`;
+    content += `**Period:** ${year}-${month}\n`;
+    content += `**Week:** ${week}\n`;
+    content += `**Total Sessions:** ${totalCompacts + totalExits} (Compacts: ${totalCompacts}, Exits: ${totalExits})\n\n`;
+    
+    // Aggregate Goals from all days
+    const allGoals = daySummaries.flatMap(d => d.goals);
+    if (allGoals.length > 0) {
+      content += `## Goals\n\n`;
+      for (const goal of allGoals.slice(0, 10)) {
+        content += `- ${goal}\n`;
+      }
+      content += '\n';
+    }
+    
+    // Aggregate Accomplishments from all days
+    const allAccomplishments = daySummaries.flatMap(d => d.accomplishments);
+    if (allAccomplishments.length > 0) {
+      content += `## Accomplishments\n\n`;
+      const seen = new Set();
+      for (const acc of allAccomplishments) {
+        const key = acc.slice(0, 50).toLowerCase().trim();
+        if (!seen.has(key) && key.length > 5) {
+          seen.add(key);
+          content += `- ✅ ${acc}\n`;
+        }
+      }
+      content += '\n';
+    }
+    
+    // Aggregate Discoveries from all days
+    const allDiscoveries = daySummaries.flatMap(d => d.discoveries);
+    if (allDiscoveries.length > 0) {
+      content += `## Discoveries\n\n`;
+      const seen = new Set();
+      for (const disc of allDiscoveries) {
+        const key = disc.slice(0, 50).toLowerCase().trim();
+        if (!seen.has(key) && key.length > 5) {
+          seen.add(key);
+          content += `- 💡 ${disc}\n`;
+        }
+      }
+      content += '\n';
+    }
+    
+    // Aggregate Bugs Fixed from all days
+    const allBugs = daySummaries.flatMap(d => d.bugsFixed);
+    if (allBugs.length > 0) {
+      content += `## Bugs Fixed\n\n`;
+      for (const bug of allBugs) {
+        content += `- ${bug}\n`;
+      }
+      content += '\n';
+    }
+    
+    // Aggregate Relevant Files from all days
+    const allFiles = daySummaries.flatMap(d => d.files);
+    if (allFiles.length > 0) {
+      content += `## Relevant Files\n\n`;
+      const uniqueFiles = [...new Set(allFiles)];
+      for (const file of uniqueFiles) {
+        content += `- ${file}\n`;
+      }
+      content += '\n';
+    }
+    
+    // Day-by-Day Summary (link to each day-summary.md)
+    content += `## Day-by-Day Summary\n\n`;
+    for (const daySummary of daySummaries) {
+      content += `### Day ${daySummary.day}\n\n`;
+      content += `- [[${daySummary.day}/day-summary.md]]\n`;
+      if (daySummary.goals.length > 0) {
+        content += `  - Goals: ${daySummary.goals.length}\n`;
+      }
+      if (daySummary.accomplishments.length > 0) {
+        content += `  - Accomplishments: ${daySummary.accomplishments.length}\n`;
+      }
+      content += '\n';
+    }
+    
+    content += `---\n*Aggregated from ${daySummaries.length} day summaries*\n`;
     
     await atomicWrite(summaryPath, content);
-    logger(`[context-plugin] Updated week summary: ${summaryPath}`);
+    logger(`[context-plugin] Updated week summary from day summaries: ${summaryPath}`);
   } catch (error) {
     logger(`[context-plugin] Error updating week summary: ${error.message}`);
-    // Don't fail session save if summary update fails
   }
+}
+
+/**
+ * Extract section content between heading and next heading
+ * Strips emojis and bullet markers to get clean text
+ */
+function extractSection(content, sectionHeading) {
+  const lines = content.split('\n');
+  const results = [];
+  let inSection = false;
+  
+  for (const line of lines) {
+    if (line.startsWith(sectionHeading)) {
+      inSection = true;
+      continue;
+    }
+    if (inSection) {
+      if (line.startsWith('## ') || line.startsWith('# ')) {
+        break;
+      }
+      if (line.trim().startsWith('- ')) {
+        // Strip emoji prefixes and bullet markers to get clean text
+        let text = line.trim().substring(2).trim();
+        // Remove emoji prefixes (with or without dash): "✅ - ", "💡 ", "✅"
+        text = text.replace(/^[✅💡🐛🔧📝🔍📦🚪][\s-–]*/, '');
+        // Remove any remaining bullet markers
+        text = text.replace(/^[-*]\s*/, '');
+        if (text.length > 0) {
+          results.push(text);
+        }
+      }
+    }
+  }
+  
+  return results;
 }
 
 // Create debounced versions using config's debounceMs

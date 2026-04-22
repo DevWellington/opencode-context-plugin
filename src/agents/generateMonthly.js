@@ -6,21 +6,23 @@
  *
  * Reads: week-summary.md files from each week in the month
  * Saves to: .opencode/context-session/reports/monthly-YYYY-MM.md
+ * 
+ * Content hierarchy: day (largest) > week > month > annual (smallest)
  */
 
 import path from 'path';
 import fs from 'fs/promises';
 import { getWeek } from 'date-fns';
 import { buildKeywords, addRelatedLinks, extractKeywordsFromContent, REPORT_PATHS, REPORTS_DIR, CONTEXT_SESSION_DIR, addKeywordNavigation, generateKeywordLinks } from './utils/linkBuilder.js';
-import { extractSessionContent, extractBugs, findPatterns } from '../modules/contentExtractor.js';
 
 /**
- * Scan all session files for a month
+ * Scan week-summary.md files for a month
+ * Reads from week summaries (hierarchical flow), NOT raw session files
  */
-async function scanSessionsInMonth(directory, year, month) {
+async function scanMonthWeekSummaries(directory, year, month) {
   const monthStr = String(month).padStart(2, '0');
   const monthDir = path.join(directory, CONTEXT_SESSION_DIR, String(year), monthStr);
-  const allSessions = [];
+  const weekSummaries = [];
 
   try {
     const weekDirs = await fs.readdir(monthDir);
@@ -28,172 +30,174 @@ async function scanSessionsInMonth(directory, year, month) {
     for (const weekDir of weekDirs) {
       if (!weekDir.startsWith('W')) continue;
       const weekPath = path.join(monthDir, weekDir);
+      const weekSummaryPath = path.join(weekPath, 'week-summary.md');
 
       try {
-        const dayDirs = await fs.readdir(weekPath, { withFileTypes: true });
-
-        for (const dayDir of dayDirs) {
-          if (!dayDir.isDirectory() || !/^\d{2}$/.test(dayDir.name)) continue;
-          const dayPath = path.join(weekPath, dayDir.name);
-
-          try {
-            const files = await fs.readdir(dayPath);
-
-            for (const file of files) {
-              if ((file.startsWith('exit-') || file.startsWith('compact-')) && file.endsWith('.md')) {
-                const content = await fs.readFile(path.join(dayPath, file), 'utf-8');
-                const extracted = extractSessionContent(content);
-                const bugs = extractBugs(content);
-                allSessions.push({
-                  filename: file,
-                  week: weekDir,
-                  day: dayDir.name,
-                  content,
-                  extracted,
-                  bugs
-                });
-              }
-            }
-          } catch {
-            // Skip unreadable directories
-          }
-        }
+        const content = await fs.readFile(weekSummaryPath, 'utf-8');
+        
+        // Extract session count from week summary
+        const sessionMatch = content.match(/\*\*Total Sessions:\*\* (\d+)/);
+        const totalSessions = parseInt(sessionMatch?.[1] || '0', 10);
+        
+        // Extract structured sections from week summary
+        const goals = extractSection(content, '## Goals');
+        const accomplishments = extractSection(content, '## Accomplishments');
+        const discoveries = extractSection(content, '## Discoveries');
+        const bugsFixed = extractSection(content, '## Bugs Fixed');
+        const files = extractSection(content, '## Relevant Files');
+        
+        weekSummaries.push({
+          week: weekDir,
+          content,
+          goals,
+          accomplishments,
+          discoveries,
+          bugsFixed,
+          files,
+          totalSessions
+        });
       } catch {
-        // Skip unreadable week directories
+        // No week summary for this week
       }
     }
   } catch {
     // Month directory doesn't exist
   }
 
-  return allSessions;
+  return weekSummaries;
 }
 
 /**
- * Aggregate accomplishments - deduplicate by first 50 chars
+ * Extract section content from summary file
+ * Strips emojis and bullet markers to get clean text
  */
-function aggregateAccomplishments(sessions) {
-  const accomplishments = [];
-  const seen = new Set();
-
-  for (const session of sessions) {
-    if (session.extracted.accomplished) {
-      const key = session.extracted.accomplished.slice(0, 50).toLowerCase().trim();
-      if (!seen.has(key) && key.length > 5) {
-        seen.add(key);
-        accomplishments.push({
-          text: session.extracted.accomplished,
-          date: `${session.week}/${session.day}`,
-          source: session.filename
-        });
+function extractSection(content, sectionHeading) {
+  const lines = content.split('\n');
+  const results = [];
+  let inSection = false;
+  
+  for (const line of lines) {
+    if (line.startsWith(sectionHeading)) {
+      inSection = true;
+      continue;
+    }
+    if (inSection) {
+      if (line.startsWith('## ') || line.startsWith('# ')) {
+        break;
+      }
+      if (line.trim().startsWith('- ')) {
+        // Strip emoji prefixes and bullet markers to get clean text
+        let text = line.trim().substring(2).trim();
+        // Remove emoji prefixes (with or without dash): "✅ - ", "💡 ", "✅"
+        text = text.replace(/^[✅💡🐛🔧📝🔍📦🚪][\s-–]*/, '');
+        // Remove any remaining bullet markers
+        text = text.replace(/^[-*]\s*/, '');
+        if (text.length > 0) {
+          results.push(text);
+        }
       }
     }
   }
-
-  return accomplishments;
+  
+  return results;
 }
 
 /**
- * Aggregate bugs from sessions
+ * Format monthly content with aggregated sections from week summaries
+ * Content hierarchy: day > week (largest) > month > annual (smallest)
  */
-function aggregateBugs(sessions) {
-  const bugs = [];
-
-  for (const session of sessions) {
-    for (const bug of session.bugs) {
-      if (bug.solution) {
-        bugs.push({
-          symptom: bug.symptom,
-          solution: bug.solution,
-          cause: bug.cause,
-          prevention: bug.prevention,
-          date: `${session.week}/${session.day}`,
-          source: session.filename
-        });
+function formatMonthlyContent(year, monthStr, weekSummaries) {
+  let content = `# Monthly Summary - ${year}-${monthStr}\n\n`;
+  
+  const totalSessions = weekSummaries.reduce((sum, w) => sum + w.totalSessions, 0);
+  const totalWeeks = weekSummaries.length;
+  
+  content += `- **Total Weeks with Sessions:** ${totalWeeks}\n`;
+  content += `- **Total Sessions:** ${totalSessions}\n\n`;
+  
+  // Aggregate Goals from all weeks
+  const allGoals = weekSummaries.flatMap(w => w.goals);
+  if (allGoals.length > 0) {
+    content += `## Goals\n\n`;
+    const seenGoals = new Set();
+    for (const goal of allGoals) {
+      const key = goal.slice(0, 50).toLowerCase().trim();
+      if (!seenGoals.has(key) && key.length > 5) {
+        seenGoals.add(key);
+        content += `- ${goal}\n`;
       }
     }
+    content += '\n';
   }
-
-  return bugs;
-}
-
-/**
- * Extract decisions from session content
- */
-function extractDecisions(sessions) {
-  const decisions = [];
-
-  for (const session of sessions) {
-    const content = [
-      session.extracted.accomplished,
-      session.extracted.discoveries,
-      session.extracted.goal
-    ].filter(Boolean).join(' ');
-
-    const decisionPatterns = [
-      /decided to ([\w\s]+)/i,
-      /chose to ([\w\s]+)/i,
-      /using ([\w\s]+) for/i,
-      /went with ([\w\s]+)/i,
-      /opted for ([\w\s]+)/i
-    ];
-
-    for (const pattern of decisionPatterns) {
-      const match = content.match(pattern);
-      if (match) {
-        decisions.push({
-          text: match[0],
-          date: `${session.week}/${session.day}`,
-          source: session.filename
-        });
+  
+  // Aggregate Accomplishments from all weeks
+  const allAccomplishments = weekSummaries.flatMap(w => w.accomplishments);
+  if (allAccomplishments.length > 0) {
+    content += `## Accomplishments\n\n`;
+    const seenAccomplishments = new Set();
+    for (const acc of allAccomplishments) {
+      const key = acc.slice(0, 50).toLowerCase().trim();
+      if (!seenAccomplishments.has(key) && key.length > 5) {
+        seenAccomplishments.add(key);
+        content += `- ✅ ${acc}\n`;
       }
     }
+    content += '\n';
   }
-
-  // Deduplicate
-  const seen = new Set();
-  return decisions.filter(d => {
-    const key = d.text.slice(0, 50).toLowerCase();
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-}
-
-/**
- * Generate executive summary
- */
-function generateExecutiveSummary(sessions, monthName, year) {
-  const totalSessions = sessions.length;
-  if (totalSessions === 0) return `No sessions recorded during ${monthName} ${year}.`;
-
-  const accomplishments = aggregateAccomplishments(sessions);
-  const bugs = aggregateBugs(sessions);
-
-  let summary = `${totalSessions} session${totalSessions !== 1 ? 's' : ''} worked on this month.`;
-
-  if (accomplishments.length > 0) {
-    const topAccomplishment = accomplishments[0].text;
-    summary += ` Key work included: ${topAccomplishment.slice(0, 100)}.`;
+  
+  // Aggregate Discoveries from all weeks
+  const allDiscoveries = weekSummaries.flatMap(w => w.discoveries);
+  if (allDiscoveries.length > 0) {
+    content += `## Discoveries\n\n`;
+    const seenDiscoveries = new Set();
+    for (const disc of allDiscoveries) {
+      const key = disc.slice(0, 50).toLowerCase().trim();
+      if (!seenDiscoveries.has(key) && key.length > 5) {
+        seenDiscoveries.add(key);
+        content += `- 💡 ${disc}\n`;
+      }
+    }
+    content += '\n';
   }
-
-  if (bugs.length > 0) {
-    summary += ` ${bugs.length} issue${bugs.length !== 1 ? 's' : ''} were resolved.`;
+  
+  // Aggregate Bugs Fixed from all weeks
+  const allBugs = weekSummaries.flatMap(w => w.bugsFixed);
+  if (allBugs.length > 0) {
+    content += `## Issues Resolved\n\n`;
+    for (const bug of allBugs) {
+      content += `- ${bug}\n`;
+    }
+    content += '\n';
   }
-
-  return summary;
-}
-
-/**
- * Group sessions by week
- */
-function groupByWeek(sessions) {
-  const byWeek = {};
-  for (const session of sessions) {
-    if (!byWeek[session.week]) byWeek[session.week] = [];
-    byWeek[session.week].push(session);
+  
+  // Aggregate Relevant Files from all weeks
+  const allFiles = weekSummaries.flatMap(w => w.files);
+  if (allFiles.length > 0) {
+    content += `## Relevant Files\n\n`;
+    const uniqueFiles = [...new Set(allFiles)];
+    for (const file of uniqueFiles) {
+      content += `- ${file}\n`;
+    }
+    content += '\n';
   }
-  return byWeek;
+  
+  // Week-by-Week Summary
+  if (weekSummaries.length > 0) {
+    content += `## Week-by-Week Summary\n\n`;
+    for (const week of weekSummaries) {
+      content += `### Week ${week.week}\n\n`;
+      content += `- Sessions: ${week.totalSessions}\n`;
+      if (week.goals.length > 0) {
+        content += `- Goals: ${week.goals.length}\n`;
+      }
+      if (week.accomplishments.length > 0) {
+        content += `- Accomplishments: ${week.accomplishments.length}\n`;
+      }
+      content += '\n';
+    }
+  }
+  
+  return content;
 }
 
 export async function generateMonthlySummary(directory, monthDate) {
@@ -208,117 +212,16 @@ export async function generateMonthlySummary(directory, monthDate) {
   }
 
   const monthStr = String(month).padStart(2, '0');
-
-  // Scan all sessions for the month
-  const sessions = await scanSessionsInMonth(directory, year, month);
   const monthName = new Date(year, month - 1).toLocaleString('default', { month: 'long' });
-  const byWeek = groupByWeek(sessions);
 
-  // Gather all data
-  const accomplishments = aggregateAccomplishments(sessions);
-  const bugs = aggregateBugs(sessions);
-  const decisions = extractDecisions(sessions);
-  const allFiles = sessions.flatMap(s => s.extracted.relevantFiles || []).filter(Boolean);
-  const uniqueFiles = [...new Set(allFiles)];
+  // Read week summaries (hierarchical flow)
+  const weekSummaries = await scanMonthWeekSummaries(directory, year, month);
 
-  // Build content with frontmatter
-  let body = `# Monthly Summary - ${year}-${monthStr}\n\n`;
-  body += `- **Total Sessions:** ${sessions.length}\n`;
-  body += `- **Total Weeks:** ${Object.keys(byWeek).length}\n\n`;
-
-  // Executive Summary
-  body += `## Executive Summary\n\n`;
-  body += `${generateExecutiveSummary(sessions, monthName, year)}\n\n`;
-
-  // Major Accomplishments
-  body += `## Major Accomplishments\n\n`;
-  if (accomplishments.length > 0) {
-    for (const acc of accomplishments.slice(0, 10)) {
-      body += `- ${acc.text}`;
-      if (acc.date) {
-        body += ` (${acc.date})`;
-      }
-      body += '\n';
-    }
-  } else {
-    body += `- No specific accomplishments recorded\n`;
-  }
-  body += '\n';
-
-  // Issues Resolved
-  body += `## Issues Resolved\n\n`;
-  if (bugs.length > 0) {
-    for (const bug of bugs) {
-      body += `### ${bug.symptom || 'Issue'}\n\n`;
-      if (bug.solution) {
-        body += `**Solution:** ${bug.solution}\n\n`;
-      }
-      if (bug.cause) {
-        body += `**Cause:** ${bug.cause}\n\n`;
-      }
-      body += `*Resolved: ${bug.date || 'unknown'}*\n\n`;
-    }
-  } else {
-    body += `No issues requiring resolution were recorded this month.\n\n`;
-  }
-
-  // Decisions Made
-  body += `## Decisions Made\n\n`;
-  if (decisions.length > 0) {
-    for (const decision of decisions.slice(0, 5)) {
-      body += `- ${decision.text}`;
-      if (decision.date) {
-        body += ` (${decision.date})`;
-      }
-      body += '\n';
-    }
-  } else {
-    body += `No explicit decisions recorded.\n\n`;
-  }
-  body += '\n';
-
-  // Week-by-Week Breakdown
-  body += `## Week-by-Week Breakdown\n\n`;
-  const sortedWeeks = Object.keys(byWeek).sort((a, b) => {
-    const numA = parseInt(a.slice(1));
-    const numB = parseInt(b.slice(1));
-    return numA - numB;
-  });
-
-  for (const week of sortedWeeks) {
-    const weekSessions = byWeek[week];
-    const weekAccomplishments = aggregateAccomplishments(weekSessions);
-    const weekBugs = aggregateBugs(weekSessions);
-
-    body += `### Week ${week}\n\n`;
-    body += `- **Sessions:** ${weekSessions.length}\n`;
-
-    if (weekAccomplishments.length > 0) {
-      body += `- **Top Accomplishments:**\n`;
-      for (const acc of weekAccomplishments.slice(0, 3)) {
-        const firstLine = acc.text.split('\n')[0].trim();
-        body += `  - ✅ ${firstLine}\n`;
-      }
-    }
-
-    if (weekBugs.length > 0) {
-      body += `- **Issues Resolved:** ${weekBugs.length}\n`;
-    }
-
-    body += '\n';
-  }
-
-  // Relevant Files
-  if (uniqueFiles.length > 0) {
-    body += `## Relevant Files\n\n`;
-    for (const file of uniqueFiles.slice(0, 20)) {
-      body += `- ${file}\n`;
-    }
-    body += '\n';
-  }
+  // Build content with aggregated data from week summaries
+  const bodyContent = formatMonthlyContent(year, monthStr, weekSummaries);
 
   // Extract keywords from content
-  const contentKeywords = extractKeywordsFromContent(body, 20);
+  const contentKeywords = extractKeywordsFromContent(bodyContent, 20);
   const filteredKeywords = contentKeywords.filter(k =>
     !['week', 'weekly', 'session', 'sessions', 'total', 'day', 'days', 'month', 'monthly'].includes(k.toLowerCase())
   );
@@ -336,6 +239,14 @@ created: ${new Date().toISOString()}
 ---
 
 `;
+
+  let body = bodyContent;
+
+  // Add keyword navigation for Obsidian
+  body += addKeywordNavigation({ type: 'monthly', year, month });
+
+  // Add keyword links
+  body += generateKeywordLinks({ keywords: filteredKeywords, year, month, maxLinks: 12 });
 
   const fullReport = header + body;
 

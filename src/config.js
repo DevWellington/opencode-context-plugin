@@ -22,9 +22,9 @@ export const defaultConfig = {
     maxContexts: 5,
     maxTokens: 8000,
     relevanceScoring: {
-      provider: 'openai',
-      model: 'gpt-4o-mini',
-      apiKeyEnv: 'OPENAI_API_KEY'
+      recencyWeight: 0.40,
+      keywordWeight: 0.35,
+      affinityWeight: 0.25
     },
     cache: {
       enabled: true,
@@ -51,12 +51,12 @@ export const defaultConfig = {
 let currentConfig = { ...defaultConfig };
 
 /**
- * Load configuration from opencode.json in the project directory
+ * Load configuration from context-plugin.json in the project directory
+ * NOT from opencode.json (which is reserved for OpenCode's own config)
  * Merges with defaults and handles missing file gracefully
- * Supports both flat format and nested contextPlugin format
  */
 export async function loadConfig(directory) {
-  const configPath = path.join(directory, 'opencode.json');
+  const configPath = path.join(directory, 'context-plugin.json');
 
   try {
     const content = await fs.readFile(configPath, 'utf-8');
@@ -81,13 +81,13 @@ export async function loadConfig(directory) {
       const timestamp = new Date().toISOString();
       await fs.appendFile(LOG_FILE, `[${timestamp}] [config] Configuration loaded from ${configPath}\n`).catch(() => {});
     } catch {}
-    
+
     return currentConfig;
   } catch (error) {
     // File doesn't exist - use defaults
     try {
       const timestamp = new Date().toISOString();
-      await fs.appendFile(LOG_FILE, `[${timestamp}] [config] Using default configuration (no opencode.json found)\n`).catch(() => {});
+      await fs.appendFile(LOG_FILE, `[${timestamp}] [config] Using default configuration (no context-plugin.json found)\n`).catch(() => {});
     } catch {}
     
     currentConfig = { ...defaultConfig };

@@ -14,7 +14,7 @@
 
 import path from 'path';
 import fs from 'fs/promises';
-import { REPORT_PATHS, extractKeywordsFromContent } from './utils/linkBuilder.js';
+import { REPORT_PATHS, REPORTS_DIR, CONTEXT_SESSION_DIR, extractKeywordsFromContent } from './utils/linkBuilder.js';
 import { getConfig } from '../config.js';
 import { extractSessionContent, extractBugs, findPatterns } from '../modules/contentExtractor.js';
 
@@ -77,6 +77,34 @@ function isGreetingTitle(title) {
 export async function updateIntelligenceLearning(directory) {
   const config = getConfig();
   const intelligencePath = path.join(directory, REPORT_PATHS.intelligence);
+  const reportsDir = path.join(directory, REPORTS_DIR);
+
+  const year = new Date().getFullYear();
+  const month = String(new Date().getMonth() + 1).padStart(2, '0');
+  const weekStr = `W${String(getWeekNumber(new Date())).padStart(2, '0')}`;
+
+  let allReportsContent = '';
+
+  // Correct hierarchical paths - same structure used by generators
+  const weekDir = path.join(directory, CONTEXT_SESSION_DIR, String(year), month, weekStr);
+  const monthDir = path.join(directory, CONTEXT_SESSION_DIR, String(year), month);
+  const yearDir = path.join(directory, CONTEXT_SESSION_DIR, String(year));
+
+  const reportFiles = [
+    path.join(directory, REPORT_PATHS.today),                                              // daily-summary.md at root
+    path.join(weekDir, 'week-summary.md'),                                               // week-summary.md in hierarchical folder
+    path.join(monthDir, `monthly-${year}-${month}.md`),                                  // monthly-*.md in month folder
+    path.join(yearDir, `annual-${year}.md`)                                               // annual-*.md in year folder
+  ];
+
+  for (const reportFile of reportFiles) {
+    try {
+      const content = await fs.readFile(reportFile, 'utf-8');
+      allReportsContent += content + '\n\n';
+    } catch {
+      // Report not ready yet
+    }
+  }
 
   // Read existing content if exists
   let existingEntries = [];
@@ -92,22 +120,48 @@ export async function updateIntelligenceLearning(directory) {
   // Gather new session information from recent files
   const newSessionInfo = await gatherRecentSessionInfo(directory);
 
-  // Check for duplicate session ID
-  if (newSessionInfo.id && existingEntries.some(s => s.id === newSessionInfo.id)) {
-    return { skipped: true, reason: 'Duplicate session ID' };
+  // Deduplicate by session content (title + firstUserMessage), not by ID
+  const existingKeys = new Set();
+  for (const entry of existingEntries) {
+    for (const session of (entry.sessions || [])) {
+      const key = `${session.title || ''}|${session.firstUserMessage || ''}`;
+      existingKeys.add(key);
+    }
   }
 
-  // Add new entry at the beginning
-  const allEntries = [newSessionInfo, ...existingEntries].slice(0, MAX_ENTRIES);
+  // Filter out sessions that already exist (by content, not by ID)
+  const newSessions = (newSessionInfo.sessions || []).filter(session => {
+    const key = `${session.title || ''}|${session.firstUserMessage || ''}`;
+    if (existingKeys.has(key)) {
+      return false;
+    }
+    existingKeys.add(key);
+    return true;
+  });
+
+  // Only add entry if it has new sessions (not just greetings that were filtered)
+  if (newSessions.length === 0) {
+    return { skipped: true, reason: 'No new meaningful sessions (all greetings or duplicates)' };
+  }
+
+  // Create deduplicated entry with filtered sessions
+  const deduplicatedEntry = {
+    ...newSessionInfo,
+    sessions: newSessions,
+    sessionCount: newSessions.length
+  };
+
+  // Add new entry at the beginning, capped at MAX_ENTRIES
+  const allEntries = [deduplicatedEntry, ...existingEntries].slice(0, MAX_ENTRIES);
 
   // Generate updated content
-  const content = generateIntelligenceContent(allEntries, newSessionInfo);
+  const content = generateIntelligenceContent(allEntries, deduplicatedEntry);
 
   // Save
   await fs.mkdir(path.dirname(intelligencePath), { recursive: true });
   await fs.writeFile(intelligencePath, content, 'utf-8');
 
-  return { success: true, entries: allEntries.length };
+  return { success: true, entries: allEntries.length, newSessions: newSessions.length };
 }
 
 /**
@@ -334,11 +388,11 @@ function parseExistingEntries(content) {
   const entries = [];
 
   // Try new format first: sessions array
-  const sessionBlocks = content.matchAll(/### (\d{4}-\d{2}-\d{2}) - (\d+) sessions\n([\s\S]*?)(?=\n### |\n## |\Z)/g);
+  // Fix: Use consuming pattern \n(?=### \d{4}|## Related) to avoid matching \n##  inside date header "### 2026-04-21"
+  const sessionBlocks = content.matchAll(/### (\d{4}-\d{2}-\d{2}) - (\d+) sessions\n([\s\S]+?)\n(?=### \d{4}|## Related|\Z)/g);
 
   for (const match of sessionBlocks) {
     const dateStr = match[1];
-    const sessionCount = parseInt(match[2], 10);
     const body = match[3];
 
     // Extract session details
@@ -352,13 +406,8 @@ function parseExistingEntries(content) {
       accomplished: accomplished[i] || ''
     }));
 
-    // Deduplicate: skip if we already have a session with same title and request
-    const isDuplicate = entries.some(e => 
-      e.sessions?.some(s => 
-        s.title === title && s.firstUserMessage === requests[i]
-      )
-    );
-    if (isDuplicate) {
+    // Skip entries with no sessions (stub blocks from buggy regex)
+    if (sessions.length === 0) {
       continue;
     }
 
@@ -366,10 +415,21 @@ function parseExistingEntries(content) {
       id: `parsed-${dateStr}`,
       date: new Date(dateStr).toISOString(),
       type: 'compact',
-      sessionCount,
+      sessionCount: sessions.length,
       sessions
     });
   }
+
+  // Global deduplication: skip if we already have a session with same title and request
+  const seen = new Set();
+  const deduplicated = entries.filter(entry => {
+    for (const session of (entry.sessions || [])) {
+      const key = `${session.title || ''}|${session.firstUserMessage || ''}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+    }
+    return true;
+  });
 
   // Fallback to old format if no new format found
   if (entries.length === 0) {
@@ -393,7 +453,7 @@ function parseExistingEntries(content) {
     }
   }
 
-  return entries;
+  return deduplicated;
 }
 
 /**

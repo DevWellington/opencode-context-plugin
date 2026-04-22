@@ -10,7 +10,8 @@
 
 import path from 'path';
 import fs from 'fs/promises';
-import { formatFileHeader, addRelatedLinks, buildKeywords, extractKeywordsFromContent, REPORT_PATHS } from './utils/linkBuilder.js';
+import { getWeek } from 'date-fns';
+import { formatFileHeader, addRelatedLinks, buildKeywords, extractKeywordsFromContent, REPORT_PATHS, addKeywordNavigation } from './utils/linkBuilder.js';
 import { getConfig } from '../config.js';
 
 export async function generateTodaySummary(directory) {
@@ -18,7 +19,7 @@ export async function generateTodaySummary(directory) {
   const today = new Date();
   const year = today.getFullYear();
   const month = String(today.getMonth() + 1).padStart(2, '0');
-  const week = `W${Math.ceil(today.getDate() / 7)}`;
+  const week = `W${getWeek(today, { weekStartsOn: 1, firstWeekContainsDate: 4 })}`;
   const day = String(today.getDate()).padStart(2, '0');
 
   const sessionDir = path.join(directory, '.opencode', 'context-session', String(year), month, week, day);
@@ -41,7 +42,7 @@ export async function generateTodaySummary(directory) {
   }
 
   // Extract keywords from actual content
-  const contentKeywords = extractKeywordsFromContent(allContent, 15);
+  const contentKeywords = extractKeywordsFromContent(allContent, 20);
 
   const keywords = buildKeywords({
     projectName: config.projectName || 'opencode-context-plugin',
@@ -71,8 +72,11 @@ export async function generateTodaySummary(directory) {
 
   body += addRelatedLinks([
     'intelligence-learning.md',
-    `weekly-${year}-${week}.md`
+    `../${year}/${month}/${week}/week-summary.md`
   ]);
+
+  // Add keyword navigation for Obsidian
+  body += addKeywordNavigation({ type: 'daily', year, month, week });
 
   const fullReport = header + body;
 

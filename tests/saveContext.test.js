@@ -26,19 +26,33 @@ jest.unstable_mockModule('../src/utils/fileUtils.js', () => ({
 }));
 
 jest.unstable_mockModule('../src/modules/summaries.js', () => ({
-  updateDailySummary: jest.fn().mockResolvedValue(undefined),
   updateDaySummary: jest.fn().mockResolvedValue(undefined),
   updateWeekSummary: jest.fn().mockResolvedValue(undefined)
 }));
 
-jest.unstable_mockModule('../src/modules/intelligence.js', () => ({
-  updateIntelligenceLearning: jest.fn().mockResolvedValue(undefined)
+jest.unstable_mockModule('../src/agents/generateToday.js', () => ({
+  generateTodaySummary: jest.fn().mockResolvedValue(undefined)
+}));
+
+jest.unstable_mockModule('../src/agents/generateMonthly.js', () => ({
+  generateMonthlySummary: jest.fn().mockResolvedValue(undefined)
+}));
+
+jest.unstable_mockModule('../src/agents/generateAnnual.js', () => ({
+  generateAnnualSummary: jest.fn().mockResolvedValue(undefined)
+}));
+
+jest.unstable_mockModule('../src/agents/generateIntelligenceLearning.js', () => ({
+  updateIntelligenceLearning: jest.fn().mockResolvedValue({ success: true, entries: 1 })
 }));
 
 const { extractSessionSummary, saveContext, ensureHierarchicalDir } = await import('../src/modules/saveContext.js');
 const { atomicWrite } = await import('../src/utils/fileUtils.js');
 const summaries = await import('../src/modules/summaries.js');
-const intelligence = await import('../src/modules/intelligence.js');
+const intelligence = await import('../src/agents/generateIntelligenceLearning.js');
+const monthly = await import('../src/agents/generateMonthly.js');
+const annual = await import('../src/agents/generateAnnual.js');
+const today = await import('../src/agents/generateToday.js');
 
 describe('SaveContext Module', () => {
   let tempDir;
@@ -144,9 +158,10 @@ describe('SaveContext Module', () => {
 
       await saveContext(tempDir, session, 'compact');
 
-      // Verify hierarchical dir was created
+      // Verify hierarchical dir was created - use current day since ensureHierarchicalDir uses new Date()
+      const currentDay = String(new Date().getDate()).padStart(2, '0');
       const ctxDir = path.join(tempDir, '.opencode', 'context-session');
-      expect(await fs.access(path.join(ctxDir, '2026', '04', 'W17', '21')).then(() => true).catch(() => false)).toBe(true);
+      expect(await fs.access(path.join(ctxDir, '2026', '04', 'W17', currentDay)).then(() => true).catch(() => false)).toBe(true);
     });
 
     it('should write atomic file with correct filename format', async () => {
@@ -200,38 +215,10 @@ describe('SaveContext Module', () => {
 
       await saveContext(tempDir, session, 'compact');
 
-      expect(summaries.updateDailySummary).toHaveBeenCalledWith(
-        tempDir,
-        expect.objectContaining({
-          type: 'compact',
-          filename: expect.stringMatching(/^compact-.*\.md$/)
-        })
-      );
-    });
-
-    it('should call updateIntelligenceLearning with session info', async () => {
-      const session = {
-        id: 'learn-session',
-        slug: 'learn',
-        title: 'Learning Test',
-        messages: [
-          { id: '1', role: 'user', content: 'test' },
-          { id: '2', role: 'assistant', content: 'response' }
-        ]
-      };
-
-      atomicWrite.mockResolvedValue(undefined);
-
-      await saveContext(tempDir, session, 'exit');
-
-      expect(intelligence.updateIntelligenceLearning).toHaveBeenCalledWith(
-        tempDir,
-        expect.objectContaining({
-          type: 'exit',
-          sessionId: 'learn-session',
-          messageCount: 2
-        })
-      );
+      expect(today.generateTodaySummary).toHaveBeenCalledWith(tempDir);
+      expect(monthly.generateMonthlySummary).toHaveBeenCalled();
+      expect(annual.generateAnnualSummary).toHaveBeenCalled();
+      expect(intelligence.updateIntelligenceLearning).toHaveBeenCalledWith(tempDir);
     });
 
     it('should return filepath on success', async () => {

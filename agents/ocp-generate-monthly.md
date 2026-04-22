@@ -1,7 +1,6 @@
 ---
-description: Generate monthly context summary with weekly statistics
+description: Generate monthly context summary by aggregating weekly reports (reads week-summary.md)
 usage: '@ocp-generate-monthly [month]'
----
 
 import { generateMonthlySummary } from '@devwellington/opencode-context-plugin';
 
@@ -11,7 +10,7 @@ export default async function({ session, args }) {
   
   try {
     const result = await generateMonthlySummary(directory, month);
-    return `✅ Monthly summary generated successfully!\n\n${result}`;
+    return `✅ Monthly summary generated to reports/monthly-*.md!\n\n${result}`;
   } catch (error) {
     return `❌ Error generating monthly summary: ${error.message}`;
   }
