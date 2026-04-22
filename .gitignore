@@ -18,9 +18,21 @@ Thumbs.db
 *.tgz
 dist/
 
+# Heapsnapshots (debug)
+*.heapsnapshot
+
+# Test/Debug scripts (not part of package)
+scripts/debug-*.js
+scripts/verify-*.js
+test-*.js
+test-hooks.js
+
 # Old/deprecated files
 old/
 
 # Plugin generated files (project-specific)
 .opencode/
 .planning/
+
+# User config (installed globally)
+~/.config/
