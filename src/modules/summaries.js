@@ -6,6 +6,7 @@ import { debounce } from '../utils/debounce.js';
 import { atomicWrite, getTimestamp } from '../utils/fileUtils.js';
 import { extractSessionContent, extractBugs, extractPersistentPatterns, normalizePattern, dedupePatterns } from './contentExtractor.js';
 import { countSessionTokens, countTokens, isCodeContent } from './tokenLimit.js';
+import { isProtectedSession, isProtectedContent, getProtectionStatus } from '../utils/patternMatcher.js';
 
 const logger = createDebugLogger('context-plugin');
 
@@ -130,15 +131,24 @@ async function readDaySessions(dirPath) {
       }
       
       if (file.endsWith('.md')) {
-        try {
-          const content = await fs.readFile(path.join(dirPath, file), 'utf-8');
-          const extracted = extractSessionContent(content);
-          const bugs = extractBugs(content);
-          sessions.push({ filename: file, content, extracted, bugs });
-        } catch {
-          // Skip unreadable files
+      try {
+        const filePath = path.join(dirPath, file);
+        const sessionInfo = { filename: file, path: filePath, type: file.startsWith('compact-') ? 'compact' : 'exit' };
+        
+        // Skip protected sessions (mode: 'session')
+        if (isProtectedSession(sessionInfo)) {
+          logger(`[summaries] Skipping protected session: ${file}`);
+          continue;
         }
+        
+        const content = await fs.readFile(filePath, 'utf-8');
+        const extracted = extractSessionContent(content);
+        const bugs = extractBugs(content);
+        sessions.push({ filename: file, path: filePath, content, extracted, bugs });
+      } catch {
+        // Skip unreadable files
       }
+    }
     }
   } catch {
     // Directory doesn't exist yet
@@ -162,22 +172,38 @@ function formatDayContent(dateStr, sessionsData) {
   const relevantFiles = new Set();
   
   for (const session of sessionsData) {
+    // Filter protected content (mode: 'content')
     if (session.extracted.goal && session.extracted.goal.length > 5) {
-      goals.push({ text: session.extracted.goal, source: session.filename });
-    }
-    if (session.extracted.accomplished && session.extracted.accomplished.length > 5) {
-      accomplishments.push({ text: session.extracted.accomplished, source: session.filename });
-    }
-    if (session.extracted.discoveries && session.extracted.discoveries.length > 5) {
-      discoveries.push({ text: session.extracted.discoveries, source: session.filename });
-    }
-    for (const bug of session.bugs) {
-      if (bug.solution) {
-        bugs.push({ ...bug, source: session.filename });
+      if (!isProtectedContent(session.extracted.goal)) {
+        goals.push({ text: session.extracted.goal, source: session.filename });
       }
     }
+    if (session.extracted.accomplished && session.extracted.accomplished.length > 5) {
+      if (!isProtectedContent(session.extracted.accomplished)) {
+        accomplishments.push({ text: session.extracted.accomplished, source: session.filename });
+      }
+    }
+    if (session.extracted.discoveries && session.extracted.discoveries.length > 5) {
+      if (!isProtectedContent(session.extracted.discoveries)) {
+        discoveries.push({ text: session.extracted.discoveries, source: session.filename });
+      }
+    }
+    // Bugs are checked for solution before adding, but also filter protected
+    for (const bug of session.bugs) {
+      if (bug.solution) {
+        // Check if bug symptom or solution is protected
+        const isBugProtected = isProtectedContent(bug.symptom) || 
+                               (bug.solution && isProtectedContent(bug.solution));
+        if (!isBugProtected) {
+          bugs.push({ ...bug, source: session.filename });
+        }
+      }
+    }
+    // Relevant files - check each file path
     for (const file of session.extracted.relevantFiles || []) {
-      if (file) relevantFiles.add(file);
+      if (file && !isProtectedContent(file)) {
+        relevantFiles.add(file);
+      }
     }
   }
   
@@ -445,6 +471,12 @@ async function updateWeekSummaryImpl(baseDir, year, month, week) {
       const daySummaryPath = path.join(dayPath, 'day-summary.md');
       
       try {
+        // Skip days that are entirely protected sessions
+        if (await isDayFullyProtected(dayPath)) {
+          logger(`[summaries] Skipping fully protected day: ${dayDir}`);
+          continue;
+        }
+        
         const content = await fs.readFile(daySummaryPath, 'utf-8');
         
         // Count sessions from the day summary
@@ -726,4 +758,44 @@ function dedupePatternsByKey(items) {
     seen.add(key);
     return true;
   });
+}
+
+/**
+ * Check if a day directory contains only protected sessions
+ * Returns true if all sessions in the day are protected
+ * 
+ * @param {string} dayPath - Path to day directory
+ * @returns {Promise<boolean>}
+ */
+async function isDayFullyProtected(dayPath) {
+  const config = getConfig();
+  
+  if (!config.protected?.enabled || config.protected?.mode !== 'session') {
+    return false;
+  }
+
+  try {
+    const files = await fs.readdir(dayPath);
+    const sessions = files.filter(f => 
+      f.endsWith('.md') && (f.startsWith('exit-') || f.startsWith('compact-'))
+    );
+    
+    if (sessions.length === 0) return false;
+    
+    // Check if ALL sessions are protected
+    for (const session of sessions) {
+      const sessionInfo = { 
+        filename: session, 
+        path: path.join(dayPath, session),
+        type: session.startsWith('compact-') ? 'compact' : 'exit'
+      };
+      if (!isProtectedSession(sessionInfo)) {
+        return false; // At least one non-protected session exists
+      }
+    }
+    
+    return true; // All sessions are protected
+  } catch {
+    return false;
+  }
 }
