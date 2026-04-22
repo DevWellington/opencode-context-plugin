@@ -5,6 +5,7 @@ import { createDebugLogger } from '../utils/debug.js';
 import { debounce } from '../utils/debounce.js';
 import { atomicWrite, getTimestamp } from '../utils/fileUtils.js';
 import { extractSessionContent, extractBugs } from './contentExtractor.js';
+import { countSessionTokens, countTokens, isCodeContent } from './tokenLimit.js';
 
 const logger = createDebugLogger('context-plugin');
 
@@ -13,6 +14,51 @@ const CONTEXT_SESSION_DIR = '.opencode/context-session';
 
 // In-memory lock for daily summary updates to prevent race conditions
 let dailySummaryLock = Promise.resolve();
+
+/**
+ * Parse session content into messages array with roles
+ * Sessions are markdown with ## Goal, ## Accomplished, etc. sections
+ * We extract the content between sections as "user" message equivalent
+ * @param {string} sessionContent - Raw session content
+ * @returns {Array<{content: string, role: string}>}
+ */
+function parseSessionToMessages(sessionContent) {
+  const messages = [];
+  if (!sessionContent) return messages;
+  
+  const lines = sessionContent.split('\n');
+  let currentSection = null;
+  let currentContent = [];
+  
+  for (const line of lines) {
+    // Check for section headers (## Goal, ## Accomplished, etc.)
+    const sectionMatch = line.match(/^##\s+(\w+)/i);
+    if (sectionMatch) {
+      // Save previous section content
+      if (currentSection && currentContent.length > 0) {
+        const content = currentContent.join('\n').trim();
+        if (content) {
+          messages.push({ content, role: 'user' });
+        }
+      }
+      currentSection = sectionMatch[1].toLowerCase();
+      currentContent = [];
+      continue;
+    }
+    
+    currentContent.push(line);
+  }
+  
+  // Don't forget the last section
+  if (currentSection && currentContent.length > 0) {
+    const content = currentContent.join('\n').trim();
+    if (content) {
+      messages.push({ content, role: 'user' });
+    }
+  }
+  
+  return messages;
+}
 
 /**
  * Read all session files from a day directory
@@ -116,6 +162,28 @@ function formatDayContent(dateStr, sessionsData) {
   const compactCount = sessionsData.filter(s => s.filename.startsWith('compact-')).length;
   const exitCount = sessionsData.filter(s => s.filename.startsWith('exit-')).length;
   content += `**Sessions:** ${sessionsData.length} (Compacts: ${compactCount}, Exits: ${exitCount})\n\n`;
+  
+  // Calculate token statistics for all sessions
+  let totalTokens = 0;
+  let userTokens = 0;
+  let assistantTokens = 0;
+  let systemTokens = 0;
+  
+  for (const session of sessionsData) {
+    const messages = parseSessionToMessages(session.content);
+    const sessionTokens = countSessionTokens(messages);
+    totalTokens += sessionTokens.total;
+    userTokens += sessionTokens.byRole.user;
+    assistantTokens += sessionTokens.byRole.assistant;
+    systemTokens += sessionTokens.byRole.system;
+  }
+  
+  // Token Statistics section
+  if (sessionsData.length > 0) {
+    content += `### Session Statistics\n\n`;
+    content += `- **Total tokens:** ${totalTokens}\n`;
+    content += `- **User tokens:** ${userTokens} | **Assistant tokens:** ${assistantTokens} | **System tokens:** ${systemTokens}\n\n`;
+  }
   
   // Goals section
   if (uniqueGoals.length > 0) {

@@ -254,6 +254,98 @@ Fix memory leak
     });
   });
 
+  describe('Token Statistics Integration', () => {
+    it('should include Session Statistics section when sessions are processed', async () => {
+      const sessionContent = `## Goal
+Implement authentication
+
+## Accomplished
+- Added JWT middleware
+`;
+
+      await fs.writeFile(path.join(ctxDir, 'compact-2026-04-21T10-30-00.md'), sessionContent);
+
+      const summaries = await import('../src/modules/summaries.js');
+
+      const sessionInfo = {
+        type: 'compact',
+        filename: 'compact-2026-04-21T10-30-00.md',
+        year: '2026',
+        month: '04',
+        day: '21'
+      };
+
+      await summaries.updateDaySummary(ctxDir, sessionInfo);
+
+      const content = await fs.readFile(path.join(ctxDir, 'day-summary.md'), 'utf-8');
+
+      // Should contain token statistics section
+      expect(content).toContain('### Session Statistics');
+      expect(content).toContain('**Total tokens:**');
+      expect(content).toContain('**User tokens:**');
+      expect(content).toContain('**Assistant tokens:**');
+    });
+
+    it('should aggregate tokens from multiple sessions', async () => {
+      const session1 = `## Goal
+Task one
+
+## Accomplished
+- Done one
+`;
+
+      const session2 = `## Goal
+Task two
+
+## Accomplished
+- Done two
+`;
+
+      await fs.writeFile(path.join(ctxDir, 'compact-2026-04-21T09-00-00.md'), session1);
+      await fs.writeFile(path.join(ctxDir, 'exit-2026-04-21T10-30-00.md'), session2);
+
+      const summaries = await import('../src/modules/summaries.js');
+
+      const sessionInfo = {
+        type: 'compact',
+        filename: 'compact-2026-04-21T10-30-00.md',
+        year: '2026',
+        month: '04',
+        day: '21'
+      };
+
+      await summaries.updateDaySummary(ctxDir, sessionInfo);
+
+      const content = await fs.readFile(path.join(ctxDir, 'day-summary.md'), 'utf-8');
+
+      // Should show 2 sessions
+      expect(content).toContain('**Sessions:** 2');
+      // Should have token statistics section
+      expect(content).toContain('### Session Statistics');
+    });
+
+    it('should handle session with no content gracefully', async () => {
+      // Empty session file
+      await fs.writeFile(path.join(ctxDir, 'compact-2026-04-21T10-30-00.md'), '');
+
+      const summaries = await import('../src/modules/summaries.js');
+
+      const sessionInfo = {
+        type: 'compact',
+        filename: 'compact-2026-04-21T10-30-00.md',
+        year: '2026',
+        month: '04',
+        day: '21'
+      };
+
+      // Should not throw
+      await summaries.updateDaySummary(ctxDir, sessionInfo);
+
+      const content = await fs.readFile(path.join(ctxDir, 'day-summary.md'), 'utf-8');
+      expect(content).toContain('**Date:** 2026-04-21');
+    });
+  });
+
   describe('debouncing verification', () => {
     it('updateDailySummary is wrapped with debounce', async () => {
       const summaries = await import('../src/modules/summaries.js');
