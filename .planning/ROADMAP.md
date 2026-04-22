@@ -203,6 +203,40 @@ Plans:
 
 ---
 
+### 📋 v2.1.6 Protected Patterns (Phase 7.6)
+
+**Goal**: Allow users to mark files/sessions as "protected" - protected content not overwritten in summaries
+
+**Depends on**: Phase 7.5
+**Requirements**: PROTECTED-01, PROTECTED-02, PROTECTED-03
+**Success Criteria** (what must be TRUE):
+  1. Protected patterns configurable via context-plugin.json
+  2. Protected content skipped in summary aggregation
+  3. Protected sessions preserved separately
+
+Plans:
+- [x] 07.6-01-PLAN.md: Add protected patterns config
+- [x] 07.6-02-PLAN.md: Implement isProtected() check
+- [x] 07.6-03-PLAN.md: Skip protected content in summaries
+
+---
+
+### 📋 v2.1.7 State Persistence (Phase 7.7)
+
+**Goal**: Track what was already summarized to avoid re-processing same content on restarts
+
+**Depends on**: Phase 7.6
+**Requirements**: RESUME-01, RESUME-02, RESUME-03
+**Success Criteria** (what must be TRUE):
+  1. State file tracks last summarized content with timestamps
+  2. Resume capability after plugin restart
+  3. Pending work queue persisted
+
+Plans:
+- [ ] 07.7-01-PLAN.md: Create state.js module, integrate with saveContext and summary generators
+
+---
+
 ### 📋 v1.2.1 Manual Context Injection (Phase 8)
 
 **Milestone Goal:** Add user-triggered manual context injection via /inject command and @ocp-inject agent
