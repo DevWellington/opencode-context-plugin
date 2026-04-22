@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [1.4.0] - 2026-04-21
+## [1.4.0] - 2026-04-22
 
 ### Added
 - **Automatic agent installation**: 11 agents installed via `postinstall` hook
@@ -17,8 +17,25 @@ All notable changes to this project will be documented in this file.
 - **Agents directory**: `.md` agent files included in npm package
 
 ### Changed
+- **Simplified file structure**: All reports now nested under year/month/week hierarchy
+  ```
+  context-session/
+  ├── daily-summary.md
+  ├── intelligence-learning.md
+  └── YYYY/
+      ├── annual-YYYY.md
+      └── MM/
+          ├── monthly-YYYY-MM.md
+          └── WW/
+              └── week-summary.md
+  ```
 - **Package description**: Updated to reference `context-session/` instead of `contextos/`
-- **File structure**: Improved documentation with clear hierarchy flow
+- **REPORT_PATHS updated**: All paths now follow hierarchical structure
+
+### Fixed
+- Sequential await for report generation (was Promise.all fire-and-forget)
+- Regex lookahead bug in parseExistingEntries
+- Duplicate session entries in intelligence-learning.md
 
 ## [1.3.12] - 2026-04-21
 
