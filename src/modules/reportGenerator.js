@@ -536,7 +536,7 @@ function extractSection(content, sectionHeading) {
         // Strip emoji prefixes and bullet markers to get clean text
         let text = line.trim().substring(2).trim();
         // Remove emoji prefixes (with or without dash): "✅ - ", "💡 ", "✅"
-        text = text.replace(/^[✅💡🐛🔧📝🔍📦🚪][\s-–]*/, '');
+        text = text.replace(/^[✅💡🐛🔧📝🔍📦🚪][\s–-]*/u, '');
         // Remove any remaining bullet markers
         text = text.replace(/^[-*]\s*/, '');
         if (text.length > 0) {
