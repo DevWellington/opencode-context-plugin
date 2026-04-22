@@ -50,6 +50,17 @@ export const defaultConfig = {
     weekSummary: 3000,
     monthlySummary: 2000,
     annualSummary: 1000
+  },
+  priority: {
+    autoClassify: true,
+    defaultPriority: 'medium',
+    highRetention: -1,           // Days to keep high-priority (-1 = forever)
+    mediumRetention: 90,          // Days to keep medium-priority
+    lowRetention: 30,             // Days to keep low-priority
+    keywords: {
+      high: ['bug', 'error', 'critical', 'security', 'architecture', 'refactor'],
+      medium: ['feature', 'implement', 'test', 'config']
+    }
   }
 };
 
