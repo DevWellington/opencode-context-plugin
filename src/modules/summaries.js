@@ -4,7 +4,7 @@ import { getConfig } from '../config.js';
 import { createDebugLogger } from '../utils/debug.js';
 import { debounce } from '../utils/debounce.js';
 import { atomicWrite, getTimestamp } from '../utils/fileUtils.js';
-import { extractSessionContent, extractBugs, extractPersistentPatterns } from './contentExtractor.js';
+import { extractSessionContent, extractBugs, extractPersistentPatterns, normalizePattern, dedupePatterns } from './contentExtractor.js';
 import { countSessionTokens, countTokens, isCodeContent } from './tokenLimit.js';
 
 const logger = createDebugLogger('context-plugin');
@@ -494,13 +494,9 @@ async function updateWeekSummaryImpl(baseDir, year, month, week) {
     const allAccomplishments = daySummaries.flatMap(d => d.accomplishments);
     if (allAccomplishments.length > 0) {
       content += `## Accomplishments\n\n`;
-      const seen = new Set();
-      for (const acc of allAccomplishments) {
-        const key = acc.slice(0, 50).toLowerCase().trim();
-        if (!seen.has(key) && key.length > 5) {
-          seen.add(key);
-          content += `- ✅ ${acc}\n`;
-        }
+      const uniqueAccomplishments = dedupePatternsByKey(allAccomplishments).filter(key => key.length > 5);
+      for (const acc of uniqueAccomplishments.slice(0, 10)) {
+        content += `- ✅ ${acc}\n`;
       }
       content += '\n';
     }
@@ -509,13 +505,9 @@ async function updateWeekSummaryImpl(baseDir, year, month, week) {
     const allDiscoveries = daySummaries.flatMap(d => d.discoveries);
     if (allDiscoveries.length > 0) {
       content += `## Discoveries\n\n`;
-      const seen = new Set();
-      for (const disc of allDiscoveries) {
-        const key = disc.slice(0, 50).toLowerCase().trim();
-        if (!seen.has(key) && key.length > 5) {
-          seen.add(key);
-          content += `- 💡 ${disc}\n`;
-        }
+      const uniqueDiscoveries = dedupePatternsByKey(allDiscoveries).filter(key => key.length > 5);
+      for (const disc of uniqueDiscoveries.slice(0, 10)) {
+        content += `- 💡 ${disc}\n`;
       }
       content += '\n';
     }
@@ -719,4 +711,19 @@ function formatTypeName(type) {
     general: 'Other Patterns'
   };
   return names[type] || type;
+}
+
+/**
+ * Deduplicate string items by normalized pattern key
+ * @param {Array} items - Array of strings to deduplicate
+ * @returns {Array} Deduplicated array
+ */
+function dedupePatternsByKey(items) {
+  const seen = new Set();
+  return items.filter(item => {
+    const key = normalizePattern(item);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
