@@ -4,6 +4,7 @@ import { getWeek } from "date-fns";
 import { getConfig } from '../config.js';
 import { createDebugLogger } from '../utils/debug.js';
 import { updateDaySummary, updateWeekSummary } from './summaries.js';
+import { classifySessionPriority } from './contentExtractor.js';
 import { generateTodaySummary } from '../agents/generateToday.js';
 import { generateWeeklySummary } from '../agents/generateWeekly.js';
 import { generateMonthlySummary } from '../agents/generateMonthly.js';
@@ -86,13 +87,18 @@ export async function saveContext(directory, session, type = 'compact', opencode
     
     const summary = extractSessionSummary(session);
     const now = new Date().toISOString();
-    
+
+    // Classify session priority based on content
+    const sessionContent = summary.messages.map(m => m.content).join(' ');
+    const priority = classifySessionPriority(sessionContent);
+
     let content = `---
 sessionId: "${summary.sessionId}"
 slug: "${summary.slug}"
 title: "${summary.title}"
 timestamp: "${now}"
 messageCount: ${summary.messageCount}
+priority: "${priority}"
 ---
 
 # Session Context - ${type.toUpperCase()}
