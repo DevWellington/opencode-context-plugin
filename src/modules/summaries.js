@@ -4,7 +4,7 @@ import { getConfig } from '../config.js';
 import { createDebugLogger } from '../utils/debug.js';
 import { debounce } from '../utils/debounce.js';
 import { atomicWrite, getTimestamp } from '../utils/fileUtils.js';
-import { extractSessionContent, extractBugs } from './contentExtractor.js';
+import { extractSessionContent, extractBugs, extractPersistentPatterns } from './contentExtractor.js';
 import { countSessionTokens, countTokens, isCodeContent } from './tokenLimit.js';
 
 const logger = createDebugLogger('context-plugin');
@@ -541,6 +541,12 @@ async function updateWeekSummaryImpl(baseDir, year, month, week) {
       content += '\n';
     }
     
+    // Add Pinned Patterns from intelligence learning
+    const pinnedSection = await getPinnedPatternsSection(baseDir);
+    if (pinnedSection) {
+      content += pinnedSection;
+    }
+    
     // Day-by-Day Summary (link to each day-summary.md)
     content += `## Day-by-Day Summary\n\n`;
     for (const daySummary of daySummaries) {
@@ -654,4 +660,63 @@ export function shouldPruneSession(sessionContent, ageDays) {
   const retention = retentionDays[priority] ?? 90;
   if (retention === -1) return false; // Never prune high priority
   return ageDays > retention;
+}
+
+/**
+ * Extract pinned patterns from intelligence-learning.md for display in summaries
+ * @param {string} baseDir - Project base directory
+ * @returns {Promise<string>} Formatted pinned patterns section
+ */
+export async function getPinnedPatternsSection(baseDir) {
+  const intelPath = path.join(baseDir, CONTEXT_SESSION_DIR, 'intelligence-learning.md');
+  
+  try {
+    const content = await fs.readFile(intelPath, 'utf-8');
+    const patterns = extractPersistentPatterns(content);
+    const pinned = patterns.filter(p => p.pinned);
+    
+    if (pinned.length === 0) {
+      return '';
+    }
+    
+    let section = '## Pinned Patterns\n\n';
+    section += `*${pinned.length} patterns pinned from previous sessions*\n\n`;
+    
+    // Group and display top pinned patterns
+    const byType = groupBy(pinned, 'type');
+    for (const [type, items] of Object.entries(byType)) {
+      if (items.length > 0) {
+        section += `### ${formatTypeName(type)}\n`;
+        for (const p of items.slice(0, 5)) {
+          section += `- ${p.pattern}\n`;
+        }
+        section += '\n';
+      }
+    }
+    
+    return section;
+  } catch {
+    return ''; // No intelligence file yet
+  }
+}
+
+function groupBy(arr, key) {
+  return arr.reduce((acc, item) => {
+    const val = item[key] || 'other';
+    if (!acc[val]) acc[val] = [];
+    acc[val].push(item);
+    return acc;
+  }, {});
+}
+
+function formatTypeName(type) {
+  const names = {
+    goal_theme: 'Goal Themes',
+    bug_pattern: 'Bug Patterns',
+    file_pattern: 'File Patterns',
+    command: 'Commands',
+    duration: 'Session Durations',
+    general: 'Other Patterns'
+  };
+  return names[type] || type;
 }
