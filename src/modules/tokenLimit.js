@@ -15,6 +15,57 @@ export function estimateTokens(content) {
 }
 
 /**
+ * Code indicator patterns for detecting code content
+ */
+const CODE_PATTERNS = [
+  /\{/, /\}/, /\(\)/, /=>/, /\bfunction\b/, /\bconst\b/, /\blet\b/, /\bvar\b/,
+  /\bif\b/, /\bfor\b/, /\bwhile\b/, /\breturn\b/, /\bimport\b/, /\bexport\b/,
+  /\bclass\b/, /\binterface\b/, /\btype\b/, /=*>/, /\/\//, /\/\*/, /\*\//
+];
+
+/**
+ * Count code indicators in content
+ * @param {string} content - Content to analyze
+ * @returns {number} - Count of code indicators
+ */
+function countCodeIndicators(content) {
+  let count = 0;
+  for (const pattern of CODE_PATTERNS) {
+    const matches = content.match(new RegExp(pattern.source, 'g'));
+    count += matches ? matches.length : 0;
+  }
+  return count;
+}
+
+/**
+ * Detect if content is primarily code vs prose
+ * @param {string} content - Content to analyze
+ * @returns {boolean} - True if content appears to be code
+ */
+export function isCodeContent(content) {
+  if (!content || content.length === 0) return false;
+  
+  const codeIndicatorsPer100Chars = (countCodeIndicators(content) * 100) / content.length;
+  return codeIndicatorsPer100Chars > 3;
+}
+
+/**
+ * Accurate token estimation using content-type-aware char per token ratio
+ * @param {string} content - Text content to estimate
+ * @param {string|null} type - 'code', 'prose', or null for auto-detection
+ * @returns {number} - Token count
+ */
+export function countTokens(content, type = null) {
+  if (!content) return 0;
+  
+  // Use provided type or detect
+  const actualType = type || (isCodeContent(content) ? 'code' : 'prose');
+  const charsPerToken = actualType === 'code' ? 3 : 4;
+  
+  return Math.ceil(content.length / charsPerToken);
+}
+
+/**
  * Truncate content to fit within token limit
  * @param {string} content - Content to truncate
  * @param {number} maxTokens - Maximum tokens allowed
