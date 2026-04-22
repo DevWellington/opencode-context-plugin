@@ -174,12 +174,36 @@ Plans:
 
 ---
 
-### 📋 Future Vision (Phases 9-10)
+### 📋 v1.6 Enhanced Summaries (Phase 09)
 
-#### Phase 9: Dashboard & UI
+**Milestone Goal:** Make summary files content-rich, not just counts and file references
+
+**Why:** Current summaries (daily-summary.md, week-summary.md, monthly-*.md, annual-*.md) only track file counts and timestamps. User wants summaries to extract: goals, accomplishments, discoveries, bugs, decisions.
+
+**Depends on**: Phase 05 (Content-Focused Reports) - uses contentExtractor.js
+**Requirements**: SUMM-01, SUMM-02, SUMM-03, SUMM-04, SUMM-05
+
+**Success Criteria (what must be TRUE):**
+1. Day summary shows Goals, Accomplishments, Discoveries, Bugs Fixed, Relevant Files
+2. Week summary aggregates all days with deduplication
+3. Monthly report has Major Accomplishments, Issues Resolved, Decisions Made
+4. Annual report has Annual Theme, Quarterly Themes, Project Evolution, Bug History
+5. All summaries use contentExtractor.js for extraction
+
+**Plans:** 4 plans (created)
+- [x] 09-01-PLAN.md: Enhance day summary with content extraction
+- [x] 09-02-PLAN.md: Enhance week summary with content aggregation
+- [x] 09-03-PLAN.md: Enhance monthly report (follow reportGenerator structure)
+- [x] 09-04-PLAN.md: Enhance annual report (follow reportGenerator structure)
+
+---
+
+### 📋 Future Vision (Phases 10-11)
+
+#### Phase 10: Dashboard & UI
 **Goal**: Visual interface for browsing and managing sessions
 
-#### Phase 10: AI-Powered Insights
+#### Phase 11: AI-Powered Insights
 **Goal**: Automatic pattern detection and recommendations
 
 ## Progress
@@ -198,8 +222,9 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 6. OpenCode Internal AI | v1.5 | 2/2 | Complete | 2026-04-21 |
 | 7. Multi-Project Support | v2.1 | 2/4 | In Progress | 2026-04-21 |
 | 8. Manual Context Injection | v1.2.1 | 0/1 | Planned | - |
-| 9. Dashboard & UI | Future | 0/TBD | Not started | - |
-| 10. AI-Powered Insights | Future | 0/TBD | Not started | - |
+| 9. Enhanced Summaries | v1.6 | 5/4 | Complete   | 2026-04-22 |
+| 10. Dashboard & UI | Future | 0/TBD | Not started | - |
+| 11. AI-Powered Insights | Future | 0/TBD | Not started | - |
 
 ## Design Principles
 
