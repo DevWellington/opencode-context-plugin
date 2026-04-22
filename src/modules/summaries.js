@@ -606,3 +606,52 @@ const debounceMs = config.debounceMs || 500;
 export const updateDailySummary = debounce(updateDailySummaryImpl, debounceMs);
 export const updateWeekSummary = debounce(updateWeekSummaryImpl, debounceMs);
 export { updateDaySummary };
+
+/**
+ * Get session age in days
+ * @param {string} sessionPath - Path to session file
+ * @returns {Promise<number>} Days since last modified
+ */
+export async function getSessionAge(sessionPath) {
+  const stats = await fs.stat(sessionPath);
+  const now = new Date();
+  const modified = new Date(stats.mtime);
+  return Math.floor((now - modified) / (1000 * 60 * 60 * 24));
+}
+
+/**
+ * Extract priority from session file frontmatter
+ * @param {string} sessionContent - Raw session file content
+ * @returns {string} 'low' | 'medium' | 'high' (defaults to 'medium')
+ */
+export function getSessionPriority(sessionContent) {
+  // Match priority: "value" or priority: value (stop at newline or closing punctuation)
+  const match = sessionContent.match(/priority:\s*["']?([a-z]+)["']?/i);
+  if (!match) return 'medium';
+  const value = match[1].toLowerCase();
+  // Only accept known priority values
+  if (['high', 'medium', 'low'].includes(value)) {
+    return value;
+  }
+  return 'medium';
+}
+
+/**
+ * Check if session should be pruned based on priority and age
+ * @param {string} sessionContent - Session file content
+ * @param {number} ageDays - Age of session in days
+ * @returns {boolean}
+ */
+export function shouldPruneSession(sessionContent, ageDays) {
+  const config = getConfig();
+  const priority = getSessionPriority(sessionContent);
+  const retentionDays = {
+    high: config.priority?.highRetention ?? -1,
+    medium: config.priority?.mediumRetention ?? 90,
+    low: config.priority?.lowRetention ?? 30
+  };
+
+  const retention = retentionDays[priority] ?? 90;
+  if (retention === -1) return false; // Never prune high priority
+  return ageDays > retention;
+}
