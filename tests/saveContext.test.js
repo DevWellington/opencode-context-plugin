@@ -27,7 +27,9 @@ jest.unstable_mockModule('../src/utils/fileUtils.js', () => ({
 
 jest.unstable_mockModule('../src/modules/summaries.js', () => ({
   updateDaySummary: jest.fn().mockResolvedValue(undefined),
-  updateWeekSummary: jest.fn().mockResolvedValue(undefined)
+  updateWeekSummary: jest.fn().mockResolvedValue(undefined),
+  shouldRegenerate: jest.fn().mockReturnValue({ shouldRegenerate: true, savingsPercent: 100, changePercent: 100 }),
+  hasNewSessions: jest.fn().mockReturnValue(true)
 }));
 
 jest.unstable_mockModule('../src/agents/generateToday.js', () => ({
