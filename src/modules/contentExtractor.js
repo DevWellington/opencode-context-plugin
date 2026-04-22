@@ -771,3 +771,42 @@ export function extractCrossProjectLinks(sessionContent) {
 
   return links;
 }
+
+/**
+ * Classify session priority based on content analysis
+ * High Priority: Bug-related, architecture, design, refactor, migration, decisions
+ * Medium Priority: Feature work, testing, configuration
+ * Low Priority: Default - routine sessions
+ * 
+ * @param {string} sessionContent - Raw session content
+ * @returns {'high' | 'medium' | 'low'} Priority level
+ */
+export function classifySessionPriority(sessionContent) {
+  if (!sessionContent || typeof sessionContent !== 'string') {
+    return 'low';
+  }
+
+  const highPriorityPatterns = [
+    /\b(bug|error|crash|security|vulnerability|critical)\b/i,
+    /\b(architecture|design|refactor|migration|performance)\b/i,
+    /\b(decision|chose|selected|agreed)\b/i
+  ];
+
+  const mediumPriorityPatterns = [
+    /\b(feature|implement|add|create|build)\b/i,
+    /\b(test|testing|coverage|verify)\b/i,
+    /\b(config|setting|setup|install)\b/i
+  ];
+
+  // Check HIGH first
+  if (highPriorityPatterns.some(p => p.test(sessionContent))) {
+    return 'high';
+  }
+
+  // Check MEDIUM second
+  if (mediumPriorityPatterns.some(p => p.test(sessionContent))) {
+    return 'medium';
+  }
+
+  return 'low';
+}
