@@ -16,6 +16,14 @@ Plugin para OpenCode que salva automaticamente o contexto da sessão em `.openco
 - **Mensagens completas**: Captura conversas de usuário e assistente
 - **Atomic writes**: Previne corrupção de arquivos em caso de crash
 - **Agentes @**: 13 agentes para gerenciar contextos via chat
+- **Token Counting**: Contagem precisa de tokens por sessão e agregação
+- **Budget Limits**: Limites de tamanho por nível de relatório
+- **Smart Triggers**: Regeneração inteligente só quando há mudanças significativas
+- **Priority Context**: Classificação de sessões por prioridade (high/medium/low)
+- **Nested Intelligence**: Padrões persistentes que sobrevivem entre sessões
+- **Protected Patterns**: Proteção de conteúdo sensível contra sobrescrita
+- **State Persistence**: Resume trabalho após reiniciar o plugin
+- **ocp_memory API**: Ferramentas para o agente gerenciar memórias cruzadas
 
 ## Estrutura de Arquivos
 
@@ -101,6 +109,21 @@ Após instalação, use os agentes no chat com `@`:
 | `@ocp-inject` | Injeta contexto manualmente |
 | `@ocp-read-*` | Lê vários tipos de contexto |
 
+### Ferramentas ocp_memory
+
+O agente pode usar `ocp_memory` para gerenciar memórias cruzadas entre sessões:
+
+```javascript
+// Escrever uma memória
+ocp_memory(action="write", category="ARCHITECTURE_DECISIONS", content="Event sourcing for orders.")
+
+// Buscar memórias
+ocp_memory(action="search", query="authentication approach")
+
+// Listar todas as memórias
+ocp_memory(action="read", category=null)
+```
+
 **Exemplos:**
 ```
 @ocp-help
@@ -162,6 +185,17 @@ opencode-context-plugin/
 ```
 
 ## Changelog
+
+### v1.5.0 (2026-04-22)
+- **Token Counting Enhancement**: `countTokens()`, `countSessionTokens()` para contagem precisa
+- **Summary Budget Limits**: Limites por nível (day: 5000, week: 3000, month: 2000, annual: 1000 chars)
+- **Smart Generation Triggers**: `shouldRegenerate()` - pula regeneração se mudança < 5%
+- **Priority-Based Context**: `classifySessionPriority()` - high/medium/low para sessões
+- **Nested Intelligence**: `extractPersistentPatterns()` - padrões fixados após 3+ sessões
+- **Protected Patterns**: `isProtected()` - conteúdo sensível protegido
+- **State Persistence**: `state.js` para resume após restart
+- **ocp_memory API**: Ferramentas inspiradas no magic-context para gerenciar memórias cruzadas
+- **Test**: 263 testes passando
 
 ### v1.4.1 (2026-04-22)
 - **Fix**: Hierarchical flow paths corrigidos em `generateIntelligenceLearning.js`

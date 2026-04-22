@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.5.0] - 2026-04-22
+
+### Added
+- **Token Counting Enhancement**: `countTokens()` with type-aware estimation (3 chars/token for code, 4 for prose), `countSessionTokens()` for session analysis by role and message
+- **Summary Budget Limits**: Configurable character limits per summary level (day: 5000, week: 3000, month: 2000, annual: 1000 chars)
+- **Smart Generation Triggers**: `shouldRegenerate()` detects meaningful changes (>5%) to skip unnecessary regeneration
+- **Priority-Based Context**: `classifySessionPriority()` classifies sessions as high/medium/low with configurable retention
+- **Nested Intelligence**: `extractPersistentPatterns()` pins patterns after 3+ sessions, deduplication across summaries
+- **Protected Patterns**: `isProtected()` with glob/regex pattern matching, protects content from being overwritten
+- **State Persistence**: `state.js` module tracks summarized content, enables resume after plugin restart
+- **ocp_memory API**: Agent tool for cross-session memory management (write/read/search actions)
+
+### Changed
+- **Budget enforcement**: All generators now respect budget limits configured in `config.js`
+- **Token transparency**: Summary reports now include token breakdown statistics by role
+
 ## [1.4.1] - 2026-04-22
 
 ### Fixed
