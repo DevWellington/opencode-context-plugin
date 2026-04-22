@@ -1,11 +1,6 @@
 ---
-name: ocp-inject
 description: Manually inject relevant context from previous sessions into current conversation
-tools:
-  - Read
-  - Glob
-  - Grep
-  - Bash
+usage: '@ocp-inject'
 ---
 
 # Context Injection Agent
