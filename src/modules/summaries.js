@@ -4,6 +4,7 @@ import { getConfig } from '../config.js';
 import { createDebugLogger } from '../utils/debug.js';
 import { debounce } from '../utils/debounce.js';
 import { atomicWrite, getTimestamp } from '../utils/fileUtils.js';
+import { extractSessionContent, extractBugs } from './contentExtractor.js';
 
 const logger = createDebugLogger('context-plugin');
 
@@ -12,6 +13,164 @@ const CONTEXT_SESSION_DIR = '.opencode/context-session';
 
 // In-memory lock for daily summary updates to prevent race conditions
 let dailySummaryLock = Promise.resolve();
+
+/**
+ * Read all session files from a day directory
+ * @param {string} dirPath - Path to day directory
+ * @returns {Array} Array of { filename, content, extracted, bugs }
+ */
+async function readDaySessions(dirPath) {
+  const sessions = [];
+  
+  try {
+    const files = await fs.readdir(dirPath);
+    
+    for (const file of files) {
+      // Skip summary files and non-session files
+      if (file.endsWith('-summary.md') || (!file.startsWith('exit-') && !file.startsWith('compact-'))) {
+        continue;
+      }
+      
+      if (file.endsWith('.md')) {
+        try {
+          const content = await fs.readFile(path.join(dirPath, file), 'utf-8');
+          const extracted = extractSessionContent(content);
+          const bugs = extractBugs(content);
+          sessions.push({ filename: file, content, extracted, bugs });
+        } catch {
+          // Skip unreadable files
+        }
+      }
+    }
+  } catch {
+    // Directory doesn't exist yet
+  }
+  
+  return sessions;
+}
+
+/**
+ * Format day content with structured sections
+ * @param {string} dateStr - Date string (YYYY-MM-DD)
+ * @param {Array} sessionsData - Array from readDaySessions
+ * @returns {string} Formatted day summary content
+ */
+function formatDayContent(dateStr, sessionsData) {
+  // Collect goals, accomplishments, discoveries, bugs, files
+  const goals = [];
+  const accomplishments = [];
+  const discoveries = [];
+  const bugs = [];
+  const relevantFiles = new Set();
+  
+  for (const session of sessionsData) {
+    if (session.extracted.goal && session.extracted.goal.length > 5) {
+      goals.push({ text: session.extracted.goal, source: session.filename });
+    }
+    if (session.extracted.accomplished && session.extracted.accomplished.length > 5) {
+      accomplishments.push({ text: session.extracted.accomplished, source: session.filename });
+    }
+    if (session.extracted.discoveries && session.extracted.discoveries.length > 5) {
+      discoveries.push({ text: session.extracted.discoveries, source: session.filename });
+    }
+    for (const bug of session.bugs) {
+      if (bug.solution) {
+        bugs.push({ ...bug, source: session.filename });
+      }
+    }
+    for (const file of session.extracted.relevantFiles || []) {
+      if (file) relevantFiles.add(file);
+    }
+  }
+  
+  // Deduplicate by first 50 chars
+  const seenGoals = new Set();
+  const uniqueGoals = goals.filter(g => {
+    const key = g.text.slice(0, 50).toLowerCase().trim();
+    if (seenGoals.has(key) || key.length < 5) return false;
+    seenGoals.add(key);
+    return true;
+  });
+  
+  const seenAccomplishments = new Set();
+  const uniqueAccomplishments = accomplishments.filter(a => {
+    const key = a.text.slice(0, 50).toLowerCase().trim();
+    if (seenAccomplishments.has(key) || key.length < 5) return false;
+    seenAccomplishments.add(key);
+    return true;
+  });
+  
+  const seenDiscoveries = new Set();
+  const uniqueDiscoveries = discoveries.filter(d => {
+    const key = d.text.slice(0, 50).toLowerCase().trim();
+    if (seenDiscoveries.has(key) || key.length < 5) return false;
+    seenDiscoveries.add(key);
+    return true;
+  });
+  
+  // Build content
+  let content = `# Day Summary\n\n`;
+  content += `**Date:** ${dateStr}\n\n`;
+  
+  // Sessions overview
+  const compactCount = sessionsData.filter(s => s.filename.startsWith('compact-')).length;
+  const exitCount = sessionsData.filter(s => s.filename.startsWith('exit-')).length;
+  content += `**Sessions:** ${sessionsData.length} (Compacts: ${compactCount}, Exits: ${exitCount})\n\n`;
+  
+  // Goals section
+  if (uniqueGoals.length > 0) {
+    content += `## Goals\n\n`;
+    for (const goal of uniqueGoals) {
+      content += `- ${goal.text}\n`;
+    }
+    content += '\n';
+  }
+  
+  // Accomplishments section
+  if (uniqueAccomplishments.length > 0) {
+    content += `## Accomplishments\n\n`;
+    for (const acc of uniqueAccomplishments) {
+      // Handle multiline content
+      const lines = acc.text.split('\n').filter(l => l.trim());
+      for (const line of lines) {
+        content += `- ✅ ${line}\n`;
+      }
+    }
+    content += '\n';
+  }
+  
+  // Discoveries section
+  if (uniqueDiscoveries.length > 0) {
+    content += `## Discoveries\n\n`;
+    for (const disc of uniqueDiscoveries) {
+      content += `- 💡 ${disc.text}\n`;
+    }
+    content += '\n';
+  }
+  
+  // Bugs Fixed section
+  if (bugs.length > 0) {
+    content += `## Bugs Fixed\n\n`;
+    for (const bug of bugs) {
+      content += `- **${bug.symptom}:** ${bug.solution}\n`;
+      if (bug.cause) {
+        content += `  - Cause: ${bug.cause}\n`;
+      }
+    }
+    content += '\n';
+  }
+  
+  // Relevant Files section
+  if (relevantFiles.size > 0) {
+    content += `## Relevant Files\n\n`;
+    for (const file of relevantFiles) {
+      content += `- ${file}\n`;
+    }
+    content += '\n';
+  }
+  
+  return content;
+}
 
 /**
  * Update daily summary at context-session root
@@ -103,33 +262,22 @@ async function updateDailySummaryImpl(baseDir, sessionInfo) {
 
 /**
  * Update day summary in hierarchical folder
+ * Now uses contentExtractor to extract Goals, Accomplishments, Discoveries, Bugs, Relevant Files
  */
 async function updateDaySummary(dirPath, sessionInfo) {
   try {
+    // Read all session files from this day directory to build comprehensive summary
+    const sessionsData = await readDaySessions(dirPath);
+    
+    // Format date string
+    const dateStr = `${sessionInfo.year}-${sessionInfo.month}-${sessionInfo.day}`;
+    
+    // Generate comprehensive day summary with extracted content
+    const content = formatDayContent(dateStr, sessionsData);
+    
     const summaryPath = path.join(dirPath, 'day-summary.md');
-    
-    // Read existing summary or create new
-    let content = '';
-    try {
-      content = await fs.readFile(summaryPath, 'utf-8');
-    } catch (e) {
-      // File doesn't exist yet
-      content = `# Day Summary\n\n`;
-      content += `**Date:** ${sessionInfo.year}-${sessionInfo.month}-${sessionInfo.day}\n\n`;
-      content += `## Sessions\n\n`;
-    }
-    
-    // Append new session info
-    const timestamp = new Date().toISOString();
-    const type = sessionInfo.type === 'compact' ? '📦 Compact' : '🚪 Exit';
-    const entry = `- [${timestamp}] ${type}: ${sessionInfo.filename}\n`;
-    
-    // Check if already recorded (idempotency)
-    if (!content.includes(sessionInfo.filename)) {
-      content += entry;
-      await atomicWrite(summaryPath, content);
-      logger(`[context-plugin] Updated day summary: ${summaryPath}`);
-    }
+    await atomicWrite(summaryPath, content);
+    logger(`[context-plugin] Updated day summary with content extraction: ${summaryPath}`);
   } catch (error) {
     logger(`[context-plugin] Error updating day summary: ${error.message}`);
     // Don't fail session save if summary update fails

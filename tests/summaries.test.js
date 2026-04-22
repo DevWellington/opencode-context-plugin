@@ -25,7 +25,20 @@ describe('Summaries Module', () => {
   });
 
   describe('updateDaySummary(dirPath, sessionInfo)', () => {
-    it('should create day-summary.md if it does not exist', async () => {
+    it('should create day-summary.md with extracted content from session files', async () => {
+      // Create a real session file that will be read
+      const sessionContent = `## Goal
+Implement user authentication flow
+
+## Accomplished
+- Added JWT middleware to API routes
+
+## Relevant Files
+- src/auth/jwt.js
+`;
+
+      await fs.writeFile(path.join(ctxDir, 'compact-2026-04-21T10-30-00.md'), sessionContent);
+
       const summaries = await import('../src/modules/summaries.js');
 
       const sessionInfo = {
@@ -41,15 +54,37 @@ describe('Summaries Module', () => {
       const daySummaryPath = path.join(ctxDir, 'day-summary.md');
       const content = await fs.readFile(daySummaryPath, 'utf-8');
 
-      expect(content).toContain('## Sessions');
-      expect(content).toContain('📦 Compact');
-      expect(content).toContain('compact-2026-04-21T10-30-00.md');
+      // New content extraction format
+      expect(content).toContain('**Date:** 2026-04-21');
+      expect(content).toContain('**Sessions:** 1');
+      expect(content).toContain('## Goals');
+      expect(content).toContain('Implement user authentication flow');
+      expect(content).toContain('## Accomplishments');
+      expect(content).toContain('Added JWT middleware');
+      expect(content).toContain('src/auth/jwt.js');
     });
 
-    it('should append to existing day-summary.md', async () => {
-      // Create existing day summary
-      await fs.writeFile(path.join(ctxDir, 'day-summary.md'),
-        `# Day Summary\n\n**Date:** 2026-04-21\n\n## Sessions\n\n- [2026-04-21T09-00-00] 🚪 Exit: exit-2026-04-21T09-00-00.md\n`);
+    it('should aggregate content from multiple session files', async () => {
+      // Create multiple session files
+      const session1 = `## Goal
+First task
+
+## Accomplished
+- Task one completed
+`;
+
+      const session2 = `## Goal
+Second task
+
+## Accomplished
+- Task two completed
+
+### Bug: Token limit exceeded
+**Solution:** Added streaming with chunked injection
+`;
+
+      await fs.writeFile(path.join(ctxDir, 'compact-2026-04-21T09-00-00.md'), session1);
+      await fs.writeFile(path.join(ctxDir, 'exit-2026-04-21T10-30-00.md'), session2);
 
       const summaries = await import('../src/modules/summaries.js');
 
@@ -64,15 +99,53 @@ describe('Summaries Module', () => {
       await summaries.updateDaySummary(ctxDir, sessionInfo);
 
       const content = await fs.readFile(path.join(ctxDir, 'day-summary.md'), 'utf-8');
-      expect(content).toContain('compact-2026-04-21T10-30-00.md');
-      expect(content).toContain('exit-2026-04-21T09-00-00.md');
+
+      // Should have both accomplishments
+      expect(content).toContain('Task one completed');
+      expect(content).toContain('Task two completed');
+      // Should have the bug fixed
+      expect(content).toContain('Bugs Fixed');
+      expect(content).toContain('Token limit exceeded');
+      expect(content).toContain('Added streaming');
+      // Session count should reflect both files
+      expect(content).toContain('**Sessions:** 2');
     });
 
-    it('should not duplicate entry if filename already exists (idempotency)', async () => {
-      // Create existing day summary with the same filename
-      await fs.writeFile(path.join(ctxDir, 'day-summary.md'),
-        `# Day Summary\n\n**Date:** 2026-04-21\n\n## Sessions\n\n- [2026-04-21T10-30-00] 📦 Compact: compact-2026-04-21T10-30-00.md\n`);
+    it('should deduplicate similar entries', async () => {
+      // Create sessions with similar accomplishments
+      const session1 = `## Accomplished
+- Implemented user authentication flow with JWT
+`;
 
+      const session2 = `## Accomplished
+- Implemented user authentication flow with JWT
+`;
+
+      await fs.writeFile(path.join(ctxDir, 'compact-2026-04-21T09-00-00.md'), session1);
+      await fs.writeFile(path.join(ctxDir, 'exit-2026-04-21T10-30-00.md'), session2);
+
+      const summaries = await import('../src/modules/summaries.js');
+
+      const sessionInfo = {
+        type: 'exit',
+        filename: 'exit-2026-04-21T10-30-00.md',
+        year: '2026',
+        month: '04',
+        day: '21'
+      };
+
+      await summaries.updateDaySummary(ctxDir, sessionInfo);
+
+      const content = await fs.readFile(path.join(ctxDir, 'day-summary.md'), 'utf-8');
+
+      // Deduplication should result in only one entry
+      const matches = content.match(/Implemented user authentication/g);
+      expect(matches).not.toBeNull();
+      // The count of matches should be 1 (deduplicated)
+      expect(content.split('Implemented user authentication').length).toBe(2); // One occurrence
+    });
+
+    it('should handle directory with no session files gracefully', async () => {
       const summaries = await import('../src/modules/summaries.js');
 
       const sessionInfo = {
@@ -83,12 +156,49 @@ describe('Summaries Module', () => {
         day: '21'
       };
 
+      // Call with empty directory - should not throw
       await summaries.updateDaySummary(ctxDir, sessionInfo);
 
-      // The function should detect duplicate and not write
+      const daySummaryPath = path.join(ctxDir, 'day-summary.md');
+      const content = await fs.readFile(daySummaryPath, 'utf-8');
+
+      expect(content).toContain('**Date:** 2026-04-21');
+      expect(content).toContain('**Sessions:** 0');
+    });
+
+    it('should extract bugs with solutions into Bugs Fixed section', async () => {
+      const sessionContent = `## Goal
+Fix memory leak
+
+### Bug: Memory leak in cache
+**Solution:** Added proper cleanup on eviction
+**Cause:** References not released
+
+## Discoveries
+- Cache eviction timing matters
+`;
+
+      await fs.writeFile(path.join(ctxDir, 'compact-2026-04-21T11-00-00.md'), sessionContent);
+
+      const summaries = await import('../src/modules/summaries.js');
+
+      const sessionInfo = {
+        type: 'compact',
+        filename: 'compact-2026-04-21T11-00-00.md',
+        year: '2026',
+        month: '04',
+        day: '21'
+      };
+
+      await summaries.updateDaySummary(ctxDir, sessionInfo);
+
       const content = await fs.readFile(path.join(ctxDir, 'day-summary.md'), 'utf-8');
-      // Should still have only one entry
-      expect(content.split('compact-2026-04-21T10-30-00.md').length).toBe(2); // One occurrence
+
+      expect(content).toContain('## Bugs Fixed');
+      expect(content).toContain('Memory leak in cache');
+      expect(content).toContain('Added proper cleanup');
+      expect(content).toContain('## Discoveries');
+      expect(content).toContain('Cache eviction timing');
     });
   });
 
