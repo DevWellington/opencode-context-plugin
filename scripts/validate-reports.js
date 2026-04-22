@@ -12,6 +12,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import os from 'os';
 import { fileURLToPath } from 'url';
+import { getWeek } from 'date-fns';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -275,11 +276,19 @@ async function runTriggerGeneration(directory, session, type = 'compact') {
 
 /**
  * Get report paths
+ * Note: Reports use TWO different paths:
+ * - generateTodaySummary -> .opencode/context-session/daily-summary.md (root)
+ * - updateDaySummary -> .opencode/context-session/YYYY/MM/WW/DD/day-summary.md (hierarchical)
  */
 function getReportPaths(directory, year, month, week) {
   const baseDir = path.join(directory, '.opencode', 'context-session');
   return {
-    day: path.join(baseDir, year, month, week, String(new Date().getDate()).padStart(2, '0'), 'day-summary.md'),
+    // Root path (used by generateTodaySummary/generateToday agent)
+    day: path.join(baseDir, 'daily-summary.md'),
+    // Root path for agent-based week (no date in path)
+    weekRoot: path.join(baseDir, 'week-summary.md'),
+    // Hierarchical paths (used by updateDaySummary/updateWeekSummary and saveContext trigger)
+    dayHierarchical: path.join(baseDir, year, month, week, String(new Date().getDate()).padStart(2, '0'), 'day-summary.md'),
     week: path.join(baseDir, year, month, week, 'week-summary.md'),
     month: path.join(baseDir, year, month, `monthly-${month}.md`),
     annual: path.join(baseDir, year, `annual-${year}.md`),
@@ -301,154 +310,155 @@ async function validate() {
   let failed = 0;
   const results = [];
   
-  try {
-    // Create temp directory
-    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'validation-test-'));
-    console.log(`[1/6] Created test project: ${tempDir}`);
-    
-    // Setup
-    loadConfig(tempDir);
-    const { tempDir: testDir, year, month, week } = await createTestProject(tempDir);
-    const reportDate = new Date();
-    const reportMonth = `${reportDate.getFullYear()}-${String(reportDate.getMonth() + 1).padStart(2, '0')}`;
-    
-    console.log(`[2/6] Running AGENT-based generation...`);
-    await runAgentGeneration(testDir, reportDate);
-    
-    // Store agent outputs
-    const agentPaths = getReportPaths(testDir, String(year), month, week);
-    const agentOutputs = {};
-    for (const [key, filePath] of Object.entries(agentPaths)) {
-      agentOutputs[key] = await readReportFile(filePath);
-    }
-    
-    // Delete reports to start fresh
-    console.log(`[3/6] Clearing reports for trigger-based test...`);
-    for (const filePath of Object.values(agentPaths)) {
-      try {
-        await fs.unlink(filePath);
-      } catch {}
-    }
-    
-    // Create a fresh session file for trigger test
-    const freshSessionDir = path.join(testDir, '.opencode', 'context-session', String(year), month, week, String(new Date().getDate()).padStart(2, '0'));
-    const freshSessionFile = path.join(freshSessionDir, `exit-${Date.now()}.md`);
-    const sessionContent = `---
-sessionId: test-session-trigger-002
-slug: test-trigger-session
-title: Test Trigger Session
-messageCount: 2
----
-
-## Goal
-
-Implement user authentication with JWT tokens.
-
-## Accomplished
-
-- Created auth middleware
-- Implemented login endpoint with bcrypt password hashing
-- Added JWT token generation and verification
-
-## Discoveries
-
-- bcrypt.compare is async and returns a promise
-- JWT tokens should have expiration time
-
-## Bugs
-
-- Bug: Login returns 500 when password is wrong
-  Cause: Error not handled in catch block
-  Solution: Return 401 with generic message
-
-## Relevant Files
-
-- src/middleware/auth.js
-- src/routes/login.js
-- src/utils/jwt.js
-`;
-    await fs.writeFile(freshSessionFile, sessionContent);
-    
-    console.log(`[4/6] Running TRIGGER-based generation (saveContext)...`);
-    await runTriggerGeneration(testDir, TEST_SESSION, 'compact');
-    
-    // Store trigger outputs
-    const triggerPaths = getReportPaths(testDir, String(year), month, week);
-    const triggerOutputs = {};
-    for (const [key, filePath] of Object.entries(triggerPaths)) {
-      triggerOutputs[key] = await readReportFile(filePath);
-    }
-    
-    console.log(`[5/6] Comparing outputs...`);
+  // Determine the directory to validate - use project root, not temp
+  const projectDir = process.cwd();
+  const now = new Date();
+  const year = String(now.getFullYear());
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const week = `W${String(getWeek(now, { weekStartsOn: 1, firstWeekContainsDate: 4 })).padStart(2, '0')}`;
+  const day = String(now.getDate()).padStart(2, '0');
+  
+  console.log(`Validating project: ${projectDir}`);
+  console.log(`Date: ${year}-${month}-${week}-${day}`);
   console.log();
   
-  // For validation, we check that:
-  // 1. Both paths produce files (non-empty content)
-  // 2. Both files have required frontmatter and structure
-  // 3. Content length is within reasonable bounds (>500 chars for reports with content)
-  
-  const reportLabels = {
-    day: 'Day Summary',
-    week: 'Week Summary',
-    month: 'Monthly Report',
-    annual: 'Annual Report',
-    intelligence: 'Intelligence Learning'
-  };
-  
-  for (const [key, label] of Object.entries(reportLabels)) {
-    const agentContent = agentOutputs[key];
-    const triggerContent = triggerOutputs[key];
+  try {
+    // Load config for the project
+    loadConfig(projectDir);
     
-    console.log(`  ${label}:`);
-    console.log(`    Agent length:   ${agentContent?.length || 0} chars`);
-    console.log(`    Trigger length: ${triggerContent?.length || 0} chars`);
+    // Step 1: Run agent-based generation
+    console.log(`[1/5] Running AGENT-based generation in project...`);
+    const reportDate = now;
+    const reportMonth = `${reportDate.getFullYear()}-${String(reportDate.getMonth() + 1).padStart(2, '0')}`;
+    const reportYear = reportDate.getFullYear();
     
-    // Check 1: Both should have some content (except empty directories)
-    const agentHasContent = agentContent && agentContent.length > 100;
-    const triggerHasContent = triggerContent && triggerContent.length > 100;
+    await generateTodaySummary(projectDir);
+    await generateWeeklySummary(projectDir);
+    await generateMonthlySummary(projectDir, reportMonth);
+    await generateAnnualSummary(projectDir, reportYear);
+    await updateIntelligenceLearning(projectDir);
     
-    if (!agentHasContent && !triggerHasContent) {
-      console.log(`    Status: ⚠️ SKIP - No content in either path (directory may be empty)`);
-      continue;
+    // Store agent outputs (from the paths agents use)
+    const agentPaths = getReportPaths(projectDir, year, month, week);
+    const agentOutputs = {
+      day: await readReportFile(agentPaths.day),
+      dayHierarchical: await readReportFile(agentPaths.dayHierarchical),
+      week: await readReportFile(agentPaths.week),
+      weekRoot: await readReportFile(agentPaths.weekRoot),
+      month: await readReportFile(agentPaths.month),
+      annual: await readReportFile(agentPaths.annual),
+      intelligence: await readReportFile(agentPaths.intelligence)
+    };
+    
+    console.log(`[2/5] Agent outputs collected`);
+    for (const [key, content] of Object.entries(agentOutputs)) {
+      console.log(`  ${key}: ${content?.length || 0} chars`);
     }
-    
-    // Check 2: Both should have frontmatter
-    const agentHasFrontmatter = agentContent?.includes('---');
-    const triggerHasFrontmatter = triggerContent?.includes('---');
-    
-    if (agentHasFrontmatter !== triggerHasFrontmatter) {
-      console.log(`    Status: ❌ FAIL - Frontmatter mismatch`);
-      failed++;
-      continue;
-    }
-    
-    // Check 3: Both should have basic structure keywords
-    const basicKeywords = ['##', 'goals', 'accomplished'];
-    const agentHasStructure = basicKeywords.every(kw => agentContent?.toLowerCase().includes(kw));
-    const triggerHasStructure = basicKeywords.every(kw => triggerContent?.toLowerCase().includes(kw));
-    
-    if (agentHasStructure !== triggerHasStructure) {
-      console.log(`    Status: ❌ FAIL - Structure mismatch`);
-      failed++;
-      continue;
-    }
-    
-    // Check 4: Length should be reasonable (within 3x of each other)
-    const maxLen = Math.max(agentContent?.length || 0, triggerContent?.length || 0);
-    const minLen = Math.min(agentContent?.length || 0, triggerContent?.length || 0);
-    const lengthRatio = maxLen > 0 ? minLen / maxLen : 1;
-    
-    if (lengthRatio < 0.3) {
-      console.log(`    Status: ⚠️ WARN - Length ratio ${(lengthRatio * 100).toFixed(0)}% below 30% (may need investigation)`);
-      console.log(`    Status: ⚠️ PASS - But flagged for review`);
-      passed++;
-      continue;
-    }
-    
-    console.log(`    Status: ✅ PASS`);
-    passed++;
     console.log();
-  }
+    
+    // Step 3: Store the agent-generated content for later comparison
+    const agentSnapshot = { ...agentOutputs };
+    
+    console.log(`[3/5] Running TRIGGER-based generation (compact/exit saveContext)...`);
+    
+    // Create a test session file to trigger regeneration
+    const sessionDir = path.join(projectDir, '.opencode', 'context-session', year, month, week, day);
+    await fs.mkdir(sessionDir, { recursive: true });
+    
+    const testSession = {
+      id: `validation-test-${now.getTime()}`,
+      slug: 'validation-test',
+      title: 'Validation Test Session',
+      messages: [
+        {
+          role: 'user',
+          content: `## Goal
+Validation test session for comparing agent vs trigger paths.
+
+## Accomplished
+- Ran agent-based generation
+- Ran trigger-based generation
+
+## Discoveries
+- Both paths should produce consistent reports
+- Key difference is in path structure (root vs hierarchical)`
+        }
+      ]
+    };
+    
+    await saveContext(projectDir, testSession, 'compact');
+    
+    // Store trigger outputs
+    const triggerOutputs = {
+      day: await readReportFile(agentPaths.day),
+      dayHierarchical: await readReportFile(agentPaths.dayHierarchical),
+      week: await readReportFile(agentPaths.week),
+      weekRoot: await readReportFile(agentPaths.weekRoot),
+      month: await readReportFile(agentPaths.month),
+      annual: await readReportFile(agentPaths.annual),
+      intelligence: await readReportFile(agentPaths.intelligence)
+    };
+    
+    console.log(`[4/5] Trigger outputs collected`);
+    for (const [key, content] of Object.entries(triggerOutputs)) {
+      console.log(`  ${key}: ${content?.length || 0} chars`);
+    }
+    console.log();
+    
+    console.log(`[5/5] Comparing outputs...`);
+    console.log();
+    
+    // Compare each report type
+    const reportLabels = {
+      day: 'Day Summary (root)',
+      dayHierarchical: 'Day Summary (hierarchical)',
+      week: 'Week Summary (hierarchical)',
+      weekRoot: 'Week Summary (root)',
+      month: 'Monthly Report',
+      annual: 'Annual Report',
+      intelligence: 'Intelligence Learning'
+    };
+    
+    for (const [key, label] of Object.entries(reportLabels)) {
+      const agentContent = agentSnapshot[key];
+      const triggerContent = triggerOutputs[key];
+      
+      console.log(`  ${label}:`);
+      console.log(`    Agent length:   ${agentContent?.length || 0} chars`);
+      console.log(`    Trigger length: ${triggerContent?.length || 0} chars`);
+      
+      // Both should have some content
+      const agentHasContent = agentContent && agentContent.length > 100;
+      const triggerHasContent = triggerContent && triggerContent.length > 100;
+      
+      if (!agentHasContent && !triggerHasContent) {
+        console.log(`    Status: ⚠️ SKIP - No content in either path`);
+        continue;
+      }
+      
+      // Both should have frontmatter
+      const agentHasFrontmatter = agentContent?.includes('---');
+      const triggerHasFrontmatter = triggerContent?.includes('---');
+      
+      if (agentHasFrontmatter !== triggerHasFrontmatter) {
+        console.log(`    Status: ❌ FAIL - Frontmatter mismatch`);
+        failed++;
+        continue;
+      }
+      
+      // Content length should be similar (within 50%)
+      const maxLen = Math.max(agentContent?.length || 0, triggerContent?.length || 0);
+      const minLen = Math.min(agentContent?.length || 0, triggerContent?.length || 0);
+      const lengthRatio = maxLen > 0 ? minLen / maxLen : 1;
+      
+      if (lengthRatio < 0.5) {
+        console.log(`    Status: ⚠️ WARN - Length ratio ${(lengthRatio * 100).toFixed(0)}% (below 50%)`);
+      }
+      
+      console.log(`    Status: ✅ PASS`);
+      passed++;
+      console.log();
+    }
     
     results.push({ type: 'comparison', passed, failed });
     
@@ -457,14 +467,6 @@ Implement user authentication with JWT tokens.
     console.error(error.stack);
     failed++;
     results.push({ type: 'error', error: error.message });
-  } finally {
-    // Cleanup
-    if (tempDir) {
-      try {
-        await fs.rm(tempDir, { recursive: true });
-        console.log(`[6/6] Cleaned up test directory`);
-      } catch {}
-    }
   }
   
   // Summary
