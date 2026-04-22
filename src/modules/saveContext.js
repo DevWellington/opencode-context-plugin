@@ -11,6 +11,8 @@ import { generateMonthlySummary } from '../agents/generateMonthly.js';
 import { generateAnnualSummary } from '../agents/generateAnnual.js';
 import { updateIntelligenceLearning } from '../agents/generateIntelligenceLearning.js';
 import { atomicWrite, getTimestamp } from '../utils/fileUtils.js';
+import { setLastSummarized, addToPendingQueue } from './state.js';
+import { countTokens } from './tokenLimit.js';
 
 const logger = createDebugLogger('context-plugin');
 
@@ -174,6 +176,34 @@ priority: "${priority}"
     logger(`[saveContext] Report regeneration completed`);
 
     logger(`[Daily Summary] Updated with ${filename}`);
+    
+    // Update state to track summarized content
+    const stateKey = `today-${year}-${month}-${day}`;
+    const contentForTokens = summary.messages.map(m => m.content).join(' ');
+    const tokenCount = countTokens(contentForTokens);
+    
+    await setLastSummarized(directory, stateKey, {
+      type: 'day',
+      path: filepath,
+      tokens: tokenCount,
+      sessionsCount: 1
+    });
+    
+    // Add pending work for other summary levels
+    await addToPendingQueue(directory, {
+      type: 'week',
+      key: `week-${year}-${month}-${week}`
+    });
+    await addToPendingQueue(directory, {
+      type: 'month',
+      key: `month-${year}-${month}`
+    });
+    await addToPendingQueue(directory, {
+      type: 'annual',
+      key: `year-${year}`
+    });
+    
+    logger('[saveContext] State updated with summarized content');
     
     return filepath;
   } catch (error) {
