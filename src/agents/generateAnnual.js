@@ -13,6 +13,8 @@
 import path from 'path';
 import fs from 'fs/promises';
 import { buildKeywords, addRelatedLinks, extractKeywordsFromContent, REPORTS_DIR, CONTEXT_SESSION_DIR, addKeywordNavigation, generateKeywordLinks } from './utils/linkBuilder.js';
+import { getConfig } from '../config.js';
+import { truncateToBudget } from '../modules/tokenLimit.js';
 
 /**
  * Scan monthly-YYYY-MM.md files for a year
@@ -262,6 +264,11 @@ created: ${new Date().toISOString()}
 `;
 
   let body = bodyContent;
+
+  // Apply budget limit
+  const budgetCfg = getConfig();
+  const annualMaxChars = budgetCfg.budget?.annualSummary || 1000;
+  body = truncateToBudget(body, annualMaxChars);
 
   // Add keyword navigation for Obsidian
   body += addKeywordNavigation({ type: 'annual', year });

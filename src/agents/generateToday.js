@@ -13,6 +13,7 @@ import fs from 'fs/promises';
 import { getWeek } from 'date-fns';
 import { formatFileHeader, addRelatedLinks, buildKeywords, extractKeywordsFromContent, REPORT_PATHS, addKeywordNavigation } from './utils/linkBuilder.js';
 import { getConfig } from '../config.js';
+import { truncateToBudget } from '../modules/tokenLimit.js';
 
 export async function generateTodaySummary(directory) {
   const config = getConfig();
@@ -77,6 +78,11 @@ export async function generateTodaySummary(directory) {
 
   // Add keyword navigation for Obsidian
   body += addKeywordNavigation({ type: 'daily', year, month, week });
+
+  // Apply budget limit to body
+  const budgetConfig = getConfig();
+  const maxChars = budgetConfig.budget?.daySummary || 5000;
+  body = truncateToBudget(body, maxChars);
 
   const fullReport = header + body;
 

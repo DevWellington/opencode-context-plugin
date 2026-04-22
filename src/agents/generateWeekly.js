@@ -12,6 +12,8 @@ import path from 'path';
 import fs from 'fs/promises';
 import { getWeek } from 'date-fns';
 import { buildKeywords, addRelatedLinks, extractKeywordsFromContent, REPORT_PATHS, REPORTS_DIR, CONTEXT_SESSION_DIR, addKeywordNavigation, generateKeywordLinks } from './utils/linkBuilder.js';
+import { getConfig } from '../config.js';
+import { truncateToBudget } from '../modules/tokenLimit.js';
 
 /**
  * Scan day-summary.md files in a week directory and extract content
@@ -233,6 +235,11 @@ created: ${new Date().toISOString()}
 `;
 
   let body = bodyContent;
+
+  // Apply budget limit
+  const budgetCfg = getConfig();
+  const weekMaxChars = budgetCfg.budget?.weekSummary || 3000;
+  body = truncateToBudget(body, weekMaxChars);
 
   body += addRelatedLinks([
     'intelligence-learning.md',
