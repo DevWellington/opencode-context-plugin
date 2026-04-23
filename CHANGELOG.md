@@ -2,6 +2,31 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.6.0] - 2026-04-23
+
+### Added
+- **Source Code Link Intelligence**: `intelligence-learning.md` now links to actual source code locations (`[[src/file.js:line|symptom]]`) instead of summary files
+- **extractSourceCodeReferences()**: Extracts `file:line` patterns from session content
+- **extractBugCrossReferences()**: Enhances bugs with `sourceRef` pointing to fixes
+- **buildCrossReferenceIndex()**: Builds keyword→file:line mapping for O(1) lookup
+- **inferSourceLocation()**: Infers source locations when not explicitly mentioned
+- **Feature Locations Section**: Intelligence learning tracks where features are implemented
+- **Search Terms**: Bug entries include search-friendly terms for finding similar issues
+- **Atomic Write Recovery**: `recoverOrphanedTempFiles()` auto-recovers `.tmp-*` orphaned files
+
+### Fixed
+- **Emoji Unicode Bug**: Missing `u` flag in regex caused emoji corruption. Fixed across 5 files.
+- **Token Propagation**: Token stats now properly flow through day→week→month→annual hierarchy
+- **Session Count Bug**: Annual summary was showing 0 sessions. Fixed regex to `\*\*Compacts:\*\* (\d+)`
+- **Monthly Format Consistency**: `## Issues Resolved` section now always present with placeholder
+- **Path Prefix Bug**: `reports/` prefix in `KNOWN_REPORTS` replaced with correct paths
+- **Wiki-links Missing**: Hierarchical `day-summary.md` now has Keywords (Obsidian), Related, Navigation sections
+
+### Changed
+- **Intelligence Learning Format**: Keywords now link to source code, not summary files
+- **Related Section Removed**: Replaced with Feature Locations table with source code links
+- **Validation Script**: `scripts/validate-reports.js` compares agent vs trigger output paths
+
 ## [1.5.0] - 2026-04-22
 
 ### Added
