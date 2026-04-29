@@ -106,7 +106,9 @@ Testing agent function
       
       const content = await fs.readFile(path.join(ctxDir, 'intelligence-learning.md'), 'utf-8');
       expect(content).toContain('Intelligence Learning');
-      expect(content).toContain('Test Session');
+      // New format: sessions are transformed into patterns, not raw titles
+      expect(content).toContain('## Project State');
+      expect(content).toContain('## Successful Approaches');
     });
 
     it('should skip greeting sessions', async () => {
