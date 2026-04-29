@@ -14,12 +14,108 @@
 
 import path from 'path';
 import fs from 'fs/promises';
-import { REPORT_PATHS, REPORTS_DIR, CONTEXT_SESSION_DIR, extractKeywordsFromContent } from './utils/linkBuilder.js';
+import { getWeek } from 'date-fns';
+import { REPORT_PATHS, CONTEXT_SESSION_DIR } from './utils/linkBuilder.js';
 import { getConfig } from '../config.js';
 import { extractSessionContent, extractBugs, findPatterns } from '../modules/contentExtractor.js';
 
 const INTELLIGENCE_FILE = 'intelligence-learning.md';
 const MAX_ENTRIES = 20;
+
+/**
+ * Reference Content Schema
+ * Clean, compact format for intelligence-learning.md (~50 lines)
+ */
+export const REFERENCE_SCHEMA = {
+  projectState: {
+    projectName: '',
+    lastUpdated: '',
+    sessionsTracked: 0,
+    activePhase: ''
+  },
+  knownIssues: [], // { id, description, location }
+  successfulApproaches: [], // { pattern, context, frequency, location }
+  failedApproaches: [], // { antiPattern, reason, location }
+  recentPatterns: [] // { type, name, frequency }
+};
+
+/**
+ * Generate compact reference content from pattern data
+ * Output format: ~50 lines with clean sections (no raw content, no backticks)
+ * 
+ * @param {Object} patternData - Structured pattern data following REFERENCE_SCHEMA
+ * @returns {string} Markdown content in compact reference format
+ */
+export function generateReferenceContent(patternData) {
+  const lines = [];
+  const timestamp = new Date().toISOString().split('T')[0];
+  
+  // Header
+  lines.push('# Intelligence Learning');
+  lines.push('');
+  
+  // Project State section
+  lines.push('## Project State');
+  lines.push(`- **Project:** ${patternData.projectState?.projectName || 'opencode-context-plugin'}`);
+  lines.push(`- **Last Updated:** ${patternData.projectState?.lastUpdated || timestamp}`);
+  lines.push(`- **Sessions Tracked:** ${patternData.projectState?.sessionsTracked || 0}`);
+  lines.push(`- **Active Phase:** ${patternData.projectState?.activePhase || 'N/A'}`);
+  lines.push('');
+  
+  // Known Issues section
+  lines.push('## Known Issues');
+  if (patternData.knownIssues && patternData.knownIssues.length > 0) {
+    for (const issue of patternData.knownIssues) {
+      const loc = issue.location ? ` (${issue.location})` : '';
+      lines.push(`- ${issue.id || 'ISSUE'}: ${issue.description}${loc}`);
+    }
+  } else {
+    lines.push('- No known issues');
+  }
+  lines.push('');
+  
+  // Successful Approaches section
+  lines.push('## Successful Approaches');
+  if (patternData.successfulApproaches && patternData.successfulApproaches.length > 0) {
+    for (const approach of patternData.successfulApproaches) {
+      const freq = approach.frequency ? ` (seen ${approach.frequency} times)` : '';
+      const loc = approach.location ? ` (${approach.location})` : '';
+      lines.push(`- ${approach.pattern}${freq}${loc}`);
+    }
+  } else {
+    lines.push('- No patterns recorded yet');
+  }
+  lines.push('');
+  
+  // Failed Approaches section
+  lines.push('## Failed Approaches');
+  if (patternData.failedApproaches && patternData.failedApproaches.length > 0) {
+    for (const approach of patternData.failedApproaches) {
+      const loc = approach.location ? ` (${approach.location})` : '';
+      lines.push(`- ANTI-PATTERN: ${approach.antiPattern}${loc}`);
+    }
+  } else {
+    lines.push('- No failed approaches recorded');
+  }
+  lines.push('');
+  
+  // Recent Patterns section
+  lines.push('## Recent Patterns');
+  if (patternData.recentPatterns && patternData.recentPatterns.length > 0) {
+    for (const pattern of patternData.recentPatterns) {
+      lines.push(`- ${pattern.type}: ${pattern.name} (${pattern.frequency} sessions)`);
+    }
+  } else {
+    lines.push('- No patterns detected yet');
+  }
+  lines.push('');
+  
+  // Footer
+  lines.push('---');
+  lines.push(`Generated: ${timestamp}`);
+  
+  return lines.join('\n');
+}
 
 // Greeting patterns to filter out - messages that are just salutations
 const GREETING_PATTERNS = [
@@ -77,11 +173,10 @@ function isGreetingTitle(title) {
 export async function updateIntelligenceLearning(directory) {
   const config = getConfig();
   const intelligencePath = path.join(directory, REPORT_PATHS.intelligence);
-  const reportsDir = path.join(directory, REPORTS_DIR);
 
   const year = new Date().getFullYear();
   const month = String(new Date().getMonth() + 1).padStart(2, '0');
-  const weekStr = `W${String(getWeekNumber(new Date())).padStart(2, '0')}`;
+  const weekStr = `W${String(getWeek(new Date(), { weekStartsOn: 1, firstWeekContainsDate: 4 })).padStart(2, '0')}`;
 
   let allReportsContent = '';
 
@@ -100,7 +195,7 @@ export async function updateIntelligenceLearning(directory) {
   for (const reportFile of reportFiles) {
     try {
       const content = await fs.readFile(reportFile, 'utf-8');
-      allReportsContent += content + '\n\n';
+      allReportsContent += cleanOldLinks(content) + '\n\n';
     } catch {
       // Report not ready yet
     }
@@ -162,17 +257,6 @@ export async function updateIntelligenceLearning(directory) {
   await fs.writeFile(intelligencePath, content, 'utf-8');
 
   return { success: true, entries: allEntries.length, newSessions: newSessions.length };
-}
-
-/**
- * Read recent session files and gather information
- */
-function getWeekNumber(date) {
-  const d = new Date(date);
-  d.setHours(0, 0, 0, 0);
-  d.setDate(d.getDate() + 4 - (d.getDay() || 7));
-  const yearStart = new Date(d.getFullYear(), 0, 1);
-  return Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
 }
 
 /**
@@ -259,11 +343,11 @@ async function gatherRecentSessionInfo(directory) {
   const day = String(today.getDate()).padStart(2, '0');
 
   // Calculate ISO week number using same logic as reportGenerator
-  const isoWeek = String(getWeekNumber(today)).padStart(2, '0');
+  const isoWeek = String(getWeek(today, { weekStartsOn: 1, firstWeekContainsDate: 4 })).padStart(2, '0');
   const weekDir = `W${isoWeek}`;
 
   // Try to find session directory
-  let sessionDir = path.join(directory, '.opencode', 'context-session', String(year), month, weekDir, day);
+  let sessionDir = path.join(directory, CONTEXT_SESSION_DIR, String(year), month, weekDir, day);
   let sessionFiles = [];
 
   try {
@@ -271,7 +355,7 @@ async function gatherRecentSessionInfo(directory) {
     sessionFiles = files.filter(f => f.endsWith('.md'));
   } catch {
     // Try searching for today's sessions in any week directory
-    const baseDir = path.join(directory, '.opencode', 'context-session', String(year), month);
+    const baseDir = path.join(directory, CONTEXT_SESSION_DIR, String(year), month);
     try {
       const weeks = await fs.readdir(baseDir);
       for (const week of weeks) {
@@ -459,9 +543,26 @@ function parseExistingEntries(content) {
 /**
  * Generate updated intelligence learning content
  */
+/**
+ * Clean old/deprecated links from content
+ * Removes references to old flat reports/ structure
+ */
+function cleanOldLinks(content) {
+  if (!content) return '';
+  // Remove links to old reports/ directory and deprecated paths, plus truncation markers
+  return content
+    .replace(/\[\[reports\/[^\]]+\]\]/g, '')
+    .replace(/\[\[\.opencode\/context-session\/reports\/[^\]]+\]\]/g, '')
+    .replace(/\*\(truncated\)\*/g, '')
+    .replace(/\[truncated\]/g, '')
+    .trim();
+}
+
 function generateIntelligenceContent(entries, latestEntry) {
-  const keywordsList = latestEntry.keywords?.length 
-    ? latestEntry.keywords.map(k => `[[${k}]]`).join(' | ')
+  const rawKeywords = latestEntry.keywords || [];
+  const uniqueKeywords = [...new Set(rawKeywords.map(k => k.toLowerCase()))].map(k => rawKeywords.find(item => item.toLowerCase() === k));
+  const keywordsList = uniqueKeywords?.length > 0
+    ? [...new Set(uniqueKeywords)].map(k => `[[${k}]]`).join(' | ')
     : '[[opencode-context-plugin]] | [[intelligence-learning]]';
 
   // Extract structured content from all entries using contentExtractor patterns
@@ -477,10 +578,16 @@ function generateIntelligenceContent(entries, latestEntry) {
   
   const patterns = patternSessions.length >= 2 ? findPatterns(patternSessions) : [];
 
-  // Build accomplishments list for pattern analysis
+  // Build accomplishments list for pattern analysis - deduplicate using Set
+  const accomplishmentSet = new Set();
   const accomplishments = allSessions
     .map(s => s.accomplished)
     .filter(Boolean)
+    .filter(a => {
+      if (accomplishmentSet.has(a)) return false;
+      accomplishmentSet.add(a);
+      return true;
+    })
     .slice(0, 10);
 
   let content = `---
@@ -510,17 +617,18 @@ lastUpdated: ${new Date().toISOString()}
         content += `#### ${session.title}\n`;
         
         // Use template format for structured content
+        // Clean old links before writing
         if (session.goal) {
-          content += `## Goal\n${session.goal}\n\n`;
+          content += `## Goal\n${cleanOldLinks(session.goal)}\n\n`;
         }
         if (session.firstUserMessage) {
-          content += `## Instructions\n${session.firstUserMessage}\n\n`;
+          content += `## Instructions\n${cleanOldLinks(session.firstUserMessage)}\n\n`;
         }
         if (session.discoveries) {
-          content += `## Discoveries\n${session.discoveries}\n\n`;
+          content += `## Discoveries\n${cleanOldLinks(session.discoveries)}\n\n`;
         }
         if (session.accomplished) {
-          content += `## Accomplished\n${session.accomplished}\n\n`;
+          content += `## Accomplished\n${cleanOldLinks(session.accomplished)}\n\n`;
         }
         if (session.relevantFiles?.length) {
           content += `## Relevant Files\n${session.relevantFiles.map(f => `- ${f}`).join('\n')}\n\n`;
@@ -573,7 +681,13 @@ lastUpdated: ${new Date().toISOString()}
 
   content += `## Related\n`;
   content += `  - [[daily-summary.md]]\n`;
-  content += `  - [[reports/weekly-${new Date().getFullYear()}-W${String(Math.ceil(new Date().getDate() / 7)).padStart(2, '0')}.md]]\n`;
+
+  // Weekly report link using current date's hierarchical path
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonth = String(now.getMonth() + 1).padStart(2, '0');
+  const currentWeek = `W${String(getWeek(now, { weekStartsOn: 1, firstWeekContainsDate: 4 })).padStart(2, '0')}`;
+  content += `  - [[${currentYear}/${currentMonth}/${currentWeek}/week-summary.md]]\n`;
 
   return content;
 }
