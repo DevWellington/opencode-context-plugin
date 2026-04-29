@@ -170,6 +170,93 @@ function isGreetingTitle(title) {
   return false;
 }
 
+/**
+ * Transform session entries into reference schema format
+ * Converts raw session data into compact patterns and issues
+ */
+function transformToReferenceSchema(allEntries, latestEntry) {
+  const timestamp = new Date().toISOString().split('T')[0];
+  const allSessions = allEntries.flatMap(e => e.sessions || []);
+  
+  // Build project state
+  const projectState = {
+    projectName: 'opencode-context-plugin',
+    lastUpdated: timestamp,
+    sessionsTracked: allEntries.reduce((sum, e) => sum + (e.sessionCount || 0), 0),
+    activePhase: 'intelligence-learning-reform'
+  };
+
+  // Extract known issues and failed approaches from bugs
+  const knownIssues = [];
+  const failedApproaches = [];
+  
+  for (const session of allSessions) {
+    if (session.bugs?.length) {
+      for (const bug of session.bugs) {
+        if (bug.solution || bug.resolution) {
+          // Resolved bug = failed approach
+          failedApproaches.push({
+            antiPattern: bug.symptom,
+            reason: bug.cause || 'resolved with workaround',
+            location: session.relevantFiles?.[0] ? `${session.relevantFiles[0]}:${bug.line || 0}` : ''
+          });
+        } else {
+          // Unresolved bug = known issue
+          knownIssues.push({
+            id: `BUG-${(bug.symptom || 'unknown').slice(0, 20).replace(/\s+/g, '-').toUpperCase()}`,
+            description: bug.symptom,
+            location: session.relevantFiles?.[0] ? `${session.relevantFiles[0]}:${bug.line || 0}` : ''
+          });
+        }
+      }
+    }
+  }
+
+  // Extract successful approaches from accomplishments
+  const successfulApproaches = [];
+  const seenAccomplishments = new Set();
+  
+  for (const session of allSessions) {
+    if (session.accomplished && !seenAccomplishments.has(session.accomplished)) {
+      seenAccomplishments.add(session.accomplished);
+      // Create pattern: "when [goal], do [accomplishment]"
+      const patternText = session.goal 
+        ? `when ${session.goal.slice(0, 30)}, do ${session.accomplished.slice(0, 40)}`
+        : session.accomplished.slice(0, 70);
+      
+      successfulApproaches.push({
+        pattern: patternText,
+        context: session.title || '',
+        frequency: 1,
+        location: session.relevantFiles?.[0] || ''
+      });
+    }
+  }
+
+  // Use findPatterns for recent patterns
+  const patternSessions = allSessions
+    .filter(s => s.goal || s.accomplished || s.discoveries)
+    .map((s, i) => ({
+      sessionId: s.sessionId || `session-${i}`,
+      content: `## Goal\n${s.goal || ''}\n\n## Accomplished\n${s.accomplished || ''}\n\n## Discoveries\n${s.discoveries || ''}`
+    }));
+  
+  const patterns = patternSessions.length >= 2 ? findPatterns(patternSessions) : [];
+  const recentPatterns = patterns.slice(0, 5).map(p => ({
+    type: p.pattern.split(':')[0] || 'general',
+    name: p.pattern.split(':').slice(1).join(':').trim() || p.pattern,
+    frequency: p.frequency
+  }));
+
+  return {
+    projectState,
+    knownIssues: knownIssues.slice(0, 10),
+    successfulApproaches: successfulApproaches.slice(0, 10),
+    failedApproaches: failedApproaches.slice(0, 10),
+    recentPatterns
+  };
+}
+
 export async function updateIntelligenceLearning(directory) {
   const config = getConfig();
   const intelligencePath = path.join(directory, REPORT_PATHS.intelligence);
@@ -249,8 +336,11 @@ export async function updateIntelligenceLearning(directory) {
   // Add new entry at the beginning, capped at MAX_ENTRIES
   const allEntries = [deduplicatedEntry, ...existingEntries].slice(0, MAX_ENTRIES);
 
-  // Generate updated content
-  const content = generateIntelligenceContent(allEntries, deduplicatedEntry);
+  // Transform to reference schema format
+  const patternData = transformToReferenceSchema(allEntries, deduplicatedEntry);
+
+  // Generate updated content using new compact format
+  const content = generateReferenceContent(patternData);
 
   // Save
   await fs.mkdir(path.dirname(intelligencePath), { recursive: true });
