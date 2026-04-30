@@ -143,7 +143,7 @@ export async function initializeIntelligenceLearning(baseDir) {
  * @param {Array} newPatterns - New patterns from findPatterns()
  * @returns {Object} { pinnedContent, recentContent }
  */
-function preservePersistentPatterns(existingContent, newPatterns) {
+export function preservePersistentPatterns(existingContent, newPatterns) {
   // Extract existing persistent patterns
   const existingPatterns = extractPersistentPatterns(existingContent);
   

@@ -18,6 +18,7 @@ import { getWeek } from 'date-fns';
 import { REPORT_PATHS, CONTEXT_SESSION_DIR } from './utils/linkBuilder.js';
 import { getConfig } from '../config.js';
 import { extractSessionContent, extractBugs, findPatterns } from '../modules/contentExtractor.js';
+import { preservePersistentPatterns } from '../modules/intelligence.js';
 
 const INTELLIGENCE_FILE = 'intelligence-learning.md';
 const MAX_ENTRIES = 20;
@@ -65,7 +66,7 @@ export function generateReferenceContent(patternData) {
   // Known Issues section
   lines.push('## Known Issues');
   if (patternData.knownIssues && patternData.knownIssues.length > 0) {
-    for (const issue of patternData.knownIssues) {
+    for (const issue of patternData.knownIssues.slice(0, 10)) {
       const loc = issue.location ? ` (${issue.location})` : '';
       lines.push(`- ${issue.id || 'ISSUE'}: ${issue.description}${loc}`);
     }
@@ -77,7 +78,7 @@ export function generateReferenceContent(patternData) {
   // Successful Approaches section
   lines.push('## Successful Approaches');
   if (patternData.successfulApproaches && patternData.successfulApproaches.length > 0) {
-    for (const approach of patternData.successfulApproaches) {
+    for (const approach of patternData.successfulApproaches.slice(0, 10)) {
       const freq = approach.frequency ? ` (seen ${approach.frequency} times)` : '';
       const loc = approach.location ? ` (${approach.location})` : '';
       lines.push(`- ${approach.pattern}${freq}${loc}`);
@@ -90,9 +91,10 @@ export function generateReferenceContent(patternData) {
   // Failed Approaches section
   lines.push('## Failed Approaches');
   if (patternData.failedApproaches && patternData.failedApproaches.length > 0) {
-    for (const approach of patternData.failedApproaches) {
+    for (const approach of patternData.failedApproaches.slice(0, 10)) {
+      const reason = approach.reason ? ` because ${approach.reason}` : '';
       const loc = approach.location ? ` (${approach.location})` : '';
-      lines.push(`- ANTI-PATTERN: ${approach.antiPattern}${loc}`);
+      lines.push(`- ANTI-PATTERN: ${approach.antiPattern}${reason}${loc}`);
     }
   } else {
     lines.push('- No failed approaches recorded');
@@ -102,7 +104,7 @@ export function generateReferenceContent(patternData) {
   // Recent Patterns section
   lines.push('## Recent Patterns');
   if (patternData.recentPatterns && patternData.recentPatterns.length > 0) {
-    for (const pattern of patternData.recentPatterns) {
+    for (const pattern of patternData.recentPatterns.slice(0, 10)) {
       lines.push(`- ${pattern.type}: ${pattern.name} (${pattern.frequency} sessions)`);
     }
   } else {
@@ -173,6 +175,19 @@ function isGreetingTitle(title) {
 /**
  * Transform session entries into reference schema format
  * Converts raw session data into compact patterns and issues
+ *
+ * @param {Array} allEntries - All monthly entries with sessions from readMonthlyFiles()
+ * @param {Object} latestEntry - Most recent monthly entry for new session data
+ * @returns {Object} Reference schema with { projectState, knownIssues, successfulApproaches, failedApproaches, recentPatterns }
+ *
+ * Input: extractBugs() returns { symptom, cause, solution, prevention }
+ *
+ * Transformations:
+ * - Unresolved bug (no solution) → knownIssues with { id, description, location }
+ * - Resolved bug (has solution) → failedApproaches with { antiPattern, reason, location }
+ *
+ * ID generation: BUG-${symptom.slice(0,20).replace(/\s+/g, '-').toUpperCase()}
+ * Location: session.relevantFiles[0]:bug.line
  */
 function transformToReferenceSchema(allEntries, latestEntry) {
   const timestamp = new Date().toISOString().split('T')[0];
@@ -336,11 +351,21 @@ export async function updateIntelligenceLearning(directory) {
   // Add new entry at the beginning, capped at MAX_ENTRIES
   const allEntries = [deduplicatedEntry, ...existingEntries].slice(0, MAX_ENTRIES);
 
+  // Extract patterns from new sessions for preservePersistentPatterns
+  const sessionPatterns = (newSessionInfo.sessions || []).map(s => ({
+    pattern: s.title || s.goal || '',
+    sessionCount: 1
+  }));
+
+  // Preserve pinned patterns (seen 3+ times) from existing content
+  const { pinnedContent } = preservePersistentPatterns(existingContent, sessionPatterns);
+
   // Transform to reference schema format
   const patternData = transformToReferenceSchema(allEntries, deduplicatedEntry);
 
   // Generate updated content using new compact format
-  const content = generateReferenceContent(patternData);
+  const pinnedSection = pinnedContent ? `# Pinned Patterns\n\n${pinnedContent}\n\n` : '';
+  const content = pinnedSection + generateReferenceContent(patternData);
 
   // Save
   await fs.mkdir(path.dirname(intelligencePath), { recursive: true });

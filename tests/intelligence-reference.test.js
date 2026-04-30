@@ -303,4 +303,115 @@ Added JWT authentication using jose library
       expect(REFERENCE_SCHEMA.projectState).toHaveProperty('activePhase');
     });
   });
+
+  describe('Output line count verification', () => {
+    it('should produce 40-60 lines of output', async () => {
+      const { generateReferenceContent } = await import('../src/agents/generateIntelligenceLearning.js');
+
+      const patternData = {
+        projectState: {
+          projectName: 'test-project',
+          lastUpdated: '2026-04-29',
+          sessionsTracked: 5,
+          activePhase: 'test-phase'
+        },
+        knownIssues: [
+          { id: 'BUG-NULL-PTR', description: 'Null pointer exception on startup', location: 'src/utils/helper.js:42' },
+          { id: 'BUG-MEMORY-LEAK', description: 'Memory leak in event handlers', location: 'src/core/handler.js:15' },
+          { id: 'BUG-ASYNC-RACE', description: 'Race condition in async operations', location: 'src/services/sync.js:88' },
+          { id: 'BUG-AUTH-TOKEN', description: 'Token expiration not handled', location: 'src/auth/jwt.js:33' },
+          { id: 'BUG-INVALID-INPUT', description: 'Input validation bypassed', location: 'src/middleware/validate.js:21' },
+          { id: 'BUG-TYPE-ERROR', description: 'Type casting issues', location: 'src/core/types.js:17' },
+          { id: 'BUG-DEPRECATED-API', description: 'Using deprecated endpoints', location: 'src/api/v1.js:9' }
+        ],
+        successfulApproaches: [
+          { pattern: 'use jose for JWT handling', context: 'ESM-native library', frequency: 8, location: 'src/auth/jwt.js:12' },
+          { pattern: 'implement circuit breaker', context: 'for external APIs', frequency: 5, location: 'src/api/client.js:45' },
+          { pattern: 'use connection pooling', context: 'database connections', frequency: 6, location: 'src/db/pool.js:28' },
+          { pattern: 'add request debouncing', context: 'user input handling', frequency: 4, location: 'src/ui/input.js:67' },
+          { pattern: 'use parameterized queries', context: 'SQL injection prevention', frequency: 7, location: 'src/db/query.js:31' },
+          { pattern: 'implement retry logic', context: 'transient failures', frequency: 3, location: 'src/api/retry.js:22' }
+        ],
+        failedApproaches: [
+          { antiPattern: 'callback hell', reason: 'hard to debug and maintain', location: 'src/legacy/callbacks.js:12' },
+          { antiPattern: 'synchronous file I/O', reason: 'blocks event loop', location: 'src/utils/file.js:33' },
+          { antiPattern: 'global mutable state', reason: 'causes race conditions', location: 'src/state/global.js:8' },
+          { antiPattern: 'monolithic functions', reason: 'difficult to test', location: 'src/core/main.js:55' },
+          { antiPattern: 'string concatenation for SQL', reason: 'SQL injection vulnerability', location: 'src/db/raw.js:14' }
+        ],
+        recentPatterns: [
+          { type: 'goal theme', name: 'authentication', frequency: 5 },
+          { type: 'bug pattern', name: 'null checks', frequency: 3 },
+          { type: 'approach', name: 'async/await patterns', frequency: 4 },
+          { type: 'goal theme', name: 'error handling', frequency: 3 },
+          { type: 'bug pattern', name: 'type conversions', frequency: 2 }
+        ]
+      };
+
+      const content = generateReferenceContent(patternData);
+      const lineCount = content.split('\n').length;
+
+      expect(lineCount).toBeGreaterThanOrEqual(40);
+      expect(lineCount).toBeLessThanOrEqual(60);
+    });
+  });
+
+  describe('Overflow enforcement (slice 0, 10)', () => {
+    it('should cap knownIssues at 10 items', async () => {
+      const { generateReferenceContent } = await import('../src/agents/generateIntelligenceLearning.js');
+
+      const patternData = {
+        projectState: { projectName: 'test', lastUpdated: '', sessionsTracked: 0, activePhase: '' },
+        knownIssues: Array(15).fill(null).map((_, i) => ({
+          id: `BUG-${i}`, description: `Issue ${i}`, location: `file${i}.js:1`
+        })),
+        successfulApproaches: [],
+        failedApproaches: [],
+        recentPatterns: []
+      };
+
+      const content = generateReferenceContent(patternData);
+      // CORRECT: Match BUG-NULL-PTR format (hyphenated uppercase)
+      const issueMatches = content.match(/^- BUG-[A-Z0-9-]+:\s+.+/gm);
+      expect(issueMatches.length).toBe(10);
+    });
+
+    it('should cap successfulApproaches at 10 items', async () => {
+      const { generateReferenceContent } = await import('../src/agents/generateIntelligenceLearning.js');
+
+      const patternData = {
+        projectState: { projectName: 'test', lastUpdated: '', sessionsTracked: 0, activePhase: '' },
+        knownIssues: [],
+        successfulApproaches: Array(15).fill(null).map((_, i) => ({
+          pattern: `pattern ${i}`, context: '', frequency: 1, location: ''
+        })),
+        failedApproaches: [],
+        recentPatterns: []
+      };
+
+      const content = generateReferenceContent(patternData);
+      // CORRECT: Match "(seen N times)" format
+      const patternMatches = content.match(/\(seen\s+\d+\s+times\)/g);
+      expect(patternMatches.length).toBe(10);
+    });
+
+    it('should cap failedApproaches at 10 items', async () => {
+      const { generateReferenceContent } = await import('../src/agents/generateIntelligenceLearning.js');
+
+      const patternData = {
+        projectState: { projectName: 'test', lastUpdated: '', sessionsTracked: 0, activePhase: '' },
+        knownIssues: [],
+        successfulApproaches: [],
+        failedApproaches: Array(15).fill(null).map((_, i) => ({
+          antiPattern: `anti ${i}`, reason: '', location: ''
+        })),
+        recentPatterns: []
+      };
+
+      const content = generateReferenceContent(patternData);
+      // CORRECT: Match ANTI-PATTERN: format
+      const antiMatches = content.match(/^- ANTI-PATTERN:\s+.+/gm);
+      expect(antiMatches.length).toBe(10);
+    });
+  });
 });

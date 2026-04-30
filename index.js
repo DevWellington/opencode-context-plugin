@@ -168,6 +168,16 @@ export async function autoInjectContexts(session) {
 export function registerPluginHooks(opencodeApi) {
   // Session start - auto inject if enabled
   opencodeApi.onSessionStart(async (session) => {
+    // Guard: prevent regeneration on every start
+    const stateFile = path.join(session.directory, '.opencode', 'context-session', 'intelligence-learning.md');
+
+    // Read intelligence learning for session context
+    const { readIntelligenceLearning } = await import('./src/agents/readIntelligenceLearning.js');
+    const intelligence = await readIntelligenceLearning(session.directory, { summary: true });
+    if (intelligence && typeof intelligence === 'string') {
+      opencodeApi.addToPrompt(`\n\n## Intelligence Learning\n\n${intelligence}\n`);
+    }
+
     const injected = await autoInjectContexts(session);
     if (injected) {
       opencodeApi.addToPrompt(injected);
@@ -177,7 +187,7 @@ export function registerPluginHooks(opencodeApi) {
   // Session end - save context (existing behavior)
   opencodeApi.onSessionEnd(async (session) => {
     const { saveContext } = await import('./src/modules/saveContext.js');
-    await saveContext(session.directory || session.directory, session, 'exit');
+    await saveContext(session.directory, session, 'exit');
   });
 }
 
@@ -481,7 +491,6 @@ export {
   readAnnualSummary,
   readIntelligenceLearning,
   // Constants
-  REPORTS_DIR,
   REPORT_PATHS
 } from './src/agents/index.js';
 
