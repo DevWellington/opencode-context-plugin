@@ -121,7 +121,9 @@ export function truncateToTokenLimit(content, maxTokens) {
  */
 export function truncateToBudget(content, maxChars) {
   if (!content || content.length <= maxChars) return content || '';
-  const truncated = content.slice(0, maxChars);
+  // Strip existing truncation markers to avoid double markers
+  const cleanContent = content.replace(/\*\(truncated\)\*/g, '').replace(/\s*\[truncated\]\s*$/g, '').trim();
+  const truncated = cleanContent.slice(0, maxChars);
   return truncated + ' [truncated]';
 }
 

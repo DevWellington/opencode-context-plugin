@@ -54,6 +54,10 @@ Implement user authentication flow
       const daySummaryPath = path.join(ctxDir, 'day-summary.md');
       const content = await fs.readFile(daySummaryPath, 'utf-8');
 
+      // Should have YAML frontmatter
+      expect(content).toMatch(/^---\n/);
+      expect(content).toContain('title: Day Summary - 2026-04-21');
+      expect(content).toContain('date: 2026-04-21');
       // New content extraction format
       expect(content).toContain('**Date:** 2026-04-21');
       expect(content).toContain('**Sessions:** 1');
@@ -343,6 +347,138 @@ Task two
 
       const content = await fs.readFile(path.join(ctxDir, 'day-summary.md'), 'utf-8');
       expect(content).toContain('**Date:** 2026-04-21');
+    });
+  });
+
+  describe('wiki-links generation', () => {
+    it('should include Keywords (Obsidian) section when week is provided', async () => {
+      const sessionContent = `## Goal
+Implement caching layer
+
+## Accomplished
+- Added Redis cache integration
+- Optimized database queries
+
+## Relevant Files
+- src/cache/redis.js
+- src/db/optimize.js
+`;
+
+      await fs.writeFile(path.join(ctxDir, 'compact-2026-04-21T10-30-00.md'), sessionContent);
+
+      const summaries = await import('../src/modules/summaries.js');
+
+      const sessionInfo = {
+        type: 'compact',
+        filename: 'compact-2026-04-21T10-30-00.md',
+        year: '2026',
+        month: '04',
+        day: '21',
+        week: 'W17'
+      };
+
+      await summaries.updateDaySummary(ctxDir, sessionInfo);
+
+      const daySummaryPath = path.join(ctxDir, 'day-summary.md');
+      const content = await fs.readFile(daySummaryPath, 'utf-8');
+
+      // Should have Keywords (Obsidian) section
+      expect(content).toContain('## Keywords (Obsidian)');
+      // Should have [[keyword]] style links
+      expect(content).toMatch(/\[\[.*\]\]/);
+    });
+
+    it('should include Related section with correct links when week is provided', async () => {
+      const sessionContent = `## Goal
+Test goal
+
+## Accomplished
+- Test accomplishment
+`;
+
+      await fs.writeFile(path.join(ctxDir, 'exit-2026-04-21T15-00-00.md'), sessionContent);
+
+      const summaries = await import('../src/modules/summaries.js');
+
+      const sessionInfo = {
+        type: 'exit',
+        filename: 'exit-2026-04-21T15-00-00.md',
+        year: '2026',
+        month: '04',
+        day: '21',
+        week: 'W17'
+      };
+
+      await summaries.updateDaySummary(ctxDir, sessionInfo);
+
+      const content = await fs.readFile(path.join(ctxDir, 'day-summary.md'), 'utf-8');
+
+      // Should have Related section
+      expect(content).toContain('## Related');
+      // Should link to intelligence-learning.md using Vault Root path
+      expect(content).toContain('[[.opencode/context-session/intelligence-learning.md]]');
+      // Should link to week summary using Vault Root path
+      expect(content).toContain('[[.opencode/context-session/2026/04/W17/week-summary.md]]');
+      // Should link to monthly report using Vault Root path
+      expect(content).toContain('[[.opencode/context-session/2026/04/monthly-2026-04.md]]');
+    });
+
+    it('should include Navigation section when week is provided', async () => {
+      const sessionContent = `## Goal
+Navigation test
+`;
+
+      await fs.writeFile(path.join(ctxDir, 'compact-2026-04-21T10-30-00.md'), sessionContent);
+
+      const summaries = await import('../src/modules/summaries.js');
+
+      const sessionInfo = {
+        type: 'compact',
+        filename: 'compact-2026-04-21T10-30-00.md',
+        year: '2026',
+        month: '04',
+        day: '21',
+        week: 'W17'
+      };
+
+      await summaries.updateDaySummary(ctxDir, sessionInfo);
+
+      const content = await fs.readFile(path.join(ctxDir, 'day-summary.md'), 'utf-8');
+
+      // Should have Navigation section
+      expect(content).toContain('## Navigation');
+      // Should have bidirectional links (relative to Vault root)
+      expect(content).toContain('[[.opencode/context-session/daily-summary.md|Today]]');
+      expect(content).toContain('[[.opencode/context-session/2026/04/W17/week-summary.md|This Week]]');
+      expect(content).toContain('[[.opencode/context-session/intelligence-learning.md|Intelligence]]');
+    });
+
+    it('should NOT include wiki-links when week is not provided', async () => {
+      const sessionContent = `## Goal
+No week test
+`;
+
+      await fs.writeFile(path.join(ctxDir, 'compact-2026-04-21T10-30-00.md'), sessionContent);
+
+      const summaries = await import('../src/modules/summaries.js');
+
+      const sessionInfo = {
+        type: 'compact',
+        filename: 'compact-2026-04-21T10-30-00.md',
+        year: '2026',
+        month: '04',
+        day: '21'
+        // week is intentionally omitted
+      };
+
+      await summaries.updateDaySummary(ctxDir, sessionInfo);
+
+      const content = await fs.readFile(path.join(ctxDir, 'day-summary.md'), 'utf-8');
+
+      // Should NOT have wiki-link sections
+      expect(content).not.toContain('## Keywords (Obsidian)');
+      expect(content).not.toContain('## Related');
+      expect(content).not.toContain('## Navigation');
     });
   });
 

@@ -233,6 +233,23 @@ opencode-context-plugin/
 
 ## Changelog
 
+### v1.6.1 (2026-05-01)
+- **10 Known Issues Resolved**: TOKEN-PROPAGATION, EMOJI-CORRUPTION, PATH-INCONSISTENCY, TRUNCATION-MARKERS, WIKI-LINK-CONTAMINATION, ISO-WEEK-BUG, EXTRACTSECTION-CRASH, DEBOUNCE-STATIC-DELAY, DUPLICATE-EXTRACTSECTION, KEYWORD-DUPLICATION
+- **322 tests passing** - comprehensive test coverage across all modules
+- **Failed Approaches documented**: 4 anti-patterns recorded to prevent future regressions
+- **Test**: 322 testes passando
+
+### v1.6.0 (2026-04-23)
+- **Source Code Link Intelligence**: `intelligence-learning.md` now links to actual source code locations (`[[src/file.js:line|symptom]]`) instead of summary files
+- **extractSourceCodeReferences()**: Extracts `file:line` patterns from session content
+- **extractBugCrossReferences()**: Enhances bugs with `sourceRef` pointing to fixes
+- **buildCrossReferenceIndex()**: Builds keyword→file:line mapping for O(1) lookup
+- **inferSourceLocation()**: Infers source locations when not explicitly mentioned
+- **Feature Locations Section**: Intelligence learning tracks where features are implemented
+- **Search Terms**: Bug entries include search-friendly terms for finding similar issues
+- **Atomic Write Recovery**: `recoverOrphanedTempFiles()` auto-recovers `.tmp-*` orphaned files
+- **Test**: 291 testes passando
+
 ### v1.5.0 (2026-04-22)
 - **Token Counting Enhancement**: `countTokens()`, `countSessionTokens()` para contagem precisa
 - **Summary Budget Limits**: Limites por nível (day: 5000, week: 3000, month: 2000, annual: 1000 chars)

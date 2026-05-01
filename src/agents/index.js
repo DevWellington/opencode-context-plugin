@@ -23,4 +23,4 @@ export { readIntelligenceLearning } from './readIntelligenceLearning.js';
 export { showHelp } from './ocpHelp.js';
 
 // Re-export constants for consistency
-export { REPORTS_DIR, REPORT_PATHS } from './utils/linkBuilder.js';
+export { REPORT_PATHS } from './utils/linkBuilder.js';

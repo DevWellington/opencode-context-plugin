@@ -26,21 +26,21 @@
 
 **Goal:** Fix duplicate daily summaries and missing wiki-links in hierarchical day-summary.md files.
 
-**Plans:** 1/3 plans executed
+**Plans:** 3/3 plans executed
 
-**Status:** Planning complete
+**Status:** Phase complete
 
 ### Plans
 
 - [x] 02-fix-obsidian-wikilinks-01-PLAN.md — Fix formatDayContent to add wiki-links and fix KNOWN_REPORTS
-- [ ] 02-fix-obsidian-wikilinks-02-PLAN.md — Fix reports/ path prefix in generateIntelligenceLearning.js
-- [ ] 02-fix-obsidian-wikilinks-03-PLAN.md — Create cleanup script for deprecated root daily-summary.md
+- [x] 02-fix-obsidian-wikilinks-02-PLAN.md — Fix reports/ path prefix in generateIntelligenceLearning.js
+- [x] 02-fix-obsidian-wikilinks-03-PLAN.md — Create cleanup script for deprecated root daily-summary.md
 
 ### Requirements
 
-- [OWB-01] Fix day-summary.md wiki-links (Keywords, Related, Navigation sections)
-- [OWB-02] Fix reports/ path prefix in all files
-- [OWB-03] Cleanup deprecated root daily-summary.md
+- [x] [OWB-01] Fix day-summary.md wiki-links (Keywords, Related, Navigation sections)
+- [x] [OWB-02] Fix reports/ path prefix in all files
+- [x] [OWB-03] Cleanup deprecated root daily-summary.md
 
 ## Phase 18: Intelligence Learning v2
 
@@ -130,31 +130,32 @@
 
 **Goal:** Fix critical and high-priority bugs in generated markdown files: truncation marker propagation, invalid wiki-link paths, missing frontmatter, month zero-padding, emoji/header leakage, and stale reports/ links.
 
-**Plans:** 4 plans
+**Plans:** 5/5 plans executed
 
-**Status:** Planning complete
+**Status:** Phase complete
 
 ### Plans
 
-- [ ] 22-bugfix-p0p1-01-PLAN.md — Fix core utilities: wiki-links, truncation, emoji/header stripping
-- [ ] 22-bugfix-p0p1-02-PLAN.md — Fix generators: paths, frontmatter, month padding, reports/ links
-- [ ] 22-bugfix-p0p1-03-PLAN.md — Add tests for all bug fixes; run full regression suite
-- [ ] 22-bugfix-p0p1-04-PLAN.md — Create regeneration script and rebuild all summary files
+- [x] 22-bugfix-p0p1-01-PLAN.md — Fix core utilities: wiki-links, truncation, emoji/header stripping
+- [x] 22-bugfix-p0p1-02-PLAN.md — Fix generators: paths, frontmatter, month padding, reports/ links
+- [x] 22-bugfix-p0p1-03-PLAN.md — Add tests for all bug fixes; run full regression suite
+- [x] 22-bugfix-p0p1-04-PLAN.md — Create regeneration script and rebuild all summary files
+- [x] 22-bugfix-p0p1-05-PLAN.md — Fix remaining P0 verification gaps (bullet-before-emoji, header leakage, truncation propagation, state deduplication, legacy REPORTS_DIR removal, emoji prefixes in generators)
 
 ### Requirements
 
-- [BUGFIX-P0-01] Strip `*(truncated)*` markers before aggregation
-- [BUGFIX-P0-02] Fix root daily-summary weekly link (../ → ./)
-- [BUGFIX-P0-03] Remove CONTEXT_SESSION_DIR prefix from wiki-links
-- [BUGFIX-P0-04] Fix intelligence link in day-summary.md (4-level relative path)
-- [BUGFIX-P1-05] Add frontmatter to day-summary.md
-- [BUGFIX-P1-06] Fix month zero-padding in monthly summary links
-- [BUGFIX-P1-07] Strip emojis from aggregated discoveries
-- [BUGFIX-P1-08] Prevent nested headers leaking into bullet lists
-- [BUGFIX-P1-09] Avoid double truncation markers
-- [BUGFIX-P1-10] Migrate/filter old reports/ links in intelligence-learning.md
+- [x] [BUGFIX-P0-01] Strip `*(truncated)*` markers before aggregation
+- [x] [BUGFIX-P0-02] Fix root daily-summary weekly link (../ → ./)
+- [x] [BUGFIX-P0-03] Remove CONTEXT_SESSION_DIR prefix from wiki-links
+- [x] [BUGFIX-P0-04] Fix intelligence link in day-summary.md (4-level relative path)
+- [x] [BUGFIX-P1-05] Add frontmatter to day-summary.md
+- [x] [BUGFIX-P1-06] Fix month zero-padding in monthly summary links
+- [x] [BUGFIX-P1-07] Strip emojis from aggregated discoveries
+- [x] [BUGFIX-P1-08] Prevent nested headers leaking into bullet lists
+- [x] [BUGFIX-P1-09] Avoid double truncation markers
+- [x] [BUGFIX-P1-10] Migrate/filter old reports/ links in intelligence-learning.md
 
-**Status:** Planning complete
+**Status:** Phase complete
 
 ## Phase 24: Intelligence Learning Reference Reform
 

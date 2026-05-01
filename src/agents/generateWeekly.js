@@ -11,11 +11,12 @@
 import path from 'path';
 import fs from 'fs/promises';
 import { getWeek } from 'date-fns';
-import { buildKeywords, addRelatedLinks, extractKeywordsFromContent, REPORT_PATHS, REPORTS_DIR, CONTEXT_SESSION_DIR, addKeywordNavigation, generateKeywordLinks } from './utils/linkBuilder.js';
+import { buildKeywords, addRelatedLinks, extractKeywordsFromContent, CONTEXT_SESSION_DIR, addKeywordNavigation, generateKeywordLinks } from './utils/linkBuilder.js';
 import { getConfig } from '../config.js';
 import { truncateToBudget } from '../modules/tokenLimit.js';
 import { shouldRegenerate } from '../modules/summaries.js';
 import { createDebugLogger } from '../utils/debug.js';
+import { extractSection } from '../utils/summaryUtils.js';
 
 const logger = createDebugLogger('context-plugin');
 
@@ -81,45 +82,10 @@ function extractDateStr(content) {
 }
 
 /**
- * Extract section content from day summary
- * Strips emojis and bullet markers to get clean text
- */
-function extractSection(content, sectionHeading) {
-  const lines = content.split('\n');
-  const results = [];
-  let inSection = false;
-  
-  for (const line of lines) {
-    if (line.startsWith(sectionHeading)) {
-      inSection = true;
-      continue;
-    }
-    if (inSection) {
-      if (line.startsWith('## ') || line.startsWith('# ')) {
-        break;
-      }
-      if (line.trim().startsWith('- ')) {
-        // Strip emoji prefixes and bullet markers to get clean text
-        let text = line.trim().substring(2).trim();
-        // Remove emoji prefixes (with or without dash): "✅ - ", "💡 ", "✅"
-        text = text.replace(/^[✅💡🐛🔧📝🔍📦🚪][\s–-]*/u, '');
-        // Remove any remaining bullet markers
-        text = text.replace(/^[-*]\s*/, '');
-        if (text.length > 0) {
-          results.push(text);
-        }
-      }
-    }
-  }
-  
-  return results;
-}
-
-/**
  * Format weekly content with aggregated sections from day summaries
  * Content hierarchy: day (largest) > week > month > annual (smallest)
  */
-function formatWeeklyContent(year, weekStr, daySummaries) {
+function formatWeeklyContent(year, month, weekStr, daySummaries) {
   let content = `## Weekly Summary - ${year}-${weekStr}\n\n`;
   
   const totalSessions = daySummaries.reduce((sum, d) => sum + d.compactCount + d.exitCount, 0);
@@ -134,10 +100,11 @@ function formatWeeklyContent(year, weekStr, daySummaries) {
     content += `## Goals\n\n`;
     const seenGoals = new Set();
     for (const goal of allGoals) {
-      const key = goal.slice(0, 50).toLowerCase().trim();
+      const cleanGoal = goal.replace(/^[✅💡🐛🔧📝🔍📦🚪]\s*/u, '').replace(/^#+\s*/, '').trim();
+      const key = cleanGoal.slice(0, 50).toLowerCase().trim();
       if (!seenGoals.has(key) && key.length > 5) {
         seenGoals.add(key);
-        content += `- ${goal}\n`;
+        content += `- ${cleanGoal}\n`;
       }
     }
     content += '\n';
@@ -149,10 +116,11 @@ function formatWeeklyContent(year, weekStr, daySummaries) {
     content += `## Accomplishments\n\n`;
     const seenAccomplishments = new Set();
     for (const acc of allAccomplishments) {
-      const key = acc.slice(0, 50).toLowerCase().trim();
+      const cleanAcc = acc.replace(/^[✅💡🐛🔧📝🔍📦🚪]\s*/u, '').replace(/^#+\s*/, '').trim();
+      const key = cleanAcc.slice(0, 50).toLowerCase().trim();
       if (!seenAccomplishments.has(key) && key.length > 5) {
         seenAccomplishments.add(key);
-        content += `- ✅ ${acc}\n`;
+        content += `- ${cleanAcc}\n`;
       }
     }
     content += '\n';
@@ -164,10 +132,11 @@ function formatWeeklyContent(year, weekStr, daySummaries) {
     content += `## Discoveries\n\n`;
     const seenDiscoveries = new Set();
     for (const disc of allDiscoveries) {
-      const key = disc.slice(0, 50).toLowerCase().trim();
+      const cleanDisc = disc.replace(/^[✅💡🐛🔧📝🔍📦🚪]\s*/u, '').replace(/^#+\s*/, '').trim();
+      const key = cleanDisc.slice(0, 50).toLowerCase().trim();
       if (!seenDiscoveries.has(key) && key.length > 5) {
         seenDiscoveries.add(key);
-        content += `- 💡 ${disc}\n`;
+        content += `- ${cleanDisc}\n`;
       }
     }
     content += '\n';
@@ -178,7 +147,10 @@ function formatWeeklyContent(year, weekStr, daySummaries) {
   if (allBugs.length > 0) {
     content += `## Bugs Fixed\n\n`;
     for (const bug of allBugs) {
-      content += `- ${bug}\n`;
+      const cleanBug = bug.replace(/^[✅💡🐛🔧📝🔍📦🚪]\s*/u, '').replace(/^#+\s*/, '').trim();
+      if (cleanBug.length > 0) {
+        content += `- ${cleanBug}\n`;
+      }
     }
     content += '\n';
   }
@@ -187,7 +159,7 @@ function formatWeeklyContent(year, weekStr, daySummaries) {
   const allFiles = daySummaries.flatMap(d => d.files);
   if (allFiles.length > 0) {
     content += `## Relevant Files\n\n`;
-    const uniqueFiles = [...new Set(allFiles)];
+    const uniqueFiles = [...new Set(allFiles.map(f => f.replace(/^[✅💡🐛🔧📝🔍📦🚪]\s*/u, '').trim()))];
     for (const file of uniqueFiles) {
       content += `- ${file}\n`;
     }
@@ -200,7 +172,7 @@ function formatWeeklyContent(year, weekStr, daySummaries) {
     for (const day of daySummaries) {
       content += `### Day ${day.day} (${day.dateStr})\n`;
       content += `- Sessions: ${day.compactCount + day.exitCount} (Exit: ${day.exitCount}, Compact: ${day.compactCount})\n`;
-      content += `- [[${day.day}/day-summary.md]]\n\n`;
+      content += `- [[${CONTEXT_SESSION_DIR}/${year}/${month}/${weekStr}/${day.day}/day-summary.md]]\n\n`;
     }
   }
   
@@ -220,7 +192,7 @@ export async function generateWeeklySummary(directory, weekDate) {
   const daySummaries = await scanWeekDaySummaries(weekDir);
 
   // Build content with aggregated data from day summaries
-  const bodyContent = formatWeeklyContent(year, weekStr, daySummaries);
+  const bodyContent = formatWeeklyContent(year, month, weekStr, daySummaries);
 
   // Extract keywords from content
   const contentKeywords = extractKeywordsFromContent(bodyContent, 20);
@@ -246,8 +218,8 @@ created: ${new Date().toISOString()}
   body = truncateToBudget(body, weekMaxChars);
 
   body += addRelatedLinks([
-    'intelligence-learning.md',
-    `../reports/monthly-${year}-${month}.md`
+    `${CONTEXT_SESSION_DIR}/intelligence-learning.md`,
+    `${CONTEXT_SESSION_DIR}/${year}/${month}/monthly-${year}-${month}.md`
   ]);
 
   // Add keyword navigation for Obsidian

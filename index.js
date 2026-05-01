@@ -164,14 +164,18 @@ export async function autoInjectContexts(session) {
 /**
  * Hook registration for OpenCode plugin API
  * This registers the plugin with OpenCode's lifecycle hooks
+ * @param {Object} opencodeApi - OpenCode plugin API
+ * @param {Object} client - OpenCode client instance for LLM access
  */
-export function registerPluginHooks(opencodeApi) {
+export async function registerPluginHooks(opencodeApi, client = null) {
   // Session start - auto inject if enabled
   opencodeApi.onSessionStart(async (session) => {
-    // Guard: prevent regeneration on every start
-    const stateFile = path.join(session.directory, '.opencode', 'context-session', 'intelligence-learning.md');
+    await loadConfig(session.directory);
 
-    // Read intelligence learning for session context
+    if (client) {
+      logger(`[context-plugin] Client available for session start: ${!!client.sessions}`);
+    }
+
     const { readIntelligenceLearning } = await import('./src/agents/readIntelligenceLearning.js');
     const intelligence = await readIntelligenceLearning(session.directory, { summary: true });
     if (intelligence && typeof intelligence === 'string') {
@@ -184,10 +188,11 @@ export function registerPluginHooks(opencodeApi) {
     }
   });
 
-  // Session end - save context (existing behavior)
+  // Session end - save context with client for LLM analysis
   opencodeApi.onSessionEnd(async (session) => {
+    await loadConfig(session.directory);
     const { saveContext } = await import('./src/modules/saveContext.js');
-    await saveContext(session.directory, session, 'exit');
+    await saveContext(session.directory, session, 'exit', client);
   });
 }
 
@@ -196,33 +201,69 @@ class ContextPlugin {
   constructor(input) {
     this.directory = input?.directory;
     this.client = input?.client;
-    
-    // Load configuration at plugin initialization
-    if (this.directory) {
-      loadConfig(this.directory).then(config => {
-        logger(`[context-plugin] Configuration loaded: debug=${config.debug}, debounceMs=${config.debounceMs}`);
-      });
-      
-      // Initialize intelligence learning file on plugin startup
-      initializeIntelligenceLearning(this.directory).catch(err => {
-        logger(`[context-plugin] Intelligence learning init failed: ${err.message}`);
-      });
-      
-      // Initialize global intelligence file on plugin startup
-      initializeGlobalIntelligence().catch(err => {
-        logger(`[context-plugin] Global intelligence init failed: ${err.message}`);
-      });
 
-      // Initialize remote sync on startup
-      initializeRemoteSync().catch(err => {
-        logger(`[context-plugin] Remote sync init failed: ${err.message}`);
-      });
-    }
-    
+    this._initPromise = null;
+    this._config = null;
+    this._intelligenceInitialized = false;
+    this._globalIntelligenceInitialized = false;
+    this._remoteSyncInitialized = false;
+
     logger(`[context-plugin] ContextPlugin instantiated for: ${this.directory}`);
   }
 
+  async _ensureInitialized() {
+    if (!this.directory) return;
+
+    if (this._initPromise) return this._initPromise;
+
+    this._initPromise = (async () => {
+      try {
+        const [config] = await Promise.all([
+          loadConfig(this.directory),
+          this._initIntelligence(),
+          this._initGlobalIntelligence(),
+          this._initRemoteSync()
+        ]);
+        this._config = config;
+        logger(`[context-plugin] Initialization complete: debug=${config.debug}, debounceMs=${config.debounceMs}`);
+      } catch (err) {
+        logger(`[context-plugin] Initialization failed: ${err.message}`);
+      }
+    })();
+
+    return this._initPromise;
+  }
+
+  async _initIntelligence() {
+    if (this._intelligenceInitialized) return;
+    this._intelligenceInitialized = true;
+    return initializeIntelligenceLearning(this.directory).catch(err => {
+      logger(`[context-plugin] Intelligence learning init failed: ${err.message}`);
+    });
+  }
+
+  async _initGlobalIntelligence() {
+    if (this._globalIntelligenceInitialized) return;
+    this._globalIntelligenceInitialized = true;
+    return initializeGlobalIntelligence().catch(err => {
+      logger(`[context-plugin] Global intelligence init failed: ${err.message}`);
+    });
+  }
+
+  async _initRemoteSync() {
+    if (this._remoteSyncInitialized) return;
+    this._remoteSyncInitialized = true;
+    return initializeRemoteSync().catch(err => {
+      logger(`[context-plugin] Remote sync init failed: ${err.message}`);
+    });
+  }
+
+  getConfig() {
+    return this._config || getConfig();
+  }
+
   async event(eventInput) {
+    await this._ensureInitialized();
     logger(`[context-plugin] RAW EVENT received: ${JSON.stringify(eventInput)}`);
     const event = eventInput?.event || eventInput;
     const eventType = event?.type;
@@ -305,7 +346,7 @@ class ContextPlugin {
       }
 
       // Remote sync trigger (fire-and-forget) after session.compacted
-      const config = getConfig();
+      const config = this.getConfig();
       if (config.remoteSync?.enabled) {
         syncToRemote(this.directory).catch(err => {
           logger(`[context-plugin] Remote sync failed (non-blocking): ${err.message}`);
@@ -328,7 +369,7 @@ class ContextPlugin {
       }
 
       // Remote sync trigger (fire-and-forget) after session.end
-      const config = getConfig();
+      const config = this.getConfig();
       if (config.remoteSync?.enabled) {
         syncToRemote(this.directory).catch(err => {
           logger(`[context-plugin] Remote sync failed (non-blocking): ${err.message}`);
@@ -346,6 +387,7 @@ class ContextPlugin {
   }
 
   async triggerPreExitCompression(sessionId) {
+    await this._ensureInitialized();
     try {
       logger(`[Pre-Exit] Triggering compression for session ${sessionId}`);
       logger(`[Pre-Exit] this type: ${typeof this}, this.client type: ${typeof this?.client}`);
@@ -393,6 +435,7 @@ class ContextPlugin {
   }
 
   async "experimental.chat.messages.transform"(transformInput) {
+    await this._ensureInitialized();
     const messages = transformInput?.messages || transformInput;
 
     if (!messages || messages.length === 0) {

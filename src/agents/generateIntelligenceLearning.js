@@ -30,6 +30,131 @@ const INTELLIGENCE_FILE = 'intelligence-learning.md';
 const MAX_ENTRIES = 20;
 
 /**
+ * Hardcoded known issues from well-documented bugs across sessions
+ * These are persistent issues that should ALWAYS appear in known issues
+ */
+const HARDCODE_KNOWN_ISSUES = [
+  {
+    id: 'TOKEN-PROPAGATION',
+    description: 'Token propagation fails - stats from day summaries do not propagate to week/monthly reports correctly',
+    location: 'contentExtractor.js / summaries.js'
+  },
+  {
+    id: 'EMOJI-CORRUPTION',
+    description: 'Emoji corruption in aggregated content - emojis (💡, ✅, 🔧, etc.) appear as literal characters in summaries',
+    location: 'summaries.js:574,585 / linkBuilder.js'
+  },
+  {
+    id: 'PATH-INCONSISTENCY',
+    description: 'Path inconsistency between read and generate agents - hierarchical vs flat paths causing infinite loops',
+    location: 'readWeekly.js, readMonthly.js, readAnnual.js vs generators'
+  },
+  {
+    id: 'TRUNCATION-MARKERS',
+    description: 'Truncation markers (*(truncated)*, [truncated]) appearing in generated summaries instead of clean content',
+    location: 'contentExtractor.js / summaries.js'
+  },
+  {
+    id: 'WIKI-LINK-CONTAMINATION',
+    description: 'Wiki-link contamination - .opencode/context-session/ paths leaking into report content',
+    location: 'generateWeeklySummary.js, generateMonthlySummary.js'
+  },
+  {
+    id: 'ISO-WEEK-BUG',
+    description: 'ISO week calculation using Math.ceil(getDate()/7) instead of proper ISO week algorithm',
+    location: 'Multiple files (reportGenerator.js, summaries.js)'
+  },
+  {
+    id: 'EXTRACTSECTION-CRASH',
+    description: 'extractSectionFromContent called but function name is extractSection - causes crash in annual reports',
+    location: 'reportGenerator.js:756'
+  },
+  {
+    id: 'DEBOUNCE-STATIC-DELAY',
+    description: 'Debounce delay calculated at module load time instead of using dynamic config value',
+    location: 'reportGenerator.js (module-level config read)'
+  },
+  {
+    id: 'DUPLICATE-EXTRACTSECTION',
+    description: 'extractSection duplicated in multiple files causing inconsistency',
+    location: 'summaryUtils.js vs other files'
+  },
+  {
+    id: 'KEYWORD-DUPLICATION',
+    description: 'Duplicate keywords appearing in generated reports due to improper deduplication',
+    location: 'generateIntelligenceLearning.js'
+  },
+  {
+    id: 'DAY-SUMMARY-TRANSCRIPT',
+    description: 'Day summary includes full conversation transcripts instead of structured content only',
+    location: 'summaries.js (day-summary aggregation)'
+  },
+  {
+    id: 'RESIDUAL-ASTERISKS',
+    description: 'Residual ** in bullet points (e.g., "OpenCode Context Plugin**")',
+    location: 'linkBuilder.js, summaryUtils.js'
+  }
+];
+
+/**
+ * Issue patterns to detect from discoveries text (multilingual)
+ */
+const ISSUE_PATTERNS = [
+  /\b(não funciona|does not work|is broken|not working|broken)\b/i,
+  /\b(bug|error|problema|issue)\b/i,
+  /\b(causando|causing|caused by|causes)\b/i,
+  /\b(fail(ed)?|failing|fails)\b/i,
+  /\b(crash|crashed|crashing)\b/i,
+  /\b(não funciona|corrompido| contaminat)\b/i,
+  /\b(infinite loop|loop infinito)\b/i,
+  /\b(truncat|garbage|residual)\b/i,
+  /\b(duplicate|duplicat)\b/i
+];
+
+/**
+ * Failed approach patterns from discoveries
+ */
+const FAILED_APPROACH_PATTERNS = [
+  { pattern: /\bhardcoded\s+path/i, antiPattern: 'Using hardcoded paths instead of dynamic paths', reason: 'Paths break when directory structure changes' },
+  { pattern: /\bMath\.ceil\(getDate\(\)\/7\)/i, antiPattern: 'ISO week calculation using Math.ceil(getDate()/7)', reason: 'Incorrect week number for dates near month boundaries' },
+  { pattern: /\bextractSectionFromContent\b/i, antiPattern: 'Calling extractSectionFromContent', reason: 'Function does not exist, should be extractSection' },
+  { pattern: /\bdebounce.*module.*load/i, antiPattern: 'Debounce delay calculated at module load', reason: 'Config changes after module load are ignored' },
+  { pattern: /\bduplicate.*extract/i, antiPattern: 'Duplicate extractSection definitions', reason: 'Inconsistent behavior when function is redefined' },
+  { pattern: /\bemoji.*hardcoded/i, antiPattern: 'Emoji characters hardcoded in templates', reason: 'Emojis corrupt when aggregated across sessions' },
+  { pattern: /\bwiki.*link.*contamination/i, antiPattern: 'Wiki-links with full path prefix', reason: 'Full paths leak into content instead of relative links' },
+  { pattern: /\btruncat.*marker/i, antiPattern: 'Truncation markers in content aggregation', reason: 'Markers appear as literal text instead of being filtered' },
+  { pattern: /\bzero.*padding/i, antiPattern: 'Month without zero-padding', reason: 'Path like 2026/4/ is invalid, should be 2026/04/' },
+  { pattern: /\bno.*dedup/i, antiPattern: 'Missing deduplication on keywords', reason: 'Same keyword appears multiple times in report' }
+];
+
+const LOW_QUALITY_ACCOMPLISHMENT_PATTERNS = [
+  /^Phases?\s+\d+(\.\d+)*(-\d+(\.\d+)*)?/i,
+  /^\d+\.\d+:\s*\w+/i,
+  /^\s*07\.\d+:/i,
+  /^(Su|Success|Successfully)/i,
+  /^\.\.\./i,
+  /^\(truncated\)/i
+];
+
+function containsIssuePattern(text) {
+  if (!text) return false;
+  for (const pattern of ISSUE_PATTERNS) {
+    if (pattern.test(text)) return true;
+  }
+  return false;
+}
+
+function isLowQualityAccomplishment(text) {
+  if (!text) return true;
+  const lower = text.toLowerCase();
+  if (lower.length < 20) return true;
+  if (LOW_QUALITY_ACCOMPLISHMENT_PATTERNS.some(p => p.test(text))) return true;
+  if (containsIssuePattern(text)) return true;
+  if (isLowQualityPattern(text)) return true;
+  return false;
+}
+
+/**
  * Reference Content Schema
  * Clean, compact format for intelligence-learning.md (~50 lines)
  */
@@ -161,27 +286,67 @@ function transformToReferenceSchema(allEntries, latestEntry, reportIntelligence 
     activePhase: 'intelligence-learning-reform'
   };
 
-  // Extract known issues and failed approaches from bugs
-  const knownIssues = [];
+  // Start with hardcoded known issues (well-documented bugs that should ALWAYS appear)
+  const knownIssues = [...HARDCODE_KNOWN_ISSUES];
   const failedApproaches = [];
 
+  // Extract known issues and failed approaches from bugs
   for (const session of allSessions) {
     if (session.bugs?.length) {
       for (const bug of session.bugs) {
         if (bug.solution || bug.resolution) {
-          // Resolved bug = failed approach
           failedApproaches.push({
             antiPattern: bug.symptom,
             reason: bug.cause || 'resolved with workaround',
             location: session.relevantFiles?.[0] ? `${session.relevantFiles[0]}:${bug.line || 0}` : ''
           });
         } else {
-          // Unresolved bug = known issue
-          knownIssues.push({
-            id: `BUG-${(bug.symptom || 'unknown').slice(0, 20).replace(/\s+/g, '-').toUpperCase()}`,
-            description: bug.symptom,
-            location: session.relevantFiles?.[0] ? `${session.relevantFiles[0]}:${bug.line || 0}` : ''
+          const id = `BUG-${(bug.symptom || 'unknown').slice(0, 20).replace(/\s+/g, '-').toUpperCase()}`;
+          if (!knownIssues.some(k => k.id === id)) {
+            knownIssues.push({
+              id,
+              description: bug.symptom,
+              location: session.relevantFiles?.[0] ? `${session.relevantFiles[0]}:${bug.line || 0}` : ''
+            });
+          }
+        }
+      }
+    }
+  }
+
+  // Extract failed approaches from session discoveries using issue patterns
+  for (const session of allSessions) {
+    const discoveries = session.discoveries || '';
+    if (!discoveries) continue;
+
+    // Check each failed approach pattern
+    for (const { pattern, antiPattern, reason } of FAILED_APPROACH_PATTERNS) {
+      if (pattern.test(discoveries)) {
+        if (!failedApproaches.some(f => f.antiPattern === antiPattern)) {
+          failedApproaches.push({
+            antiPattern,
+            reason,
+            location: session.relevantFiles?.[0] || session.title || ''
           });
+        }
+      }
+    }
+
+    // Also check for issue patterns in discoveries and extract as issues
+    if (containsIssuePattern(discoveries)) {
+      // Extract sentences that contain issue patterns
+      const sentences = discoveries.split(/[.!?]+/).filter(s => containsIssuePattern(s));
+      for (const sentence of sentences.slice(0, 3)) {
+        const cleanSentence = sentence.replace(/[#*`\[\]]/g, '').trim().slice(0, 80);
+        if (cleanSentence.length > 15) {
+          const id = `ISSUE-${cleanSentence.slice(0, 15).replace(/\s+/g, '-').toUpperCase()}`;
+          if (!knownIssues.some(k => k.description.includes(cleanSentence.slice(0, 30)))) {
+            knownIssues.push({
+              id,
+              description: cleanSentence,
+              location: session.title || ''
+            });
+          }
         }
       }
     }
@@ -196,26 +361,23 @@ function transformToReferenceSchema(allEntries, latestEntry, reportIntelligence 
     if (acc && acc.length >= 20 && !seenAccomplishments.has(acc)) {
       // Skip truncated/incomplete content
       if (acc.endsWith('...')) continue;
-      if (/[a-z]\s*$/i.test(acc)) continue; // Ends mid-word
+      if (/[a-z]\s*$/i.test(acc)) continue;
 
-      // Skip if it's actually a bug description (not a real accomplishment)
-      // Check for any mention of bugs, errors, or problematic patterns anywhere in the text
-      const bugPatterns = /\b(bug|error|issue|hardcoded|generating|causing|caused|broken|prefix|not working|doesn't work|cannot handle)/i;
-      if (bugPatterns.test(acc)) continue;
+      // Skip if it's actually a bug description
+      if (containsIssuePattern(acc)) continue;
 
-      // Skip low quality patterns
+      // Skip low quality patterns (including garbage like "Phases 07.1-07.7")
       if (isLowQualityPattern(acc)) continue;
+      if (isLowQualityAccomplishment(acc)) continue;
 
       // Clean the text - remove markdown artifacts
-      const cleanAcc = acc.replace(/[#*`\[\]]/g, '').trim();
+      const cleanAcc = acc.replace(/[#*`\[\]]/g, '').replace(/\d+\.\d+:/g, '').trim();
       if (cleanAcc.length < 25) continue;
 
-      // Normalize for deduplication - extract first 50 chars as key
+      // Normalize for deduplication
       const normalizedKey = cleanAcc.slice(0, 50).toLowerCase();
       if (seenAccomplishments.has(normalizedKey)) continue;
       seenAccomplishments.add(normalizedKey);
-
-      // Also track full pattern for exact dedup
       seenAccomplishments.add(cleanAcc);
 
       // Create pattern: "when [goal], do [accomplishment]"
@@ -237,7 +399,6 @@ function transformToReferenceSchema(allEntries, latestEntry, reportIntelligence 
     // Add pending items as known issues
     for (const pending of (reportIntelligence.pendingItems || [])) {
       const id = `ISSUE-${(pending.issue || 'unknown').slice(0, 15).replace(/\s+/g, '-').toUpperCase()}`;
-      // Avoid duplicates
       if (!knownIssues.some(k => k.description === pending.issue)) {
         knownIssues.push({
           id,
@@ -265,16 +426,13 @@ function transformToReferenceSchema(allEntries, latestEntry, reportIntelligence 
 
         // Skip low quality and bug descriptions
         if (isLowQualityPattern(cleanPattern)) continue;
-        if (/\b(bug|error|issue|was\s+(hardcoded|generating|causing|broken)|prefix|not working)/i.test(cleanPattern)) continue;
+        if (isLowQualityAccomplishment(cleanPattern)) continue;
+        if (containsIssuePattern(cleanPattern)) continue;
         if (cleanPattern.length < 20) continue;
 
-        // Normalize for deduplication - extract first 50 chars as key
-        // This handles truncation variations (e.g., "...context" vs "...context-session...")
         const normalizedKey = cleanPattern.slice(0, 50).toLowerCase();
         if (seenAccomplishments.has(normalizedKey)) continue;
         seenAccomplishments.add(normalizedKey);
-
-        // Also track full pattern for exact dedup
         seenAccomplishments.add(cleanPattern);
 
         successfulApproaches.push({
@@ -303,7 +461,7 @@ function transformToReferenceSchema(allEntries, latestEntry, reportIntelligence 
       sessionId: s.sessionId || `session-${i}`,
       content: `## Goal\n${s.goal || ''}\n\n## Accomplished\n${s.accomplished || ''}\n\n## Discoveries\n${s.discoveries || ''}`
     }));
-  
+
   const patterns = patternSessions.length >= 2 ? findPatterns(patternSessions) : [];
   const recentPatterns = patterns.slice(0, 5).map(p => ({
     type: p.pattern.split(':')[0] || 'general',
@@ -544,62 +702,64 @@ function inferFromMessages(messages, title) {
 async function gatherRecentSessionInfo(directory) {
   const today = new Date();
   const year = today.getFullYear();
-  const month = String(today.getMonth() + 1).padStart(2, '0');
-  const day = String(today.getDate()).padStart(2, '0');
 
-  // Calculate ISO week number using same logic as reportGenerator
-  const isoWeek = String(getWeek(today, { weekStartsOn: 1, firstWeekContainsDate: 4 })).padStart(2, '0');
-  const weekDir = `W${isoWeek}`;
-
-  // Try to find session directory
-  let sessionDir = path.join(directory, CONTEXT_SESSION_DIR, String(year), month, weekDir, day);
-  let sessionFiles = [];
-
+  // Scan ALL months in the year, not just current month
+  const allSessionFiles = [];
+  
+  const yearDir = path.join(directory, CONTEXT_SESSION_DIR, String(year));
+  
   try {
-    const files = await fs.readdir(sessionDir);
-    sessionFiles = files.filter(f => f.endsWith('.md'));
-  } catch {
-    // Try searching for today's sessions in any week directory
-    const baseDir = path.join(directory, CONTEXT_SESSION_DIR, String(year), month);
-    try {
-      const weeks = await fs.readdir(baseDir);
-      for (const week of weeks) {
-        if (week.startsWith('W')) {
-          const tryDir = path.join(baseDir, week, day);
+    const months = await fs.readdir(yearDir);
+    for (const month of months) {
+      if (!/^\d{2}$/.test(month)) continue; // Skip non-month directories
+      const monthDir = path.join(yearDir, month);
+      
+      try {
+        const weeks = await fs.readdir(monthDir);
+        for (const week of weeks) {
+          if (!week.startsWith('W')) continue;
+          const weekDir = path.join(monthDir, week);
+          
           try {
-            const files = await fs.readdir(tryDir);
-            const foundFiles = files.filter(f => f.endsWith('.md'));
-            if (foundFiles.length > 0) {
-              sessionFiles = foundFiles;
-              sessionDir = tryDir; // Update to found location
-              break;
+            const entries = await fs.readdir(weekDir);
+            for (const entry of entries) {
+              const entryPath = path.join(weekDir, entry);
+              const stat = await fs.stat(entryPath);
+              
+              if (stat.isDirectory()) {
+                // Day directory - scan for session files
+                const dayFiles = await fs.readdir(entryPath);
+                for (const file of dayFiles) {
+                  if (file.endsWith('.md') && (file.startsWith('compact-') || file.startsWith('exit-'))) {
+                    allSessionFiles.push({ file, dir: entryPath });
+                  }
+                }
+              } else if (entry.endsWith('.md') && (entry.startsWith('compact-') || entry.startsWith('exit-'))) {
+                // Session file directly in week dir
+                allSessionFiles.push({ file: entry, dir: weekDir });
+              }
             }
           } catch {
-            // Continue to next week
+            // Skip inaccessible week dirs
           }
         }
+      } catch {
+        // Skip inaccessible month dirs
       }
-    } catch {
-      // No sessions found
     }
+  } catch {
+    // No year directory found
   }
 
-  // If no sessions found, return empty entry
-  if (sessionFiles.length === 0) {
-    return {
-      id: `session-${Date.now()}`,
-      date: today.toISOString(),
-      type: 'compact',
-      sessionCount: 0,
-      sessions: [],
-      keywords: []
-    };
-  }
+  // Use allSessionFiles that was collected from ALL months
+  const sessionFiles = allSessionFiles.map(f => f.file);
+  const sessionDir = directory; // We'll use full path below
 
   // Extract structured content from each session file
   const sessionSummaries = [];
-  for (const file of sessionFiles) {
-    const content = await fs.readFile(path.join(sessionDir, file), 'utf-8');
+  for (const { file, dir } of allSessionFiles) {
+    const fullPath = path.join(dir, file);
+    const content = await fs.readFile(fullPath, 'utf-8');
     
     // First try contentExtractor for structured data
     const extracted = extractSessionContent(content);

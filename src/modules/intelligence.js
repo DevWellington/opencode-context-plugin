@@ -94,7 +94,7 @@ export async function initializeIntelligenceLearning(baseDir) {
     content += `- [Auto-populated from cross-session analysis]\n\n`;
     
     content += `## Pinned Patterns\n\n`;
-    content += `Patterns that have appeared in 3+ sessions and are preserved across all updates:\n\n`;
+    content += `Patterns that have appeared in 2+ sessions and are preserved across all updates:\n\n`;
     content += `### Pinned Goal Themes\n`;
     content += `- [Auto-populated from cross-session analysis]\n\n`;
     content += `### Pinned Bug Patterns\n`;
@@ -147,7 +147,7 @@ export function preservePersistentPatterns(existingContent, newPatterns) {
   // Extract existing persistent patterns
   const existingPatterns = extractPersistentPatterns(existingContent);
   
-  // Separate pinned (sessionCount >= 3) from recent
+  // Separate pinned (sessionCount >= 2) from recent
   const pinnedPatterns = existingPatterns.filter(p => p.pinned);
   const recentPatterns = newPatterns || [];
   
@@ -174,7 +174,7 @@ function mergePatterns(pinned, newPatterns) {
       result[matchIdx].sessions.push(...newPat.sessions);
       result[matchIdx].sessionCount = result[matchIdx].sessions.length;
       result[matchIdx].lastSeen = new Date().toISOString().split('T')[0];
-      result[matchIdx].pinned = result[matchIdx].sessionCount >= 3;
+      result[matchIdx].pinned = result[matchIdx].sessionCount >= 2;
     }
     // New patterns that aren't pinned yet go to recent, not pinned
   }
@@ -184,7 +184,7 @@ function mergePatterns(pinned, newPatterns) {
 
 function formatPinnedPatterns(patterns) {
   if (!patterns || patterns.length === 0) {
-    return 'No pinned patterns yet (appear in 3+ sessions to pin)\n';
+    return 'No pinned patterns yet (appear in 2+ sessions to pin)\n';
   }
   
   // Group by type

@@ -11,7 +11,7 @@
 import path from 'path';
 import fs from 'fs/promises';
 import { getWeek } from 'date-fns';
-import { formatFileHeader, addRelatedLinks, buildKeywords, extractKeywordsFromContent, REPORT_PATHS, addKeywordNavigation } from './utils/linkBuilder.js';
+import { formatFileHeader, addRelatedLinks, buildKeywords, extractKeywordsFromContent, REPORT_PATHS, addKeywordNavigation, CONTEXT_SESSION_DIR } from './utils/linkBuilder.js';
 import { getConfig } from '../config.js';
 import { truncateToBudget } from '../modules/tokenLimit.js';
 import { shouldRegenerate } from '../modules/summaries.js';
@@ -36,7 +36,10 @@ export async function generateTodaySummary(directory) {
   try {
     const files = await fs.readdir(sessionDir);
     for (const file of files) {
-      if (file.endsWith('.md')) {
+      // Filter out summary files to avoid self-inclusion
+      if (file.endsWith('.md') && 
+          !file.includes('-summary.md') && 
+          !file.includes('summary.md')) {
         const content = await fs.readFile(path.join(sessionDir, file), 'utf-8');
         sessions.push({ file, content });
         allContent += content + '\n';
@@ -76,8 +79,8 @@ export async function generateTodaySummary(directory) {
   }
 
   body += addRelatedLinks([
-    'intelligence-learning.md',
-    `../${year}/${month}/${week}/week-summary.md`
+    `${CONTEXT_SESSION_DIR}/intelligence-learning.md`,
+    `${CONTEXT_SESSION_DIR}/${year}/${month}/${week}/week-summary.md`
   ]);
 
   // Add keyword navigation for Obsidian

@@ -3,7 +3,7 @@
 ## Pacote npm
 
 **Pacote:** `@devwellington/opencode-context-plugin`
-**Versão atual:** 1.5.0
+**Versão atual:** 1.6.1
 **NPM:** https://www.npmjs.com/package/@devwellington/opencode-context-plugin
 **GitHub:** https://github.com/DevWellington/opencode-context-plugin
 
@@ -43,7 +43,7 @@ npm view @devwellington/opencode-context-plugin versions
 
 ## Checklist de Release
 
-- [x] Testar com `npm test` (263 testes passando)
+- [x] Testar com `npm test` (322 testes passando)
 - [x] Atualizar CHANGELOG.md
 - [x] Bump version no package.json
 - [x] Commit e push para GitHub

@@ -8,9 +8,9 @@ import fs from 'fs/promises';
 import path from 'path';
 import matter from 'gray-matter';
 import { extractSessionContent, extractBugs, findPatterns, inferMissingFields, extractCrossProjectLinks } from './contentExtractor.js';
-import { resolveLinksInContent } from '../utils/crossProjectLinks.js';
+import { extractSection } from '../utils/summaryUtils.js';
+import { CONTEXT_SESSION_DIR } from '../config.js';
 
-const CONTEXT_SESSION_DIR = '.opencode/context-session';
 const REPORTS_DIR = '.opencode/context-session/reports';
 
 /**
@@ -515,41 +515,6 @@ async function readWeekSummaries(monthDir) {
 }
 
 /**
- * Extract section content from summary file
- * Strips emojis and bullet markers to get clean text
- */
-function extractSection(content, sectionHeading) {
-  const lines = content.split('\n');
-  const results = [];
-  let inSection = false;
-  
-  for (const line of lines) {
-    if (line.startsWith(sectionHeading)) {
-      inSection = true;
-      continue;
-    }
-    if (inSection) {
-      if (line.startsWith('## ') || line.startsWith('# ')) {
-        break;
-      }
-      if (line.trim().startsWith('- ')) {
-        // Strip emoji prefixes and bullet markers to get clean text
-        let text = line.trim().substring(2).trim();
-        // Remove emoji prefixes (with or without dash): "✅ - ", "💡 ", "✅"
-        text = text.replace(/^[✅💡🐛🔧📝🔍📦🚪][\s–-]*/u, '');
-        // Remove any remaining bullet markers
-        text = text.replace(/^[-*]\s*/, '');
-        if (text.length > 0) {
-          results.push(text);
-        }
-      }
-    }
-  }
-  
-  return results;
-}
-
-/**
  * Aggregate accomplishments from week summaries
  */
 function aggregateAccomplishmentsFromWeeks(weekSummaries) {
@@ -747,6 +712,7 @@ async function readMonthlyFiles(directory, year) {
         month: monthStr,
         monthName: new Date(year, month - 1).toLocaleString('default', { month: 'long' }),
         totalSessions,
+        content,
         goals: extractSection(content, '## Goals'),
         accomplishments: extractSection(content, '## Major Accomplishments'),
         discoveries: extractSection(content, '## Discoveries'),
@@ -787,7 +753,7 @@ function aggregateBugsFromMonths(monthlyFiles) {
   const bugs = [];
   
   for (const month of monthlyFiles) {
-    const issuesResolved = extractSectionFromContent(monthlyFiles.find(m => m.month === month.month)?.toString() || '', '## Issues Resolved');
+    const issuesResolved = extractSection(month.content, '## Issues Resolved');
     for (const issue of issuesResolved) {
       if (issue.includes(':')) {
         const [symptom, solution] = issue.split(':').map(s => s.trim());

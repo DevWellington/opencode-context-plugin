@@ -86,21 +86,34 @@ export function extractSessionContent(sessionContent) {
   let currentContent = [];
 
   for (const line of lines) {
-    // Check for section headers
-    const sectionMatch = line.match(/^##\s+(Goal|Accomplished|Discoveries|Relevant Files)/i);
+    // Check for section headers (## Level)
+    const sectionMatch = line.match(/^##\s+(Goal|Accomplished|Discoveries|Relevant Files?.*)/i);
     if (sectionMatch) {
       // Save previous section
       saveSection(result, currentSection, currentContent);
-      currentSection = sectionMatch[1].toLowerCase();
+      // Normalize: treat "Relevant files / directories" and similar variants as "relevant files"
+      const matched = sectionMatch[1].toLowerCase();
+      currentSection = matched.startsWith('relevant') ? 'relevant files' : matched;
       currentContent = [];
       continue;
     }
 
-    // Check for "###" sub-headers (e.g., "### Bug:")
-    const subSectionMatch = line.match(/^###\s+(Goal|Accomplished|Discoveries|Relevant Files)/i);
+    // Check for "###" sub-headers for Goal/Accomplished/Discoveries/Relevant Files
+    const subSectionMatch = line.match(/^###\s+(Goal|Accomplished|Discoveries|Relevant Files?.*)/i);
     if (subSectionMatch) {
       saveSection(result, currentSection, currentContent);
-      currentSection = subSectionMatch[1].toLowerCase();
+      const matched = subSectionMatch[1].toLowerCase();
+      currentSection = matched.startsWith('relevant') ? 'relevant files' : matched;
+      currentContent = [];
+      continue;
+    }
+
+    // Skip other nested headers (### Architecture, ### Bug:, etc.) - but save current section first
+    const otherHeaderMatch = line.match(/^###+\s+.*/);
+    if (otherHeaderMatch) {
+      // This marks the end of current section content
+      saveSection(result, currentSection, currentContent);
+      currentSection = null;
       currentContent = [];
       continue;
     }
@@ -116,7 +129,16 @@ export function extractSessionContent(sessionContent) {
 
     // Accumulate content for current section
     if (currentSection) {
-      currentContent.push(line);
+      // Strip emojis and truncation markers from aggregated content
+      const cleanLine = line
+        .replace(/^[\s]*[-*–][\s]+/u, '')     // Strip bullet marker first
+        .replace(/^[✅💡🐛🔧📝🔍📦🚪🚀][\s\-–]*/u, '')  // Then strip emoji
+        .replace(/\*\(truncated\)\*/g, '')
+        .replace(/\*\*/g, '')                  // Remove residual **
+        .trim();
+      if (cleanLine.length > 0 && !cleanLine.match(/^#+\s/)) {
+        currentContent.push(cleanLine);
+      }
     }
   }
 
@@ -164,20 +186,30 @@ function parseRelevantFiles(content) {
   const files = [];
   const lines = content.split('\n');
 
+  // Only accept lines that look like actual file paths
+  // Valid: /path/file.js, src/file.js, *.test.js, package.json, dir/file.ext
+  // Invalid: plain English sentences, "Note:", "No files", greeting text
+  const filePathPattern = /^[\/.]?[a-zA-Z][\w\-\.\/\*]*\.[a-zA-Z]{1,10}$/;
+  // Also accept paths starting with /Users/, /var/, ./, ../, or *.
+  const validPrefixes = ['/Users/', '/var/', '/tmp/', './', '../', '~/.'];
+
   for (const line of lines) {
-    // Match bullet points with file paths
-    const bulletMatch = line.match(/^-\s+(.+)/);
-    if (bulletMatch) {
-      const fileContent = bulletMatch[1].trim();
-      // Extract file paths (e.g., src/utils/file.js, *.test.js, etc.)
-      const fileMatches = fileContent.match(/(?:[\w\-\*\/\.]+\/?)+[\w\-\*\.]+/g);
-      if (fileMatches) {
-        files.push(...fileMatches);
-      } else if (fileContent && !fileContent.startsWith('*')) {
-        // If it's a bullet but no file pattern, treat as a file reference
-        files.push(fileContent);
-      }
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    const fileContent = trimmed.replace(/^[-*]\s*/, '').trim();
+    if (!fileContent) continue;
+
+    // Must match file path pattern OR start with valid prefix
+    const hasValidPrefix = validPrefixes.some(p => fileContent.startsWith(p));
+    const matchesPattern = filePathPattern.test(fileContent);
+    // Accept wildcards at START (*.test.js) or with ** in middle (src/**/*.js)
+    // but NOT garbage like "Note: ...*" (asterisk at end of sentence)
+    const hasWildcard = /^\*|^\[.*\]\(/.test(fileContent) || fileContent.includes('**');
+
+    if (matchesPattern || hasValidPrefix || hasWildcard) {
+      files.push(fileContent);
     }
+    // Silent drop: sentences, greetings, system messages
   }
 
   return [...new Set(files)]; // Deduplicate
@@ -500,8 +532,8 @@ function buildInferencePrompt(sessionContent, extracted) {
  * @param {Array} sessions - Array of session objects with content
  * @returns {Array} [{ pattern, sessions, frequency }]
  */
-export function findPatterns(sessions) {
-  if (!Array.isArray(sessions) || sessions.length < 2) {
+export function findPatterns(sessions, existingPatterns = []) {
+  if (!Array.isArray(sessions) || sessions.length < 1) {
     return [];
   }
 
@@ -573,43 +605,222 @@ export function findPatterns(sessions) {
 }
 
 /**
- * Find recurring themes in text array
+ * Semantic theme definitions for meaningful work pattern detection
+ * Each theme has a name, specific phrases that indicate the theme,
+ * and example topics for documentation.
+ */
+const SEMANTIC_THEMES = [
+  {
+    name: 'startup optimization',
+    phrases: ['lazy initialization', 'deferred loading', 'async initialization', 'module-level init', 'slow startup', 'constructor initialization'],
+    exampleTopics: 'Improving plugin startup time'
+  },
+  {
+    name: 'LLM integration',
+    phrases: ['llm client', 'infer missing fields', 'context plugin', 'mechanical extraction', 'clientsessionsprompt', 'openai client', 'ai inference'],
+    exampleTopics: 'Integrating LLM capabilities'
+  },
+  {
+    name: 'context learning',
+    phrases: ['context learning', 'extract persistent patterns', 'intelligence learning', 'pattern detection', 'learn from sessions'],
+    exampleTopics: 'Learning from session history'
+  },
+  {
+    name: 'plugin hook registration',
+    phrases: ['hook registration', 'register hook', 'hook system', 'lifecycle hook', 'plugin hook', 'before/after hook'],
+    exampleTopics: 'Plugin hook infrastructure'
+  },
+  {
+    name: 'token counting',
+    phrases: ['token counting', 'count tokens', 'countSessionTokens', 'token limit', 'context length', 'max tokens'],
+    exampleTopics: 'Managing context window limits'
+  },
+  {
+    name: 'memory management',
+    phrases: ['memory leak', 'cache invalidation', 'weak reference', 'memory pressure', 'gc optimization', 'object pooling'],
+    exampleTopics: 'Memory optimization and leak prevention'
+  },
+  {
+    name: 'dead code detection',
+    phrases: ['dead code', 'unused code', 'unreachable code', 'code analysis', 'static analysis', 'unused export'],
+    exampleTopics: 'Identifying and removing unused code'
+  },
+  {
+    name: 'session deduplication',
+    phrases: ['session deduplication', 'dedupe sessions', 'duplicate session', 'merge sessions', 'session merge'],
+    exampleTopics: 'Preventing duplicate session entries'
+  },
+  {
+    name: 'keyword link generation',
+    phrases: ['keyword link', 'cross reference', 'related session', 'session link', 'cross-project link', 'link generation'],
+    exampleTopics: 'Generating links between related sessions'
+  },
+  {
+    name: 'error handling improvement',
+    phrases: ['error handling', 'exception handling', 'try-catch', 'error recovery', 'graceful degradation', 'fallback mechanism'],
+    exampleTopics: 'Improving error resilience'
+  },
+  {
+    name: 'API client wrapper',
+    phrases: ['api client', 'http client', 'fetch wrapper', 'axios instance', 'request builder', 'api abstraction'],
+    exampleTopics: 'Abstracting external API calls'
+  },
+  {
+    name: 'data serialization',
+    phrases: ['serialize', 'deserialize', 'json parsing', 'parse json', 'serialization format', 'data marshalling'],
+    exampleTopics: 'Converting data between formats'
+  },
+  {
+    name: 'configuration management',
+    phrases: ['config management', 'settings persistence', 'user preferences', 'config file', 'environment config', 'dotenv'],
+    exampleTopics: 'Managing application configuration'
+  },
+  {
+    name: 'logging and debugging',
+    phrases: ['debug logger', 'debug mode', 'verbose logging', 'log level', 'trace execution', 'console debug'],
+    exampleTopics: 'Diagnostic and debugging utilities'
+  },
+  {
+    name: 'file system operations',
+    phrases: ['file watcher', 'directory scan', 'path resolution', 'file glob', 'fs operations', 'watch directory'],
+    exampleTopics: 'File and directory handling'
+  },
+  {
+    name: 'prompt engineering',
+    phrases: ['prompt template', 'system prompt', 'user prompt', 'prompt injection', 'prompt optimization', 'chat template'],
+    exampleTopics: 'Crafting effective LLM prompts'
+  },
+  {
+    name: 'context window management',
+    phrases: ['context window', 'truncate context', 'context overflow', 'trim history', 'prune context', 'context limit'],
+    exampleTopics: 'Managing LLM context constraints'
+  },
+  {
+    name: 'state management',
+    phrases: ['state machine', 'state management', 'store state', 'persist state', 'application state', 'state reducer'],
+    exampleTopics: 'Managing application state'
+  },
+  {
+    name: 'batch processing',
+    phrases: ['batch processing', 'bulk operation', 'batch operation', 'parallel processing', 'concurrent tasks', 'worker queue'],
+    exampleTopics: 'Processing multiple items efficiently'
+  },
+  {
+    name: 'session context extraction',
+    phrases: ['extract context', 'parse session', 'session parsing', 'content extraction', 'structured data', 'parse markdown'],
+    exampleTopics: 'Extracting structured data from sessions'
+  }
+];
+
+/**
+ * Find recurring semantic themes in text array
+ * Uses phrase-based matching instead of single keywords
+ * 
  * @param {Array} textsWithIds - Array of {text, id} objects
  * @param {string} patternType - Type prefix for patterns
  */
 function findRecurringThemes(textsWithIds, patternType) {
   const themeMap = new Map();
 
-  // Simple keyword-based theme detection
-  const commonKeywords = [
-    'api', 'database', 'auth', 'config', 'test', 'bug', 'fix', 'feature',
-    'refactor', 'deploy', 'migration', 'error', 'performance', 'security'
-  ];
+  // Initialize theme map with semantic themes
+  for (const theme of SEMANTIC_THEMES) {
+    const themeKey = patternType + ': ' + theme.name;
+    themeMap.set(theme.name, {
+      pattern: themeKey,
+      sessions: [],
+      frequency: 0,
+      themeName: theme.name
+    });
+  }
 
   for (const { text, id } of textsWithIds) {
     if (!text) continue;
-    
+
     const lowerText = text.toLowerCase();
-    const seenKeywords = new Set(); // Track keywords found in this session to avoid duplicates
-    
-    for (const keyword of commonKeywords) {
-      if (lowerText.includes(keyword)) {
-        const theme = patternType + ': ' + keyword;
-        if (!themeMap.has(theme)) {
-          themeMap.set(theme, { pattern: theme, sessions: [], frequency: 0 });
-        }
-        const entry = themeMap.get(theme);
-        // Only add session ID if we haven't already counted this keyword for this session
-        if (!seenKeywords.has(keyword)) {
+    const matchedThemes = new Set(); // Track themes matched in this session
+
+    // Check each semantic theme
+    for (const theme of SEMANTIC_THEMES) {
+      // Skip if this session already matched this theme
+      if (matchedThemes.has(theme.name)) continue;
+
+      // Check if any phrase for this theme matches
+      for (const phrase of theme.phrases) {
+        if (lowerText.includes(phrase.toLowerCase())) {
+          // Mark this theme as matched for this session
+          matchedThemes.add(theme.name);
+          
+          const entry = themeMap.get(theme.name);
           entry.sessions.push(id);
           entry.frequency++;
-          seenKeywords.add(keyword);
+          break; // Only count once per session
         }
       }
     }
   }
 
-  return Array.from(themeMap.values()).filter(t => t.frequency >= 2);
+  // Filter to themes appearing in at least 2 sessions, sort by frequency
+  let results = Array.from(themeMap.values())
+    .filter(t => t.frequency >= 2)
+    .sort((a, b) => b.frequency - a.frequency);
+
+  // ALWAYS run keyword fallback to find additional organic patterns
+  // This supplements SEMANTIC_THEMES, doesn't replace them
+  const stopWords = new Set(['the', 'a', 'an', 'is', 'was', 'are', 'were', 'be', 'been', 'to', 'of', 'and', 'in', 'for', 'on', 'with', 'that', 'this', 'it', 'its', 'as', 'at', 'by', 'from', 'or', 'if', 'when', 'while', 'then', 'so', 'but', 'not', 'can', 'will', 'just', 'have', 'has', 'had', 'do', 'does', 'did', 'would', 'could', 'should', 'may', 'might', 'must', 'about', 'into', 'out', 'up', 'down', 'over', 'under', 'again', 'more', 'most', 'some', 'any', 'all', 'each', 'few', 'many', 'other', 'such', 'no', 'nor', 'only', 'own', 'same', 'than', 'too', 'very', 's', 't', 'i', 'me', 'my', 'we', 'our', 'you', 'your', 'he', 'she', 'they', 'them', 'their', 'what', 'which', 'who', 'whom', 'these', 'those', 'am', 'let', 'get', 'got', 'been', 'session', 'user', 'wants', 'summary', 'conversation', 'context', 'goal', 'message', 'assistant', 'file', 'files', 'project', 'code', 'plugin', 'opencode', 'using', 'used', 'create', 'created', 'make', 'made', 'add', 'added', 'update', 'updated', 'remove', 'removed', 'fix', 'fixed', 'change', 'changed', 'check', 'see', 'need', 'needs', 'look', 'looking', 'find', 'found', 'help', 'try', 'start', 'work', 'works', 'working', 'run', 'running', 'give', 'given', 'tell', 'told', 'ask', 'asked', 'want', 'like', 'take', 'took', 'know', 'think', 'thought', 'right', 'left', 'good', 'great', 'well', 'way', 'ways', 'new', 'now', 'here', 'there', 'come', 'came', 'go', 'went', 'say', 'said', 'use', 'using', 'thanks', 'thank', 'please', 'sorry', 'something', 'anything', 'everything', 'nothing', 'someone', 'anyone', 'everyone', 'done', 'doing', 'able', 'also', 'back', 'even', 'still', 'enough', 'first', 'last', 'next', 'best', 'better', 'sure', 'real', 'really', 'maybe', 'perhaps', 'probably', 'actually', 'basically', 'simply', 'exactly', 'already', 'yet', 'ever', 'never', 'always', 'sometimes', 'often', 'usually', 'likely', 'unlikely', 'possible', 'impossible', 'necessary', 'worse', 'important', 'easy', 'hard', 'long', 'short', 'big', 'small', 'old', 'young', 'high', 'low', 'fast', 'slow', 'hot', 'cold', 'warm', 'cool', 'dark', 'light', 'bright', 'weak', 'strong', 'loud', 'quiet', 'clean', 'dirty', 'dry', 'wet', 'deep', 'shallow', 'full', 'empty', 'heavy', 'light', 'rich', 'poor', 'safe', 'dangerous', 'healthy', 'sick', 'alive', 'dead', 'open', 'closed', 'true', 'false', 'different', 'similar', 'natural', 'artificial', 'free', 'expensive', 'cheap', 'quiet', 'noisy', 'simple', 'complex', 'clear', 'confusing', 'direct', 'indirect', 'positive', 'negative', 'active', 'passive', 'correct', 'incorrect', 'early', 'late', 'modern', 'traditional', 'internal', 'external', 'public', 'private', 'formal', 'informal', 'special', 'general', 'temporary', 'permanent', 'curious', 'indifferent', 'optimistic', 'pessimistic', 'objective', 'subjective', 'logical', 'illogical', 'reasonable', 'unreasonable', 'responsible', 'irresponsible', 'efficient', 'inefficient', 'sufficient', 'insufficient', 'necessary', 'unnecessary', 'sufficient', 'acceptable', 'unacceptable', 'appropriate', 'inappropriate', 'significant', 'insignificant', 'obvious', 'subtle', 'minor', 'major', 'primary', 'secondary', 'basic', 'advanced', 'standard', 'nonstandard', 'normal', 'abnormal', 'regular', 'irregular', 'consistent', 'inconsistent', 'dependent', 'independent', 'relative', 'absolute', 'complete', 'incomplete', 'perfect', 'imperfect', 'strong', 'weak', 'violent', 'peaceful', '粗糙', '精细', '快速', '缓慢', '简单', '复杂', '清楚', '模糊', '稳定', '不稳定', '有效', '无效', '一致', '不一致', '全面', '片面', '系统', '零散', '主动', '被动', '计划', '随机', '开源', '闭源', '同步', '异步', '集中', '分散', '这个', '那个', '什么', '怎么', '为什么', '哪里', '谁', '何时', '是否', '虽然', '但是', '而且', '或者', '因为', '所以', '如果', '虽然', 'test', 'tests', 'testing', 'tested', 'revisar', 'revisando', 'revisado', 'tudo', 'todas', 'todos', 'todo', 'toda', 'very', 'also', 'too', 'only', 'just', 'even']);
+
+  // Count single words, 2-word phrases, and 3-word phrases
+  const phraseCount = new Map();
+  const matchedSemanticThemes = new Set(results.map(r => r.themeName));
+  for (const { text, id } of textsWithIds) {
+    if (!text) continue;
+    const lowerText = text.toLowerCase();
+    const words = lowerText.split(/\s+/).filter(w => w.length >= 3 && !stopWords.has(w));
+    
+    // Count single words (3+ chars)
+    for (const word of words) {
+      if (matchedSemanticThemes.has(word)) continue;
+      if (!phraseCount.has(word)) phraseCount.set(word, { count: 0, sessions: new Set() });
+      phraseCount.get(word).count++;
+      phraseCount.get(word).sessions.add(id);
+    }
+    
+    // Count 2-word phrases
+    for (let i = 0; i < words.length - 1; i++) {
+      const phrase2 = words.slice(i, i + 2).join(' ');
+      if (matchedSemanticThemes.has(phrase2) || matchedSemanticThemes.has(phrase2.split(' ')[0])) continue;
+      if (!phraseCount.has(phrase2)) phraseCount.set(phrase2, { count: 0, sessions: new Set() });
+      phraseCount.get(phrase2).count++;
+      phraseCount.get(phrase2).sessions.add(id);
+    }
+    
+    // Count 3-word phrases
+    for (let i = 0; i < words.length - 2; i++) {
+      const phrase3 = words.slice(i, i + 3).join(' ');
+      if (matchedSemanticThemes.has(phrase3)) continue;
+      if (!phraseCount.has(phrase3)) phraseCount.set(phrase3, { count: 0, sessions: new Set() });
+      phraseCount.get(phrase3).count++;
+      phraseCount.get(phrase3).sessions.add(id);
+    }
+  }
+
+  // Build organic patterns from phrases appearing in 2+ sessions
+  const existingPatterns = new Set(results.map(r => r.pattern.toLowerCase()));
+  for (const [phrase, data] of phraseCount) {
+    if (data.sessions.size >= 2) {
+      const pattern = patternType + ': ' + phrase;
+      if (!existingPatterns.has(pattern.toLowerCase())) {
+        results.push({
+          pattern,
+          sessions: Array.from(data.sessions),
+          frequency: data.sessions.size
+        });
+      }
+    }
+  }
+
+  // Sort by frequency and limit
+  results.sort((a, b) => b.frequency - a.frequency);
+  return results.slice(0, 10);
 }
 
 /**
@@ -643,7 +854,7 @@ function findBugPatterns(sessionData) {
     }
   }
 
-  return Array.from(bugMap.values()).filter(t => t.frequency >= 2);
+  return Array.from(bugMap.values()).filter(t => t.frequency >= 1);
 }
 
 /**
@@ -671,7 +882,7 @@ function findFilePatterns(sessionData) {
     }
   }
 
-  return Array.from(fileMap.values()).filter(t => t.frequency >= 2);
+  return Array.from(fileMap.values()).filter(t => t.frequency >= 1);
 }
 
 /**
@@ -938,14 +1149,17 @@ function inferPatternType(pattern) {
 
 /**
  * Normalize pattern text for deduplication comparison
- * Uses first 50 chars, lowercase, trimmed
+ * Removes articles, normalizes whitespace, lowercases
  * 
  * @param {string} pattern - Pattern text
  * @returns {string} Normalized pattern key
  */
 export function normalizePattern(pattern) {
   if (!pattern) return '';
-  return pattern.toLowerCase().trim().slice(0, 50);
+  let normalized = pattern.toLowerCase().trim();
+  normalized = normalized.replace(/\b(a|an|the)\b/g, '');
+  normalized = normalized.replace(/\s+/g, ' ').trim();
+  return normalized.slice(0, 50);
 }
 
 /**

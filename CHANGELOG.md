@@ -2,6 +2,31 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.6.1] - 2026-05-01
+
+### Added
+- **Failed Approaches Section**: 4 anti-patterns documented to prevent regressions:
+  - ANTI-PATTERN: Calling `extractSectionFromContent` (function does not exist, should be `extractSection`)
+  - ANTI-PATTERN: Truncation markers appearing as literal text instead of being filtered
+  - ANTI-PATTERN: Missing deduplication on keywords causing duplicates in reports
+  - ANTI-PATTERN: Month without zero-padding causing invalid paths (e.g., `2026/4/` instead of `2026/04/`)
+
+### Fixed
+- **TOKEN-PROPAGATION**: Token stats now properly flow through day→week→month→annual hierarchy
+- **EMOJI-CORRUPTION**: Emojis (💡, ✅, 🔧) no longer appear as literal characters in summaries
+- **PATH-INCONSISTENCY**: Hierarchical vs flat paths reconciled between read and generate agents
+- **TRUNCATION-MARKERS**: `*(truncated)*` and `[truncated]` markers filtered from content
+- **WIKI-LINK-CONTAMINATION**: `.opencode/context-session/` paths no longer leak into report content
+- **ISO-WEEK-BUG**: Proper ISO week algorithm replaces `Math.ceil(getDate()/7)`
+- **EXTRACTSECTION-CRASH**: `extractSectionFromContent` corrected to `extractSection` in annual reports
+- **DEBOUNCE-STATIC-DELAY**: Debounce delay now uses dynamic config value at runtime
+- **DUPLICATE-EXTRACTSECTION**: Single `extractSection` implementation in `summaryUtils.js`
+- **KEYWORD-DUPLICATION**: Proper deduplication prevents duplicate keywords in reports
+
+### Changed
+- **Test Suite**: 322 tests now passing (up from 291)
+- **Session Tracking**: 19 sessions tracked with comprehensive intelligence learning
+
 ## [1.6.0] - 2026-04-23
 
 ### Added

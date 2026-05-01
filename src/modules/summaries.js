@@ -1,17 +1,16 @@
 import fs from "fs/promises";
 import path from "path";
-import { getConfig } from '../config.js';
+import { getConfig, CONTEXT_SESSION_DIR } from '../config.js';
 import { createDebugLogger } from '../utils/debug.js';
 import { debounce } from '../utils/debounce.js';
-import { atomicWrite, getTimestamp } from '../utils/fileUtils.js';
+import { atomicWrite } from '../utils/fileUtils.js';
 import { extractSessionContent, extractBugs, extractPersistentPatterns, normalizePattern, dedupePatterns } from './contentExtractor.js';
 import { countSessionTokens, countTokens, isCodeContent } from './tokenLimit.js';
 import { isProtectedSession, isProtectedContent, getProtectionStatus } from '../utils/patternMatcher.js';
+import { buildKeywords, extractKeywordsFromContent, addRelatedLinks, addKeywordNavigation } from '../agents/utils/linkBuilder.js';
+import { extractSection } from '../utils/summaryUtils.js';
 
 const logger = createDebugLogger('context-plugin');
-
-// Constants
-const CONTEXT_SESSION_DIR = '.opencode/context-session';
 
 /**
  * Check if content change exceeds nudge threshold
@@ -163,7 +162,7 @@ async function readDaySessions(dirPath) {
  * @param {Array} sessionsData - Array from readDaySessions
  * @returns {string} Formatted day summary content
  */
-function formatDayContent(dateStr, sessionsData) {
+function formatDayContent(dateStr, sessionsData, year, month, week, allContent = '') {
   // Collect goals, accomplishments, discoveries, bugs, files
   const goals = [];
   const accomplishments = [];
@@ -232,8 +231,14 @@ function formatDayContent(dateStr, sessionsData) {
     return true;
   });
   
-  // Build content
-  let content = `# Day Summary\n\n`;
+  // Build content with frontmatter
+  let content = `---
+title: Day Summary - ${dateStr}
+date: ${dateStr}
+---
+
+`;
+  content += `# Day Summary\n\n`;
   content += `**Date:** ${dateStr}\n\n`;
   
   // Sessions overview
@@ -279,10 +284,11 @@ function formatDayContent(dateStr, sessionsData) {
       // Handle multiline content
       const lines = acc.text.split('\n').filter(l => l.trim());
       for (const line of lines) {
-        // Strip existing bullet marker if present
+        // Strip existing bullet marker and any emoji
         let cleanLine = line.replace(/^[-*]\s*/, '').trim();
+        cleanLine = cleanLine.replace(/^[✅💡🐛🔧📝🔍📦🚪]\s*/u, '');
         if (cleanLine.length > 0) {
-          content += `- ✅ ${cleanLine}\n`;
+          content += `- ${cleanLine}\n`;
         }
       }
     }
@@ -293,10 +299,11 @@ function formatDayContent(dateStr, sessionsData) {
   if (uniqueDiscoveries.length > 0) {
     content += `## Discoveries\n\n`;
     for (const disc of uniqueDiscoveries) {
-      // Strip existing bullet marker if present
+      // Strip existing bullet marker and any emoji
       let cleanText = disc.text.replace(/^[-*]\s*/, '').trim();
+      cleanText = cleanText.replace(/^[✅💡🐛🔧📝🔍📦🚪]\s*/u, '');
       if (cleanText.length > 0) {
-        content += `- 💡 ${cleanText}\n`;
+        content += `- ${cleanText}\n`;
       }
     }
     content += '\n';
@@ -321,6 +328,39 @@ function formatDayContent(dateStr, sessionsData) {
       content += `- ${file}\n`;
     }
     content += '\n';
+  }
+  
+  // Add Keywords (Obsidian) section with wiki-links
+  if (allContent && year && month && week) {
+    const contentKeywords = extractKeywordsFromContent(allContent, 15).filter(k =>
+      !['summary', 'summaries', 'sessions', 'total', 'date', 'week', 'month', 'year',
+        'context', 'report', 'reports', 'daily', 'weekly', 'monthly', 'annual', 'intelligence',
+        'compact', 'exit', 'file', 'files', 'day', 'days', 'related', 'navigation',
+        'keywords', 'obsidian', 'created', 'title', 'generated', 'section',
+        'messages', 'user', 'assistant', 'content', 'session', 'sessions'].includes(k.toLowerCase())
+    );
+    
+    if (contentKeywords.length > 0) {
+      const config = getConfig();
+      const keywords = buildKeywords({
+        projectName: config.projectName || 'opencode-context-plugin',
+        module: 'daySummary',
+        keywords: contentKeywords
+      });
+      content += `## Keywords (Obsidian)\n\n`;
+      content += `${keywords}\n\n`;
+    }
+
+    // Add Related section
+    // Links are now relative to Vault Root for Obsidian compatibility
+    content += addRelatedLinks([
+      `${CONTEXT_SESSION_DIR}/intelligence-learning.md`,
+      `${CONTEXT_SESSION_DIR}/${year}/${month}/${week}/week-summary.md`,
+      `${CONTEXT_SESSION_DIR}/${year}/${month}/monthly-${year}-${month}.md`
+    ]);
+
+    // Add Navigation section
+    content += addKeywordNavigation({ type: 'daily', year, month, week });
   }
   
   return content;
@@ -423,11 +463,14 @@ async function updateDaySummary(dirPath, sessionInfo) {
     // Read all session files from this day directory to build comprehensive summary
     const sessionsData = await readDaySessions(dirPath);
     
-    // Format date string
-    const dateStr = `${sessionInfo.year}-${sessionInfo.month}-${sessionInfo.day}`;
+    // Format date string with zero-padding
+    const dateStr = `${sessionInfo.year}-${String(sessionInfo.month).padStart(2, '0')}-${String(sessionInfo.day).padStart(2, '0')}`;
+    
+    // Build allContent for keyword extraction
+    const allContent = sessionsData.map(s => s.content).join('\n');
     
     // Generate comprehensive day summary with extracted content
-    const content = formatDayContent(dateStr, sessionsData);
+    const content = formatDayContent(dateStr, sessionsData, sessionInfo.year, sessionInfo.month, sessionInfo.week, allContent);
     
     const summaryPath = path.join(dirPath, 'day-summary.md');
     await atomicWrite(summaryPath, content);
@@ -512,55 +555,90 @@ async function updateWeekSummaryImpl(baseDir, year, month, week) {
     content += `**Week:** ${week}\n`;
     content += `**Total Sessions:** ${totalCompacts + totalExits} (Compacts: ${totalCompacts}, Exits: ${totalExits})\n\n`;
     
-    // Aggregate Goals from all days
+    // Synthesize Goals by theme clustering
     const allGoals = daySummaries.flatMap(d => d.goals);
     if (allGoals.length > 0) {
       content += `## Goals\n\n`;
-      for (const goal of allGoals.slice(0, 10)) {
-        content += `- ${goal}\n`;
+      const goalClusters = synthesizeByTheme(allGoals);
+      for (const cluster of goalClusters) {
+        if (cluster.count > 1) {
+          content += `- **${cluster.theme}** (${cluster.count} days)\n`;
+        } else {
+          content += `- ${cluster.examples[0]}\n`;
+        }
       }
       content += '\n';
     }
     
-    // Aggregate Accomplishments from all days
+    // Synthesize Accomplishments by type clustering
     const allAccomplishments = daySummaries.flatMap(d => d.accomplishments);
     if (allAccomplishments.length > 0) {
       content += `## Accomplishments\n\n`;
       const uniqueAccomplishments = dedupePatternsByKey(allAccomplishments).filter(key => key.length > 5);
-      for (const acc of uniqueAccomplishments.slice(0, 10)) {
-        content += `- ✅ ${acc}\n`;
+      const accClusters = synthesizeByTheme(uniqueAccomplishments);
+      for (const cluster of accClusters) {
+        if (cluster.count > 1) {
+          content += `- **${cluster.theme}** (${cluster.count} occurrences)\n`;
+        } else {
+          content += `- ${cluster.examples[0]}\n`;
+        }
       }
       content += '\n';
     }
     
-    // Aggregate Discoveries from all days
+    // Synthesize Discoveries by topic clustering
     const allDiscoveries = daySummaries.flatMap(d => d.discoveries);
     if (allDiscoveries.length > 0) {
       content += `## Discoveries\n\n`;
       const uniqueDiscoveries = dedupePatternsByKey(allDiscoveries).filter(key => key.length > 5);
-      for (const disc of uniqueDiscoveries.slice(0, 10)) {
-        content += `- 💡 ${disc}\n`;
+      const discClusters = synthesizeByTheme(uniqueDiscoveries);
+      for (const cluster of discClusters) {
+        if (cluster.count > 1) {
+          content += `- **${cluster.theme}** (${cluster.count} occurrences)\n`;
+        } else {
+          content += `- ${cluster.examples[0]}\n`;
+        }
       }
       content += '\n';
     }
     
-    // Aggregate Bugs Fixed from all days
+    // Synthesize Bugs Fixed with trend info
     const allBugs = daySummaries.flatMap(d => d.bugsFixed);
     if (allBugs.length > 0) {
       content += `## Bugs Fixed\n\n`;
-      for (const bug of allBugs) {
-        content += `- ${bug}\n`;
+      const bugClusters = synthesizeByTheme(allBugs);
+      const totalBugs = allBugs.length;
+      content += `**Total:** ${totalBugs} bug${totalBugs !== 1 ? 's' : ''} fixed across ${daySummaries.length} days\n\n`;
+      for (const cluster of bugClusters) {
+        if (cluster.count > 1) {
+          content += `- **${cluster.theme}** (${cluster.count} occurrences)\n`;
+        } else {
+          content += `- ${cluster.examples[0]}\n`;
+        }
       }
       content += '\n';
     }
     
-    // Aggregate Relevant Files from all days
+    // Aggregate Relevant Files (still just unique list)
     const allFiles = daySummaries.flatMap(d => d.files);
     if (allFiles.length > 0) {
       content += `## Relevant Files\n\n`;
       const uniqueFiles = [...new Set(allFiles)];
-      for (const file of uniqueFiles) {
+      for (const file of uniqueFiles.slice(0, 15)) {
         content += `- ${file}\n`;
+      }
+      if (uniqueFiles.length > 15) {
+        content += `- ... and ${uniqueFiles.length - 15} more\n`;
+      }
+      content += '\n';
+    }
+    
+    // Week Highlights - top 3 most significant items
+    const highlights = computeWeekHighlights(daySummaries);
+    if (highlights.length > 0) {
+      content += `## Week Highlights\n\n`;
+      for (const h of highlights) {
+        content += `- ${h}\n`;
       }
       content += '\n';
     }
@@ -575,7 +653,7 @@ async function updateWeekSummaryImpl(baseDir, year, month, week) {
     content += `## Day-by-Day Summary\n\n`;
     for (const daySummary of daySummaries) {
       content += `### Day ${daySummary.day}\n\n`;
-      content += `- [[${daySummary.day}/day-summary.md]]\n`;
+      content += `- [[${year}/${month}/${week}/${daySummary.day}/day-summary.md]]\n`;
       if (daySummary.goals.length > 0) {
         content += `  - Goals: ${daySummary.goals.length}\n`;
       }
@@ -594,47 +672,12 @@ async function updateWeekSummaryImpl(baseDir, year, month, week) {
   }
 }
 
-/**
- * Extract section content between heading and next heading
- * Strips emojis and bullet markers to get clean text
- */
-function extractSection(content, sectionHeading) {
-  const lines = content.split('\n');
-  const results = [];
-  let inSection = false;
-  
-  for (const line of lines) {
-    if (line.startsWith(sectionHeading)) {
-      inSection = true;
-      continue;
-    }
-    if (inSection) {
-      if (line.startsWith('## ') || line.startsWith('# ')) {
-        break;
-      }
-      if (line.trim().startsWith('- ')) {
-        // Strip emoji prefixes and bullet markers to get clean text
-        let text = line.trim().substring(2).trim();
-        // Remove emoji prefixes (with or without dash): "✅ - ", "💡 ", "✅"
-        text = text.replace(/^[✅💡🐛🔧📝🔍📦🚪][\s–-]*/u, '');
-        // Remove any remaining bullet markers
-        text = text.replace(/^[-*]\s*/, '');
-        if (text.length > 0) {
-          results.push(text);
-        }
-      }
-    }
-  }
-  
-  return results;
+function getDebounceDelay() {
+  return getConfig().debounceMs || 500;
 }
 
-// Create debounced versions using config's debounceMs
-const config = getConfig();
-const debounceMs = config.debounceMs || 500;
-
-export const updateDailySummary = debounce(updateDailySummaryImpl, debounceMs);
-export const updateWeekSummary = debounce(updateWeekSummaryImpl, debounceMs);
+export const updateDailySummary = debounce(updateDailySummaryImpl, getDebounceDelay);
+export const updateWeekSummary = debounce(updateWeekSummaryImpl, getDebounceDelay);
 export { updateDaySummary };
 
 /**
@@ -743,6 +786,124 @@ function formatTypeName(type) {
     general: 'Other Patterns'
   };
   return names[type] || type;
+}
+
+/**
+ * Synthesize items by theme clustering
+ * Groups items by extracted theme and counts occurrences
+ * 
+ * @param {Array} items - Array of strings to synthesize
+ * @returns {Array} Array of {theme, count, examples} clusters
+ */
+function synthesizeByTheme(items) {
+  const themeMap = new Map();
+  
+  for (const item of items) {
+    const normalized = normalizePattern(item);
+    const theme = extractTheme(item);
+    
+    if (!themeMap.has(theme)) {
+      themeMap.set(theme, { theme, count: 0, examples: [] });
+    }
+    const cluster = themeMap.get(theme);
+    cluster.count++;
+    if (cluster.examples.length < 2) {
+      cluster.examples.push(item);
+    }
+  }
+  
+  return Array.from(themeMap.values()).sort((a, b) => b.count - a.count);
+}
+
+/**
+ * Extract a theme from an item string
+ * Groups similar items together based on key words
+ * 
+ * @param {string} item - Item text
+ * @returns {string} Theme string
+ */
+function extractTheme(item) {
+  const lower = item.toLowerCase();
+  
+  if (lower.includes('fix') || lower.includes('bug')) {
+    if (lower.includes('parser')) return 'Bug fixes in parser';
+    if (lower.includes('config')) return 'Bug fixes in config';
+    if (lower.includes('test')) return 'Test fixes';
+    return 'Bug fixes';
+  }
+  
+  if (lower.includes('add') || lower.includes('implement') || lower.includes('create')) {
+    if (lower.includes('test')) return 'Tests added';
+    if (lower.includes('feature')) return 'New features';
+    if (lower.includes('function') || lower.includes('method')) return 'New functions/methods';
+    if (lower.includes('file')) return 'New files created';
+    return 'Implementation work';
+  }
+  
+  if (lower.includes('update') || lower.includes('refactor') || lower.includes('improve')) {
+    if (lower.includes('test')) return 'Test updates';
+    if (lower.includes('code')) return 'Code refactoring';
+    return 'Updates and improvements';
+  }
+  
+  if (lower.includes('remove') || lower.includes('delete')) {
+    return 'Code removal';
+  }
+  
+  if (lower.includes('read') || lower.includes('investigate') || lower.includes('explore')) {
+    return 'Research and investigation';
+  }
+  
+  if (lower.includes('debug') || lower.includes('troubleshoot')) {
+    return 'Debugging';
+  }
+  
+  if (lower.includes('optimize') || lower.includes('performance')) {
+    return 'Performance optimization';
+  }
+  
+  if (lower.includes('review') || lower.includes('check')) {
+    return 'Code review';
+  }
+  
+  if (lower.includes('docs') || lower.includes('documentation')) {
+    return 'Documentation';
+  }
+  
+  return item.length > 40 ? item.slice(0, 40) + '...' : item;
+}
+
+/**
+ * Compute week highlights - top 3 most significant items
+ * 
+ * @param {Array} daySummaries - Array of day summary objects
+ * @returns {Array} Array of highlight strings
+ */
+function computeWeekHighlights(daySummaries) {
+  const highlights = [];
+  
+  const totalBugs = daySummaries.flatMap(d => d.bugsFixed).length;
+  const totalAccomplishments = daySummaries.flatMap(d => d.accomplishments).length;
+  const totalDiscoveries = daySummaries.flatMap(d => d.discoveries).length;
+  
+  if (totalBugs > 0) {
+    highlights.push(`Fixed ${totalBugs} bug${totalBugs !== 1 ? 's' : ''} across the week`);
+  }
+  
+  if (totalAccomplishments >= 5) {
+    highlights.push(`Completed ${totalAccomplishments} accomplishments`);
+  }
+  
+  if (totalDiscoveries >= 3) {
+    highlights.push(`Made ${totalDiscoveries} discoveries`);
+  }
+  
+  const goalDays = daySummaries.filter(d => d.goals.length > 0).length;
+  if (goalDays >= 4) {
+    highlights.push(`Set goals on ${goalDays} days (${Math.round(goalDays / daySummaries.length * 100)}% goal coverage)`);
+  }
+  
+  return highlights.slice(0, 3);
 }
 
 /**

@@ -5,18 +5,19 @@
  * Usage: @ocp-generate-annual [year]
  *
  * Reads: monthly-YYYY-MM.md files from each month in the year
- * Saves to: .opencode/context-session/reports/annual-YYYY.md
+ * Saves to: .opencode/context-session/YYYY/annual-YYYY.md
  * 
  * Content hierarchy: day > week > month (largest) > annual (smallest)
  */
 
 import path from 'path';
 import fs from 'fs/promises';
-import { buildKeywords, addRelatedLinks, extractKeywordsFromContent, REPORTS_DIR, CONTEXT_SESSION_DIR, addKeywordNavigation, generateKeywordLinks } from './utils/linkBuilder.js';
+import { buildKeywords, extractKeywordsFromContent, CONTEXT_SESSION_DIR, addKeywordNavigation, generateKeywordLinks } from './utils/linkBuilder.js';
 import { getConfig } from '../config.js';
 import { truncateToBudget } from '../modules/tokenLimit.js';
 import { shouldRegenerate } from '../modules/summaries.js';
 import { createDebugLogger } from '../utils/debug.js';
+import { extractSection } from '../utils/summaryUtils.js';
 
 const logger = createDebugLogger('context-plugin');
 
@@ -66,41 +67,6 @@ async function scanYearMonthlyFiles(directory, year) {
 }
 
 /**
- * Extract section content from summary file
- * Strips emojis and bullet markers to get clean text
- */
-function extractSection(content, sectionHeading) {
-  const lines = content.split('\n');
-  const results = [];
-  let inSection = false;
-  
-  for (const line of lines) {
-    if (line.startsWith(sectionHeading)) {
-      inSection = true;
-      continue;
-    }
-    if (inSection) {
-      if (line.startsWith('## ') || line.startsWith('# ')) {
-        break;
-      }
-      if (line.trim().startsWith('- ')) {
-        // Strip emoji prefixes and bullet markers to get clean text
-        let text = line.trim().substring(2).trim();
-        // Remove emoji prefixes (with or without dash): "✅ - ", "💡 ", "✅"
-        text = text.replace(/^[✅💡🐛🔧📝🔍📦🚪][\s–-]*/u, '');
-        // Remove any remaining bullet markers
-        text = text.replace(/^[-*]\s*/, '');
-        if (text.length > 0) {
-          results.push(text);
-        }
-      }
-    }
-  }
-  
-  return results;
-}
-
-/**
  * Get quarter from month number (1-12)
  */
 function getQuarter(month) {
@@ -129,10 +95,11 @@ function formatAnnualContent(year, monthlyFiles) {
     content += `## Goals\n\n`;
     const seenGoals = new Set();
     for (const goal of allGoals) {
-      const key = goal.slice(0, 50).toLowerCase().trim();
+      const cleanGoal = goal.replace(/^[✅💡🐛🔧📝🔍📦🚪]\s*/u, '').replace(/^#+\s*/, '').trim();
+      const key = cleanGoal.slice(0, 50).toLowerCase().trim();
       if (!seenGoals.has(key) && key.length > 5) {
         seenGoals.add(key);
-        content += `- ${goal}\n`;
+        content += `- ${cleanGoal}\n`;
       }
     }
     content += '\n';
@@ -144,10 +111,11 @@ function formatAnnualContent(year, monthlyFiles) {
     content += `## Major Accomplishments\n\n`;
     const seenAccomplishments = new Set();
     for (const acc of allAccomplishments) {
-      const key = acc.slice(0, 50).toLowerCase().trim();
+      const cleanAcc = acc.replace(/^[✅💡🐛🔧📝🔍📦🚪]\s*/u, '').replace(/^#+\s*/, '').trim();
+      const key = cleanAcc.slice(0, 50).toLowerCase().trim();
       if (!seenAccomplishments.has(key) && key.length > 5) {
         seenAccomplishments.add(key);
-        content += `- ✅ ${acc}\n`;
+        content += `- ${cleanAcc}\n`;
       }
     }
     content += '\n';
@@ -159,10 +127,11 @@ function formatAnnualContent(year, monthlyFiles) {
     content += `## Discoveries\n\n`;
     const seenDiscoveries = new Set();
     for (const disc of allDiscoveries) {
-      const key = disc.slice(0, 50).toLowerCase().trim();
+      const cleanDisc = disc.replace(/^[✅💡🐛🔧📝🔍📦🚪]\s*/u, '').replace(/^#+\s*/, '').trim();
+      const key = cleanDisc.slice(0, 50).toLowerCase().trim();
       if (!seenDiscoveries.has(key) && key.length > 5) {
         seenDiscoveries.add(key);
-        content += `- 💡 ${disc}\n`;
+        content += `- ${cleanDisc}\n`;
       }
     }
     content += '\n';
@@ -173,7 +142,10 @@ function formatAnnualContent(year, monthlyFiles) {
   if (allIssues.length > 0) {
     content += `## Issues Resolved\n\n`;
     for (const issue of allIssues) {
-      content += `- ${issue}\n`;
+      const cleanIssue = issue.replace(/^[✅💡🐛🔧📝🔍📦🚪]\s*/u, '').replace(/^#+\s*/, '').trim();
+      if (cleanIssue.length > 0) {
+        content += `- ${cleanIssue}\n`;
+      }
     }
     content += '\n';
   }
@@ -182,7 +154,7 @@ function formatAnnualContent(year, monthlyFiles) {
   const allFiles = monthlyFiles.flatMap(m => m.files);
   if (allFiles.length > 0) {
     content += `## Relevant Files\n\n`;
-    const uniqueFiles = [...new Set(allFiles)];
+    const uniqueFiles = [...new Set(allFiles.map(f => f.replace(/^[✅💡🐛🔧📝🔍📦🚪]\s*/u, '').trim()))];
     for (const file of uniqueFiles) {
       content += `- ${file}\n`;
     }
@@ -207,11 +179,12 @@ function formatAnnualContent(year, monthlyFiles) {
       content += `- **Top Accomplishments:**\n`;
       const seenAccomplishments = new Set();
       for (const acc of quarterAccomplishments) {
-        const key = acc.slice(0, 50).toLowerCase().trim();
+        const cleanAcc = acc.replace(/^[✅💡🐛🔧📝🔍📦🚪]\s*/u, '').replace(/^#+\s*/, '').trim();
+        const key = cleanAcc.slice(0, 50).toLowerCase().trim();
         if (!seenAccomplishments.has(key) && key.length > 5) {
           seenAccomplishments.add(key);
-          const firstLine = acc.split('\n')[0].trim();
-          content += `  - ✅ ${firstLine}\n`;
+          const firstLine = cleanAcc.split('\n')[0].trim();
+          content += `  - ${firstLine}\n`;
         }
       }
     }

@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect } from '@jest/globals';
-import { countTokens, isCodeContent, countSessionTokens } from '../src/modules/tokenLimit.js';
+import { countTokens, isCodeContent, countSessionTokens, truncateToBudget } from '../src/modules/tokenLimit.js';
 
 describe('isCodeContent', () => {
   it('detects JavaScript code', () => {
@@ -95,5 +95,33 @@ describe('countSessionTokens', () => {
     expect(result.byMessage[0]).toHaveProperty('role', 'user');
     expect(result.byMessage[0]).toHaveProperty('tokens');
     expect(result.byMessage[0]).toHaveProperty('preview', 'Test');
+  });
+});
+
+describe('truncateToBudget', () => {
+  it('strips existing *(truncated)* before adding [truncated]', () => {
+    const content = 'a'.repeat(100) + ' *(truncated)*';
+    const result = truncateToBudget(content, 50);
+    expect(result).not.toContain('*(truncated)*');
+    expect(result).toContain('[truncated]');
+    expect(result.match(/\[truncated\]/g)).toHaveLength(1);
+  });
+
+  it('strips existing [truncated] before adding new [truncated]', () => {
+    const content = 'a'.repeat(100) + ' [truncated]';
+    const result = truncateToBudget(content, 50);
+    expect(result.match(/\[truncated\]/g)).toHaveLength(1);
+  });
+
+  it('does not add [truncated] if content fits within budget', () => {
+    const content = 'short content';
+    const result = truncateToBudget(content, 100);
+    expect(result).toBe(content);
+    expect(result).not.toContain('[truncated]');
+  });
+
+  it('handles empty content', () => {
+    expect(truncateToBudget('', 50)).toBe('');
+    expect(truncateToBudget(null, 50)).toBe('');
   });
 });

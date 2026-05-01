@@ -8,18 +8,19 @@
  */
 
 import path from 'path';
+import { getWeek } from 'date-fns';
 import { readFileContent, fileExists } from './utils/fileReader.js';
-import { REPORTS_DIR } from './utils/linkBuilder.js';
+import { CONTEXT_SESSION_DIR } from './utils/linkBuilder.js';
 import { generateWeeklySummary } from './generateWeekly.js';
 
 export async function readWeeklySummary(directory, weekDate, options = { summary: true }) {
   const date = weekDate ? new Date(weekDate) : new Date();
   const year = date.getFullYear();
-  const weekNum = String(Math.ceil(date.getDate() / 7)).padStart(2, '0');
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const weekNum = String(getWeek(date, { weekStartsOn: 1, firstWeekContainsDate: 4 })).padStart(2, '0');
   const weekStr = `W${weekNum}`;
 
-  const filename = `weekly-${year}-${weekStr}.md`;
-  const filePath = path.join(directory, REPORTS_DIR, filename);
+  const filePath = path.join(directory, CONTEXT_SESSION_DIR, String(year), month, weekStr, 'week-summary.md');
 
   // Auto-generate if doesn't exist
   if (!(await fileExists(filePath))) {

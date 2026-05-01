@@ -100,11 +100,14 @@ export async function getPendingQueue(baseDir) {
  */
 export async function addToPendingQueue(baseDir, item) {
   const state = await loadState(baseDir);
-  state.pending.push({
-    ...item,
-    addedAt: Date.now()
-  });
-  await saveState(baseDir, state);
+  const exists = state.pending.some(p => p.type === item.type && p.key === item.key);
+  if (!exists) {
+    state.pending.push({
+      ...item,
+      addedAt: Date.now()
+    });
+    await saveState(baseDir, state);
+  }
 }
 
 /**

@@ -9,7 +9,7 @@
 
 import path from 'path';
 import { readFileContent, fileExists } from './utils/fileReader.js';
-import { REPORTS_DIR } from './utils/linkBuilder.js';
+import { CONTEXT_SESSION_DIR } from './utils/linkBuilder.js';
 import { generateMonthlySummary } from './generateMonthly.js';
 
 export async function readMonthlySummary(directory, monthDate, options = { summary: true }) {
@@ -17,8 +17,7 @@ export async function readMonthlySummary(directory, monthDate, options = { summa
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, '0');
 
-  const filename = `monthly-${year}-${month}.md`;
-  const filePath = path.join(directory, REPORTS_DIR, filename);
+  const filePath = path.join(directory, CONTEXT_SESSION_DIR, String(year), month, `monthly-${year}-${month}.md`);
 
   // Auto-generate if doesn't exist
   if (!(await fileExists(filePath))) {

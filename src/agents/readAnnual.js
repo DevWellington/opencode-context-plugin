@@ -9,14 +9,13 @@
 
 import path from 'path';
 import { readFileContent, fileExists } from './utils/fileReader.js';
-import { REPORTS_DIR } from './utils/linkBuilder.js';
+import { CONTEXT_SESSION_DIR } from './utils/linkBuilder.js';
 import { generateAnnualSummary } from './generateAnnual.js';
 
 export async function readAnnualSummary(directory, year, options = { summary: true }) {
   const targetYear = year || new Date().getFullYear();
 
-  const filename = `annual-${targetYear}.md`;
-  const filePath = path.join(directory, REPORTS_DIR, filename);
+  const filePath = path.join(directory, CONTEXT_SESSION_DIR, String(targetYear), `annual-${targetYear}.md`);
 
   // Auto-generate if doesn't exist
   if (!(await fileExists(filePath))) {

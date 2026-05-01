@@ -141,6 +141,27 @@ Some other content here.
 
       expect(result.relevantFiles).toHaveLength(2);
     });
+
+    it('should strip emojis from extracted discoveries', () => {
+      const content = `## Discoveries
+- 💡 Found a bug
+- 🚀 Launched feature
+`;
+      const result = extractSessionContent(content);
+      expect(result.discoveries).not.toContain('💡');
+      expect(result.discoveries).not.toContain('🚀');
+      expect(result.discoveries).toContain('Found a bug');
+      expect(result.discoveries).toContain('Launched feature');
+    });
+
+    it('should strip *(truncated)* markers from extracted content', () => {
+      const content = `## Goal
+Implement auth *(truncated)*
+`;
+      const result = extractSessionContent(content);
+      expect(result.goal).not.toContain('*(truncated)*');
+      expect(result.goal).toContain('Implement auth');
+    });
   });
 
   describe('extractBugs', () => {

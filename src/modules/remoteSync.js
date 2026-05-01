@@ -567,8 +567,3 @@ export async function initializeRemoteSync() {
   logger(`[RemoteSync] Initialized - configured: ${syncState.configured}`);
   return syncState.configured;
 }
-
-// Initialize on module load
-initializeRemoteSync().catch(() => {
-  logger(`[RemoteSync] Initialization deferred`);
-});

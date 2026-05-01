@@ -1,7 +1,6 @@
 /**
  * Constants for file paths - ensures consistency across all agents
  */
-export const REPORTS_DIR = '.opencode/context-session/reports';
 export const CONTEXT_SESSION_DIR = '.opencode/context-session';
 
 export const REPORT_PATHS = {
@@ -17,9 +16,9 @@ export const REPORT_PATHS = {
  */
 export const KNOWN_REPORTS = {
   daily: 'daily-summary.md',
-  week: (year, week) => `${CONTEXT_SESSION_DIR}/${year}/MM/${week}/week-summary.md`,
-  monthly: (year, month) => `${REPORTS_DIR}/monthly-${year}-${month}.md`,
-  annual: (year) => `${REPORTS_DIR}/annual-${year}.md`,
+  week: (year, month, week) => `${year}/${month}/${week}/week-summary.md`,
+  monthly: (year, month) => `${year}/${month}/monthly-${year}-${month}.md`,
+  annual: (year) => `${year}/annual-${year}.md`,
   intelligence: 'intelligence-learning.md'
 };
 
@@ -33,12 +32,60 @@ export const KNOWN_REPORTS = {
 export function extractKeywordsFromContent(content, maxKeywords = 20) {
   // Remove markdown syntax and common words
   const stopWords = new Set([
+    // Articles, prepositions, pronouns
     'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for',
     'of', 'with', 'by', 'from', 'as', 'is', 'was', 'are', 'were', 'been',
     'be', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could',
     'should', 'may', 'might', 'can', 'this', 'that', 'these', 'those', 'it',
     'my', 'your', 'his', 'her', 'its', 'our', 'their', 'what', 'which', 'who',
-    'whom', 'when', 'where', 'how', 'why', 'if', 'then', 'else', 'because'
+    'whom', 'when', 'where', 'how', 'why', 'if', 'then', 'else', 'because',
+    // Technical generic terms (critical to filter)
+    'message', 'messages', 'msg',
+    'check', 'checking', 'checked',
+    'line', 'lines',
+    'function', 'functions', 'func',
+    'client', 'clients',
+    'update', 'updated', 'updating',
+    'test', 'testing', 'tested',
+    'note', 'notes',
+    'file', 'files',
+    'path', 'paths',
+    'key', 'keys',
+    'value', 'values',
+    'data', 'datum',
+    'error', 'errors',
+    'success', 'successful',
+    'start', 'started', 'starting',
+    'end', 'ended', 'ending',
+    'return', 'returned', 'returning',
+    'call', 'called', 'calling',
+    'run', 'ran', 'running',
+    'set', 'setting',
+    'get', 'getting',
+    'add', 'adding',
+    'remove', 'removing',
+    'create', 'created', 'creating',
+    'delete', 'deleted', 'deleting',
+    'read', 'reading',
+    'write', 'writing',
+    'open', 'opened', 'opening',
+    'close', 'closed', 'closing',
+    'new', 'old',
+    'first', 'last', 'next', 'previous',
+    'current', 'previous', 'next',
+    'total', 'all',
+    // System terms
+    'truncated', 'summary', 'summaries',
+    'session', 'sessions',
+    'context', 'contexts',
+    // No-value garbage keywords from generated reports
+    'no', 'not', 'none', 'any', 'but', 'actually', 'need', 'needs',
+    'looking', 'being', 'done', 'idea', 'bug', 'fix', 'search',
+    'package', 'chars', 'word', 'length', 'true', 'false',
+    'expected', 'received', 'rejected', 'accepted', 'fail', 'passed', 'passes',
+    'too', 'short', 'tei', 'technical', 'meaningful', 'terms', 'approaches',
+    'issue', 'content', 'actual', 'directories', 'relevant', 'current',
+    'door', 'checking', 'added', 'appear', 'relevant', 'start', 'conversation',
   ]);
 
   // Extract words
@@ -53,6 +100,10 @@ export function extractKeywordsFromContent(content, maxKeywords = 20) {
     .replace(/compact-/g, 'compact ')
     .replace(/exit-/g, 'exit ')
     .replace(/\(\)/g, ' ')
+    .replace(/\*\(truncated\)\*/g, ' ')
+    .replace(/\(truncated\)/g, ' ')
+    .replace(/\[truncated\]/g, ' ')
+    .replace(/[()\[\]]+/g, ' ')
     .split(/\s+/)
     .filter(w => {
       if (w.length < 4) return false;
@@ -60,6 +111,9 @@ export function extractKeywordsFromContent(content, maxKeywords = 20) {
       if (/^\d+$/.test(w)) return false;
       if (/[0-9]/.test(w)) return false;
       if (w === 'exit' || w === 'compact') return false;
+      if (w === 'truncated') return false;
+      if (w === '(truncated)') return false;
+      if (w === '[truncated]') return false;
       return true;
     });
 
@@ -132,7 +186,15 @@ export function generateKeywordLinks(options) {
       'compact:', 'exit:', 'file:', 'files:', 'day', 'days', 'related', 'navigation',
       'keywords', 'obsidian', 'created', 'title', 'generated', 'section',
       'messages', 'user', 'assistant', 'content', 'session', 'sessions',
-      'total', 'exit', 'compact', 'with', 'from', 'were', 'been', 'have', 'has', 'had'
+      'total', 'exit', 'compact', 'with', 'from', 'were', 'been', 'have', 'has', 'had',
+      // No-value garbage
+      'files', 'directories', 'currently', 'relevant', 'conversation', 'start',
+      'appear', 'needs', 'added', 'technical', 'meaningful', 'rejected', 'accepted',
+      'short', 'checking', 'checked', 'done', 'idea', 'search', 'package', 'chars',
+      'word', 'length', 'true', 'false', 'expected', 'received', 'fail', 'bug', 'fix',
+      'tei', 'approaches', 'issue', 'actual', 'door', 'being', 'looking', 'need',
+      'But', 'BUT', 'no', 'not', 'none', 'any', 'but', 'too', 'passed', 'passes',
+      'success', 'successful', 'terms', 'note', 'notes', 'relevant',
     ];
     return !exclude.includes(lower) && !lower.includes(':') && lower.length > 4;
   }).slice(0, maxLinks);
@@ -140,12 +202,12 @@ export function generateKeywordLinks(options) {
   if (meaningfulKeywords.length === 0) return '';
 
   const currentYear = year || new Date().getFullYear();
-  const currentMonth = month || String(new Date().getMonth() + 1).padStart(2, '0');
+  const currentMonth = month ? String(month).padStart(2, '0') : String(new Date().getMonth() + 1).padStart(2, '0');
 
-  // Define target files with correct paths
+  // Define target files with correct paths (relative to vault root)
   const targets = [
-    { file: 'intelligence-learning.md', label: 'Intelligence' },
-    { file: 'daily-summary.md', label: 'Daily' },
+    { file: `${CONTEXT_SESSION_DIR}/intelligence-learning.md`, label: 'Intelligence' },
+    { file: `${CONTEXT_SESSION_DIR}/daily-summary.md`, label: 'Daily' },
     { file: `${CONTEXT_SESSION_DIR}/${currentYear}/${currentMonth}/monthly-${currentYear}-${currentMonth}.md`, label: 'Monthly' },
     { file: `${CONTEXT_SESSION_DIR}/${currentYear}/annual-${currentYear}.md`, label: 'Annual' }
   ];
@@ -153,12 +215,17 @@ export function generateKeywordLinks(options) {
   // Filter out current file
   const validTargets = targets.filter(t => !currentFile || !t.file.includes(currentFile));
 
-  // Create links for each meaningful keyword
-  const links = meaningfulKeywords.flatMap(keyword =>
-    validTargets.map(t => `[[${t.file}|${keyword}]]`)
-  );
+  // Create links for each meaningful keyword - more compact format to avoid N x M explosion
+  // Format: [[target|keyword]] for top keywords
+  const links = [];
+  for (const target of validTargets) {
+    // Add top 2 keywords for each target to keep it compact
+    meaningfulKeywords.slice(0, 3).forEach(keyword => {
+      links.push(`[[${target.file}|${keyword}]]`);
+    });
+  }
 
-  return `\n## Keywords (Obsidian)\n${links.slice(0, maxLinks * 3).map(l => `  - ${l}`).join('\n')}\n`;
+  return `\n## Keywords (Obsidian)\n${links.map(l => `  - ${l}`).join('\n')}\n`;
 }
 
 /**
@@ -171,32 +238,48 @@ export function addKeywordNavigation(context) {
   const { type, year, month, week } = context;
   const links = [];
   const y = year || new Date().getFullYear();
-  const m = month || String(new Date().getMonth() + 1).padStart(2, '0');
-  const w = week || 'W17';
+  const m = month ? String(month).padStart(2, '0') : String(new Date().getMonth() + 1).padStart(2, '0');
+
+  // Calculate ISO week properly - use date-fns getWeek or manual calculation
+  function getISOWeekNum(date) {
+    const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+    const dayNum = d.getUTCDay() || 7;
+    d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+    const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+    return Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+  }
+
+  let w;
+  if (week && typeof week === 'string' && week.startsWith('W')) {
+    w = week;
+  } else {
+    w = `W${String(getISOWeekNum(new Date())).padStart(2, '0')}`;
+  }
 
   // Hierarchical navigation based on current report type
+  // All paths are relative to VAULT root for Obsidian compatibility
   switch (type) {
     case 'daily':
-      links.push({ text: 'Today', file: 'daily-summary.md' });
+      links.push({ text: 'Today', file: `${CONTEXT_SESSION_DIR}/daily-summary.md` });
       links.push({ text: 'This Week', file: `${CONTEXT_SESSION_DIR}/${y}/${m}/${w}/week-summary.md` });
-      links.push({ text: 'Intelligence', file: 'intelligence-learning.md' });
+      links.push({ text: 'Intelligence', file: `${CONTEXT_SESSION_DIR}/intelligence-learning.md` });
       break;
     case 'weekly':
-      links.push({ text: 'Daily Summary', file: 'daily-summary.md' });
+      links.push({ text: 'Daily Summary', file: `${CONTEXT_SESSION_DIR}/daily-summary.md` });
       links.push({ text: 'This Month', file: `${CONTEXT_SESSION_DIR}/${y}/${m}/monthly-${y}-${m}.md` });
-      links.push({ text: 'Intelligence', file: 'intelligence-learning.md' });
+      links.push({ text: 'Intelligence', file: `${CONTEXT_SESSION_DIR}/intelligence-learning.md` });
       break;
     case 'monthly':
       links.push({ text: 'Weekly Summaries', file: `${CONTEXT_SESSION_DIR}/${y}/${m}/${w}/week-summary.md` });
       links.push({ text: 'Annual', file: `${CONTEXT_SESSION_DIR}/${y}/annual-${y}.md` });
-      links.push({ text: 'Intelligence', file: 'intelligence-learning.md' });
+      links.push({ text: 'Intelligence', file: `${CONTEXT_SESSION_DIR}/intelligence-learning.md` });
       break;
     case 'annual':
       links.push({ text: 'January', file: `${CONTEXT_SESSION_DIR}/${y}/01/monthly-${y}-01.md` });
-      links.push({ text: 'Intelligence', file: 'intelligence-learning.md' });
+      links.push({ text: 'Intelligence', file: `${CONTEXT_SESSION_DIR}/intelligence-learning.md` });
       break;
     case 'intelligence':
-      links.push({ text: 'Daily', file: 'daily-summary.md' });
+      links.push({ text: 'Daily', file: `${CONTEXT_SESSION_DIR}/daily-summary.md` });
       links.push({ text: 'This Week', file: `${CONTEXT_SESSION_DIR}/${y}/${m}/${w}/week-summary.md` });
       links.push({ text: 'This Month', file: `${CONTEXT_SESSION_DIR}/${y}/${m}/monthly-${y}-${m}.md` });
       links.push({ text: 'Annual', file: `${CONTEXT_SESSION_DIR}/${y}/annual-${y}.md` });

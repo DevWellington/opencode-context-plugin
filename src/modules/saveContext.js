@@ -168,10 +168,14 @@ priority: "${priority}"
     logger(`[saveContext] [4/5] Generating annual summary...`);
     await generateAnnualSummary(directory, reportYear);
 
-    // Step 5: Update intelligence learning - REMOVED due to performance issues
-    // This was causing slowness at session end. Use @ocp-generate-intelligence-learning manually when needed.
-    // logger(`[saveContext] [5/5] Updating intelligence learning...`);
-    // await updateIntelligenceLearning(directory, opencodeClient);
+    // Step 5: Update intelligence learning on every session save
+    logger(`[saveContext] [5/5] Updating intelligence learning...`);
+    try {
+      const { updateIntelligenceLearning } = await import('../agents/generateIntelligenceLearning.js');
+      await updateIntelligenceLearning(directory, opencodeClient);
+    } catch (error) {
+      logger(`[saveContext] Intelligence learning update failed (non-fatal): ${error.message}`);
+    }
 
     console.log(`[saveContext] Report regeneration completed`);
     logger(`[saveContext] Report regeneration completed`);

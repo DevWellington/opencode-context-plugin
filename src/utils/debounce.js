@@ -22,11 +22,14 @@ export function debounce(fn, delayMs) {
       clearTimeout(timeoutId);
     }
     
+    // Resolve delay (supports dynamic delay via function)
+    const resolvedDelay = typeof delayMs === 'function' ? delayMs() : delayMs;
+    
     // Set new timer
     timeoutId = setTimeout(() => {
       timeoutId = null;
       fn.apply(this, args);
-    }, delayMs);
+    }, resolvedDelay);
   };
   
   // Add flush method to execute immediately
