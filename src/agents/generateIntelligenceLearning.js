@@ -17,8 +17,14 @@ import fs from 'fs/promises';
 import { getWeek } from 'date-fns';
 import { REPORT_PATHS, CONTEXT_SESSION_DIR } from './utils/linkBuilder.js';
 import { getConfig } from '../config.js';
-import { extractSessionContent, extractBugs, findPatterns } from '../modules/contentExtractor.js';
+import { createDebugLogger } from '../utils/debug.js';
+import { extractSessionContent, extractBugs, findPatterns, inferMissingFields } from '../modules/contentExtractor.js';
 import { preservePersistentPatterns } from '../modules/intelligence.js';
+import { isGreeting, isGreetingTitle, isGreetingContent, hasStructuredWorkContent } from '../utils/greetingFilter.js';
+import { extractIntelligenceFromReports, mergePatterns } from './reportExtractor.js';
+import { isLowQualityPattern } from './reportExtractor.js';
+
+const logger = createDebugLogger('intelligence');
 
 const INTELLIGENCE_FILE = 'intelligence-learning.md';
 const MAX_ENTRIES = 20;
@@ -92,9 +98,15 @@ export function generateReferenceContent(patternData) {
   lines.push('## Failed Approaches');
   if (patternData.failedApproaches && patternData.failedApproaches.length > 0) {
     for (const approach of patternData.failedApproaches.slice(0, 10)) {
-      const reason = approach.reason ? ` because ${approach.reason}` : '';
       const loc = approach.location ? ` (${approach.location})` : '';
-      lines.push(`- ANTI-PATTERN: ${approach.antiPattern}${reason}${loc}`);
+      // If antiPattern already looks complete, don't add reason
+      // If antiPattern is a partial phrase followed by "because X", skip adding more
+      const hasBecauseInAnti = approach.antiPattern.includes(' because');
+      if (approach.reason && !hasBecauseInAnti) {
+        lines.push(`- ANTI-PATTERN: ${approach.antiPattern} because ${approach.reason}${loc}`);
+      } else {
+        lines.push(`- ANTI-PATTERN: ${approach.antiPattern}${loc}`);
+      }
     }
   } else {
     lines.push('- No failed approaches recorded');
@@ -120,58 +132,6 @@ export function generateReferenceContent(patternData) {
 }
 
 // Greeting patterns to filter out - messages that are just salutations
-const GREETING_PATTERNS = [
-  /^oi$/i, /^hi$/i, /^hello$/i, /^olá$/i, /^hey$/i, /^e aí$/i,
-  /^bom dia$/i, /^boa tarde$/i, /^boa noite$/i, /^tudo bem$/i,
-  /^(hi|hey|yo|sup)\s*[!.]*$/i
-];
-
-// Keywords that indicate greeting titles (not actual work)
-const GREETING_KEYWORDS = [
-  'greeting', 'saudação', 'cumprimento', 'light chat', 'quick check-in'
-];
-
-/**
- * Check if content is likely just a greeting (not meaningful work)
- */
-function isGreeting(content) {
-  if (!content || typeof content !== 'string') return false;
-  
-  const trimmed = content.trim().toLowerCase();
-  
-  // Check if it's too short (likely greeting)
-  if (trimmed.length < 5) return true;
-  
-  // Check against greeting patterns
-  for (const pattern of GREETING_PATTERNS) {
-    if (pattern.test(trimmed)) return true;
-  }
-  
-  return false;
-}
-
-/**
- * Check if session title indicates greeting content
- */
-function isGreetingTitle(title) {
-  if (!title) return false;
-  
-  const lowerTitle = title.toLowerCase();
-  
-  // Check greeting keywords in title
-  for (const keyword of GREETING_KEYWORDS) {
-    if (lowerTitle.includes(keyword)) return true;
-  }
-  
-  // Check if title contains a timestamp pattern (for "New session - <timestamp>" format)
-  // This indicates a default-named session that typically contains greeting content
-  if (/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(title)) {
-    return true;
-  }
-  
-  return false;
-}
-
 /**
  * Transform session entries into reference schema format
  * Converts raw session data into compact patterns and issues
@@ -188,11 +148,11 @@ function isGreetingTitle(title) {
  *
  * ID generation: BUG-${symptom.slice(0,20).replace(/\s+/g, '-').toUpperCase()}
  * Location: session.relevantFiles[0]:bug.line
- */
-function transformToReferenceSchema(allEntries, latestEntry) {
+*/
+function transformToReferenceSchema(allEntries, latestEntry, reportIntelligence = null) {
   const timestamp = new Date().toISOString().split('T')[0];
   const allSessions = allEntries.flatMap(e => e.sessions || []);
-  
+
   // Build project state
   const projectState = {
     projectName: 'opencode-context-plugin',
@@ -204,7 +164,7 @@ function transformToReferenceSchema(allEntries, latestEntry) {
   // Extract known issues and failed approaches from bugs
   const knownIssues = [];
   const failedApproaches = [];
-  
+
   for (const session of allSessions) {
     if (session.bugs?.length) {
       for (const bug of session.bugs) {
@@ -230,15 +190,33 @@ function transformToReferenceSchema(allEntries, latestEntry) {
   // Extract successful approaches from accomplishments
   const successfulApproaches = [];
   const seenAccomplishments = new Set();
-  
+
   for (const session of allSessions) {
-    if (session.accomplished && !seenAccomplishments.has(session.accomplished)) {
-      seenAccomplishments.add(session.accomplished);
+    const acc = session.accomplished;
+    if (acc && acc.length >= 20 && !seenAccomplishments.has(acc)) {
+      // Skip truncated/incomplete content
+      if (acc.endsWith('...')) continue;
+      if (/[a-z]\s*$/i.test(acc)) continue; // Ends mid-word
+
+      // Skip if it's actually a bug description (not a real accomplishment)
+      // Check for any mention of bugs, errors, or problematic patterns anywhere in the text
+      const bugPatterns = /\b(bug|error|issue|hardcoded|generating|causing|caused|broken|prefix|not working|doesn't work|cannot handle)/i;
+      if (bugPatterns.test(acc)) continue;
+
+      // Skip low quality patterns
+      if (isLowQualityPattern(acc)) continue;
+
+      // Clean the text - remove markdown artifacts
+      const cleanAcc = acc.replace(/[#*`\[\]]/g, '').trim();
+      if (cleanAcc.length < 25) continue;
+
+      seenAccomplishments.add(acc);
+
       // Create pattern: "when [goal], do [accomplishment]"
-      const patternText = session.goal 
-        ? `when ${session.goal.slice(0, 30)}, do ${session.accomplished.slice(0, 40)}`
-        : session.accomplished.slice(0, 70);
-      
+      const patternText = session.goal && session.goal.length > 3
+        ? `when ${session.goal.slice(0, 30)}, do ${cleanAcc.slice(0, 80)}`
+        : cleanAcc.slice(0, 120);
+
       successfulApproaches.push({
         pattern: patternText,
         context: session.title || '',
@@ -247,6 +225,62 @@ function transformToReferenceSchema(allEntries, latestEntry) {
       });
     }
   }
+
+  // Merge intelligence from reports (week/monthly/annual summaries)
+  if (reportIntelligence) {
+    // Add pending items as known issues
+    for (const pending of (reportIntelligence.pendingItems || [])) {
+      const id = `ISSUE-${(pending.issue || 'unknown').slice(0, 15).replace(/\s+/g, '-').toUpperCase()}`;
+      // Avoid duplicates
+      if (!knownIssues.some(k => k.description === pending.issue)) {
+        knownIssues.push({
+          id,
+          description: pending.issue,
+          location: pending.source || ''
+        });
+      }
+    }
+
+    // Add failed approaches from report discoveries (bugs found)
+    for (const failed of (reportIntelligence.failedApproaches || [])) {
+      if (failed.antiPattern && !failedApproaches.some(f => f.antiPattern === failed.antiPattern)) {
+        failedApproaches.push({
+          antiPattern: failed.antiPattern,
+          reason: failed.reason || '',
+          location: failed.source || ''
+        });
+      }
+    }
+
+    // Add successful approaches from report insights
+    for (const success of (reportIntelligence.successfulApproaches || [])) {
+      if (success.pattern && !seenAccomplishments.has(success.pattern)) {
+        const cleanPattern = success.pattern.replace(/[#*`\[\]]/g, '').trim();
+
+        // Skip low quality and bug descriptions
+        if (isLowQualityPattern(cleanPattern)) continue;
+        if (/\b(bug|error|issue|was\s+(hardcoded|generating|causing|broken)|prefix|not working)/i.test(cleanPattern)) continue;
+        if (cleanPattern.length < 20) continue;
+
+        seenAccomplishments.add(cleanPattern);
+        successfulApproaches.push({
+          pattern: cleanPattern.slice(0, 120),
+          context: success.source || '',
+          frequency: success.frequency || 1,
+          location: ''
+        });
+      }
+    }
+  }
+
+  // Deduplicate knownIssues that overlap with failedApproaches
+  const knownIssuesDeduped = knownIssues.filter(ki => {
+    const normalizedKi = (ki.description || '').toLowerCase().slice(0, 40);
+    return !failedApproaches.some(fa =>
+      (fa.antiPattern || '').toLowerCase().includes(normalizedKi) ||
+      normalizedKi.includes((fa.antiPattern || '').toLowerCase().slice(0, 30))
+    );
+  });
 
   // Use findPatterns for recent patterns
   const patternSessions = allSessions
@@ -265,14 +299,14 @@ function transformToReferenceSchema(allEntries, latestEntry) {
 
   return {
     projectState,
-    knownIssues: knownIssues.slice(0, 10),
+    knownIssues: knownIssuesDeduped.slice(0, 10),
     successfulApproaches: successfulApproaches.slice(0, 10),
     failedApproaches: failedApproaches.slice(0, 10),
     recentPatterns
   };
 }
 
-export async function updateIntelligenceLearning(directory) {
+export async function updateIntelligenceLearning(directory, opencodeClient = null) {
   const config = getConfig();
   const intelligencePath = path.join(directory, REPORT_PATHS.intelligence);
 
@@ -341,6 +375,45 @@ export async function updateIntelligenceLearning(directory) {
     return { skipped: true, reason: 'No new meaningful sessions (all greetings or duplicates)' };
   }
 
+  // Apply LLM analysis to sessions when client is available
+  if (opencodeClient?.sessions?.prompt) {
+    logger('[intelligence] Using LLM analysis for enhanced pattern detection');
+    for (const session of newSessions) {
+      try {
+        // Build session content from available fields
+        const sessionContent = [
+          `Title: ${session.title || ''}`,
+          `Goal: ${session.goal || ''}`,
+          `Instructions: ${session.instructions || ''}`,
+          `Accomplished: ${session.accomplished || ''}`,
+          `Discoveries: ${session.discoveries || ''}`,
+          `Relevant Files: ${(session.relevantFiles || []).join(', ')}`
+        ].join('\n');
+
+        // Use inferMissingFields to get LLM-enhanced structured data
+        const inferred = await inferMissingFields(sessionContent, opencodeClient);
+
+        // Update session with LLM-inferred data if we got better confidence
+        if (inferred.confidence.goal > 0.5 && inferred.goal && !session.goal) {
+          session.goal = inferred.goal;
+        }
+        if (inferred.confidence.accomplished > 0.5 && inferred.accomplished && !session.accomplished) {
+          session.accomplished = inferred.accomplished;
+        }
+        if (inferred.confidence.discoveries > 0.5 && inferred.discoveries && !session.discoveries) {
+          session.discoveries = inferred.discoveries;
+        }
+
+        logger(`[intelligence] LLM analysis completed for session: ${session.title}`);
+      } catch (error) {
+        logger(`[intelligence] LLM analysis failed for session: ${error.message}`);
+        // Continue without LLM enhancement - non-blocking
+      }
+    }
+  } else {
+    logger('[intelligence] No LLM client available, using mechanical extraction only');
+  }
+
   // Create deduplicated entry with filtered sessions
   const deduplicatedEntry = {
     ...newSessionInfo,
@@ -360,8 +433,11 @@ export async function updateIntelligenceLearning(directory) {
   // Preserve pinned patterns (seen 3+ times) from existing content
   const { pinnedContent } = preservePersistentPatterns(existingContent, sessionPatterns);
 
+  // Extract intelligence from reports (week/monthly/annual summaries)
+  const reportIntelligence = await extractIntelligenceFromReports(directory);
+
   // Transform to reference schema format
-  const patternData = transformToReferenceSchema(allEntries, deduplicatedEntry);
+  const patternData = transformToReferenceSchema(allEntries, deduplicatedEntry, reportIntelligence);
 
   // Generate updated content using new compact format
   const pinnedSection = pinnedContent ? `# Pinned Patterns\n\n${pinnedContent}\n\n` : '';
@@ -535,7 +611,11 @@ async function gatherRecentSessionInfo(directory) {
       (messages.find(m => m.role === 'user')?.content || '');
     
     // Skip sessions that are just greetings - they don't represent meaningful work
-    if (isGreeting(firstUserMessage) || isGreetingTitle(title)) {
+    // But allow sessions with structured content (## Goal, ## Accomplished, etc.)
+    if (isGreeting(firstUserMessage) && !hasStructuredWorkContent(content)) {
+      continue;
+    }
+    if (isGreetingTitle(title, hasStructuredWorkContent(content))) {
       continue;
     }
     

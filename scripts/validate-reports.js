@@ -292,7 +292,7 @@ function getReportPaths(directory, year, month, week) {
     week: path.join(baseDir, year, month, week, 'week-summary.md'),
     month: path.join(baseDir, year, month, `monthly-${month}.md`),
     annual: path.join(baseDir, year, `annual-${year}.md`),
-    intelligence: path.join(baseDir, 'intelligence-learning.md')
+    intelligence: path.join(baseDir, '.opencode', 'context-session', 'intelligence-learning.md')
   };
 }
 
