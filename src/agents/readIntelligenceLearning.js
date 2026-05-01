@@ -11,15 +11,14 @@ import path from 'path';
 import fs from 'fs/promises';
 import { extractSummary } from './utils/fileReader.js';
 import { REPORT_PATHS } from './utils/linkBuilder.js';
-import { updateIntelligenceLearning } from './generateIntelligenceLearning.js';
 
 export async function readIntelligenceLearning(directory, options = { summary: true }) {
   const filePath = path.join(directory, REPORT_PATHS.intelligence);
 
-  // Auto-generate if doesn't exist
-  if (!(await fileExists(filePath))) {
-    await updateIntelligenceLearning(directory);
-  }
+  // Don't auto-generate - file should already exist or user triggers generation manually
+  // if (!(await fileExists(filePath))) {
+  //   await updateIntelligenceLearning(directory);
+  // }
 
   try {
     const content = await fs.readFile(filePath, 'utf-8');
@@ -31,14 +30,5 @@ export async function readIntelligenceLearning(directory, options = { summary: t
     return content;
   } catch (error) {
     return `Error reading intelligence learning: ${error.message}`;
-  }
-}
-
-async function fileExists(filePath) {
-  try {
-    await fs.access(filePath);
-    return true;
-  } catch {
-    return false;
   }
 }

@@ -167,10 +167,15 @@ describe('SaveContext Module', () => {
 
       await saveContext(tempDir, session, 'compact');
 
-      // Verify hierarchical dir was created - use current day since ensureHierarchicalDir uses new Date()
-      const currentDay = String(new Date().getDate()).padStart(2, '0');
+      // Verify hierarchical dir was created - use current day/week since ensureHierarchicalDir uses new Date()
+      const now = new Date();
+      const currentDay = String(now.getDate()).padStart(2, '0');
+      const currentMonth = String(now.getMonth() + 1).padStart(2, '0');
+      const { getWeek } = await import('date-fns');
+      const weekNum = getWeek(now, { weekStartsOn: 1, firstWeekContainsDate: 4 });
+      const currentWeek = `W${String(weekNum).padStart(2, '0')}`;
       const ctxDir = path.join(tempDir, '.opencode', 'context-session');
-      expect(await fs.access(path.join(ctxDir, '2026', '04', 'W17', currentDay)).then(() => true).catch(() => false)).toBe(true);
+      expect(await fs.access(path.join(ctxDir, String(now.getFullYear()), currentMonth, currentWeek, currentDay)).then(() => true).catch(() => false)).toBe(true);
     });
 
     it('should write atomic file with correct filename format', async () => {
@@ -207,9 +212,9 @@ describe('SaveContext Module', () => {
 
       await saveContext(tempDir, session, 'compact');
 
-      // Check that content in the saved file has truncation
-      expect(savedContent).toContain('*(truncated)*');
+      // Check that content in the saved file has been truncated
       expect(savedContent).not.toContain('x'.repeat(2500));
+      expect(savedContent.length).toBeLessThan(longContent.length + 500); // Truncated + metadata
     });
 
     it('should call updateDailySummary after saving', async () => {
@@ -227,7 +232,7 @@ describe('SaveContext Module', () => {
       expect(today.generateTodaySummary).toHaveBeenCalledWith(tempDir);
       expect(monthly.generateMonthlySummary).toHaveBeenCalled();
       expect(annual.generateAnnualSummary).toHaveBeenCalled();
-      expect(intelligence.updateIntelligenceLearning).toHaveBeenCalledWith(tempDir);
+      // updateIntelligenceLearning auto-update removed - use @ocp-generate-intelligence-learning manually
     });
 
     it('should return filepath on success', async () => {

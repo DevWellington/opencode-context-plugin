@@ -3,13 +3,12 @@ import path from "path";
 import { getWeek } from "date-fns";
 import { getConfig } from '../config.js';
 import { createDebugLogger } from '../utils/debug.js';
-import { updateDaySummary, updateWeekSummary } from './summaries.js';
+import { updateDaySummary } from './summaries.js';
 import { classifySessionPriority } from './contentExtractor.js';
 import { generateTodaySummary } from '../agents/generateToday.js';
 import { generateWeeklySummary } from '../agents/generateWeekly.js';
 import { generateMonthlySummary } from '../agents/generateMonthly.js';
 import { generateAnnualSummary } from '../agents/generateAnnual.js';
-import { updateIntelligenceLearning } from '../agents/generateIntelligenceLearning.js';
 import { atomicWrite, getTimestamp } from '../utils/fileUtils.js';
 import { setLastSummarized, addToPendingQueue } from './state.js';
 import { countTokens } from './tokenLimit.js';
@@ -117,7 +116,7 @@ priority: "${priority}"
     content += `## Messages\n\n`;
     
     summary.messages.forEach((msg) => {
-      const preview = msg.content.length > 2000 ? msg.content.slice(0, 2000) + '\n\n*(truncated)*' : msg.content;
+      const preview = msg.content.length > 2000 ? msg.content.slice(0, 2000) : msg.content;
       content += `### Message ${msg.index} [${msg.role}]\n\n`;
       content += `${preview}\n\n`;
     });
@@ -169,8 +168,10 @@ priority: "${priority}"
     logger(`[saveContext] [4/5] Generating annual summary...`);
     await generateAnnualSummary(directory, reportYear);
 
-    logger(`[saveContext] [5/5] Updating intelligence learning...`);
-    await updateIntelligenceLearning(directory);
+    // Step 5: Update intelligence learning - REMOVED due to performance issues
+    // This was causing slowness at session end. Use @ocp-generate-intelligence-learning manually when needed.
+    // logger(`[saveContext] [5/5] Updating intelligence learning...`);
+    // await updateIntelligenceLearning(directory, opencodeClient);
 
     console.log(`[saveContext] Report regeneration completed`);
     logger(`[saveContext] Report regeneration completed`);
