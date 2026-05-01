@@ -7,7 +7,7 @@ const logger = createDebugLogger('context-plugin');
 export { createDebugLogger };
 
 // Constants
-const CONTEXT_SESSION_DIR = '.opencode/context-session';
+export const CONTEXT_SESSION_DIR = '.opencode/context-session';
 
 /**
  * Atomic write using temp file + rename pattern for crash safety
@@ -37,4 +37,46 @@ export async function atomicWrite(filePath, content) {
 export function getTimestamp() {
   const now = new Date();
   return now.toISOString().replace(/[:.]/g, '-').slice(0, -5);
+}
+
+/**
+ * Find and remove orphaned temp files (.tmp-*) that were left behind
+ * after crashes or failed writes. These are temp files that are older
+ * than 1 hour and have no corresponding final file.
+ */
+export async function recoverOrphanedTempFiles(baseDir = CONTEXT_SESSION_DIR) {
+  const MAX_AGE_MS = 60 * 60 * 1000; // 1 hour
+  const now = Date.now();
+  let cleaned = 0;
+
+  try {
+    const entries = await fs.readdir(baseDir, { withFileTypes: true });
+
+    for (const entry of entries) {
+      const fullPath = path.join(baseDir, entry.name);
+
+      if (entry.isDirectory()) {
+        // Recurse into subdirectories
+        cleaned += await recoverOrphanedTempFiles(fullPath);
+      } else if (entry.name.startsWith('.tmp-')) {
+        // This is a temp file - check its age
+        const stats = await fs.stat(fullPath);
+        const age = now - stats.mtimeMs;
+
+        if (age > MAX_AGE_MS) {
+          // Temp file is older than 1 hour - likely orphaned
+          logger(`[recover] Removing orphaned temp file: ${fullPath} (age: ${Math.round(age / 1000)}s)`);
+          await fs.unlink(fullPath);
+          cleaned++;
+        }
+      }
+    }
+  } catch (error) {
+    // Directory might not exist yet
+    if (error.code !== 'ENOENT') {
+      logger(`[recover] Error scanning ${baseDir}: ${error.message}`);
+    }
+  }
+
+  return cleaned;
 }

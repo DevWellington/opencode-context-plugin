@@ -22,7 +22,8 @@ jest.unstable_mockModule('../src/utils/debug.js', () => ({
 
 jest.unstable_mockModule('../src/utils/fileUtils.js', () => ({
   atomicWrite: jest.fn(),
-  getTimestamp: jest.fn(() => '2026-04-21T10-30-00')
+  getTimestamp: jest.fn(() => '2026-04-21T10-30-00'),
+  recoverOrphanedTempFiles: jest.fn().mockResolvedValue(0)
 }));
 
 jest.unstable_mockModule('../src/modules/summaries.js', () => ({

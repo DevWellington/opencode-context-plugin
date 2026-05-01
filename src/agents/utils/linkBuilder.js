@@ -86,12 +86,13 @@ export function extractKeywordsFromContent(content, maxKeywords = 20) {
     'too', 'short', 'tei', 'technical', 'meaningful', 'terms', 'approaches',
     'issue', 'content', 'actual', 'directories', 'relevant', 'current',
     'door', 'checking', 'added', 'appear', 'relevant', 'start', 'conversation',
+    'phase', 'week', 'section', 'para', 'format', 'issues', 'look', 'failed',
   ]);
 
   // Extract words
   const words = content
     .toLowerCase()
-    .replace(/[#*`\[\]]/g, ' ')
+    .replace(/[#*`\[\]"]/g, ' ')
     .replace(/\d{4}-\d{2}-\d{2}/g, ' ')
     .replace(/\d{2}:\d{2}:\d{2}/g, ' ')
     .replace(/t\.\d{3,4}z/gi, ' ')

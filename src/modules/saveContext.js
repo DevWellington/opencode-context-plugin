@@ -9,7 +9,7 @@ import { generateTodaySummary } from '../agents/generateToday.js';
 import { generateWeeklySummary } from '../agents/generateWeekly.js';
 import { generateMonthlySummary } from '../agents/generateMonthly.js';
 import { generateAnnualSummary } from '../agents/generateAnnual.js';
-import { atomicWrite, getTimestamp } from '../utils/fileUtils.js';
+import { atomicWrite, getTimestamp, recoverOrphanedTempFiles } from '../utils/fileUtils.js';
 import { setLastSummarized, addToPendingQueue } from './state.js';
 import { countTokens } from './tokenLimit.js';
 
@@ -78,6 +78,18 @@ export function extractSessionSummary(session) {
 export async function saveContext(directory, session, type = 'compact', opencodeClient = null) {
   console.log(`[saveContext] FUNCTION CALLED - directory=${directory}, type=${type}, hasClient=${!!opencodeClient}`);
   logger(`[saveContext] START - type=${type}, sessionId=${session?.id || session?.sessionID}, messages=${session?.messages?.length || 0}`);
+
+  // Clean up orphaned temp files from previous crashes/failed writes
+  try {
+    const cleaned = await recoverOrphanedTempFiles(directory);
+    if (cleaned > 0) {
+      logger(`[saveContext] Cleaned up ${cleaned} orphaned temp files`);
+    }
+  } catch (error) {
+    // Non-fatal - temp file cleanup should not block saving
+    logger(`[saveContext] Temp file cleanup failed (non-fatal): ${error.message}`);
+  }
+
   try {
     const pathComponents = await ensureHierarchicalDir(directory);
     logger(`[saveContext] Hierarchical dir ensured: ${JSON.stringify(pathComponents)}`);
