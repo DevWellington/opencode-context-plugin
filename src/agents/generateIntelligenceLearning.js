@@ -210,7 +210,13 @@ function transformToReferenceSchema(allEntries, latestEntry, reportIntelligence 
       const cleanAcc = acc.replace(/[#*`\[\]]/g, '').trim();
       if (cleanAcc.length < 25) continue;
 
-      seenAccomplishments.add(acc);
+      // Normalize for deduplication - extract first 50 chars as key
+      const normalizedKey = cleanAcc.slice(0, 50).toLowerCase();
+      if (seenAccomplishments.has(normalizedKey)) continue;
+      seenAccomplishments.add(normalizedKey);
+
+      // Also track full pattern for exact dedup
+      seenAccomplishments.add(cleanAcc);
 
       // Create pattern: "when [goal], do [accomplishment]"
       const patternText = session.goal && session.goal.length > 3
@@ -262,7 +268,15 @@ function transformToReferenceSchema(allEntries, latestEntry, reportIntelligence 
         if (/\b(bug|error|issue|was\s+(hardcoded|generating|causing|broken)|prefix|not working)/i.test(cleanPattern)) continue;
         if (cleanPattern.length < 20) continue;
 
+        // Normalize for deduplication - extract first 50 chars as key
+        // This handles truncation variations (e.g., "...context" vs "...context-session...")
+        const normalizedKey = cleanPattern.slice(0, 50).toLowerCase();
+        if (seenAccomplishments.has(normalizedKey)) continue;
+        seenAccomplishments.add(normalizedKey);
+
+        // Also track full pattern for exact dedup
         seenAccomplishments.add(cleanPattern);
+
         successfulApproaches.push({
           pattern: cleanPattern.slice(0, 120),
           context: success.source || '',
