@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.6.3] - 2026-05-02
+
+### Fixed
+- **PUBLISH.md version mismatch**: Updated version from 1.6.1 to 1.6.3
+- **Duplicate entry in AGENTS.md reference**: Removed duplicate `opencode-context-plugin/` directory line
+- **AGENTS.md reference removed**: File no longer exists, updated to reflect actual `agents/` directory with 12 agent files
+- **Garbled keywords in linkBuilder.js**: Removed 'door' from stopwords/exclusion lists (was appearing as a keyword)
+
 ## [1.6.1] - 2026-05-01
 
 ### Added

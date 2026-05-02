@@ -85,7 +85,7 @@ export function extractKeywordsFromContent(content, maxKeywords = 20) {
     'expected', 'received', 'rejected', 'accepted', 'fail', 'passed', 'passes',
     'too', 'short', 'tei', 'technical', 'meaningful', 'terms', 'approaches',
     'issue', 'content', 'actual', 'directories', 'relevant', 'current',
-    'door', 'checking', 'added', 'appear', 'relevant', 'start', 'conversation',
+    'checking', 'added', 'appear', 'relevant', 'start', 'conversation',
     'phase', 'week', 'section', 'para', 'format', 'issues', 'look', 'failed',
   ]);
 
@@ -193,7 +193,7 @@ export function generateKeywordLinks(options) {
       'appear', 'needs', 'added', 'technical', 'meaningful', 'rejected', 'accepted',
       'short', 'checking', 'checked', 'done', 'idea', 'search', 'package', 'chars',
       'word', 'length', 'true', 'false', 'expected', 'received', 'fail', 'bug', 'fix',
-      'tei', 'approaches', 'issue', 'actual', 'door', 'being', 'looking', 'need',
+      'tei', 'approaches', 'issue', 'actual', 'being', 'looking', 'need',
       'But', 'BUT', 'no', 'not', 'none', 'any', 'but', 'too', 'passed', 'passes',
       'success', 'successful', 'terms', 'note', 'notes', 'relevant',
     ];

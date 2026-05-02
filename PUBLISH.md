@@ -3,7 +3,7 @@
 ## Pacote npm
 
 **Pacote:** `@devwellington/opencode-context-plugin`
-**Versão atual:** 1.6.1
+**Versão atual:** 1.6.3
 **NPM:** https://www.npmjs.com/package/@devwellington/opencode-context-plugin
 **GitHub:** https://github.com/DevWellington/opencode-context-plugin
 
@@ -88,12 +88,12 @@ Isso é necessário apenas **1 vez** - funciona em todas as vaults depois.
 
 ```
 opencode-context-plugin/
-opencode-context-plugin/
 ├── index.js              # Plugin principal (ESM, V2 export)
 ├── package.json          # Configuração npm
 ├── README.md             # Documentação
-├── AGENTS.md            # Instruções para agentes
-├── agents/              # 11 agentes @ocp-* (.md files)
+├── CHANGELOG.md         # Histórico de versões
+├── PUBLISH.md           # Guia de publicação
+├── agents/              # 12 agentes @ocp-* (.md files)
 ├── src/
 │   ├── agents/          # Geradores de relatório
 │   │   ├── generateToday.js
