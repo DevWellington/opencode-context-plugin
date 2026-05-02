@@ -274,7 +274,7 @@ export function generateReferenceContent(patternData) {
  * ID generation: BUG-${symptom.slice(0,20).replace(/\s+/g, '-').toUpperCase()}
  * Location: session.relevantFiles[0]:bug.line
 */
-function transformToReferenceSchema(allEntries, latestEntry, reportIntelligence = null) {
+function transformToReferenceSchema(allEntries, latestEntry, reportIntelligence = null, config = null) {
   const timestamp = new Date().toISOString().split('T')[0];
   const allSessions = allEntries.flatMap(e => e.sessions || []);
 
@@ -286,8 +286,9 @@ function transformToReferenceSchema(allEntries, latestEntry, reportIntelligence 
     activePhase: 'intelligence-learning-reform'
   };
 
-  // Start with hardcoded known issues (well-documented bugs that should ALWAYS appear)
-  const knownIssues = [...HARDCODE_KNOWN_ISSUES];
+  // Only include hardcoded known issues if config flag is set
+  const includeExampleIssues = config?.intelligence?.includeExampleIssues ?? false;
+  const knownIssues = includeExampleIssues ? [...HARDCODE_KNOWN_ISSUES] : [];
   const failedApproaches = [];
 
   // Extract known issues and failed approaches from bugs
@@ -609,7 +610,7 @@ export async function updateIntelligenceLearning(directory, opencodeClient = nul
   const reportIntelligence = await extractIntelligenceFromReports(directory);
 
   // Transform to reference schema format
-  const patternData = transformToReferenceSchema(allEntries, deduplicatedEntry, reportIntelligence);
+  const patternData = transformToReferenceSchema(allEntries, deduplicatedEntry, reportIntelligence, config);
 
   // Generate updated content using new compact format
   const pinnedSection = pinnedContent ? `# Pinned Patterns\n\n${pinnedContent}\n\n` : '';
