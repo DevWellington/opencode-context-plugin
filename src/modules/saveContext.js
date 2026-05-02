@@ -133,7 +133,12 @@ priority: "${priority}"
       content += `### Message ${msg.index} [${msg.role}]\n\n`;
       content += `${preview}\n\n`;
     });
-    
+
+    if (!content.includes('## ')) {
+      content += `\n> **Note:** This session appears to be a chat log without structured sections. Consider adding ## Goal, ## Accomplished, and ## Discoveries sections for better analysis.\n`;
+      logger(`[saveContext] Chat log detected, appended soft warning to: ${filepath}`);
+    }
+
     await atomicWrite(filepath, content);
     logger(`[context-plugin] Saved context to: ${filepath}`);
     console.log(`[context-plugin] Context saved: ${filename}`);
