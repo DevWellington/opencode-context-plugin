@@ -23,7 +23,8 @@ function createDefaultState() {
     version: STATE_VERSION,
     lastSummarized: {},
     pending: [],
-    lastUpdated: new Date().toISOString()
+    lastUpdated: new Date().toISOString(),
+    sessionGuidanceShown: null
   };
 }
 

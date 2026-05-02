@@ -5,6 +5,7 @@ import { loadConfig, getConfig, LOG_FILE, CONTEXT_SESSION_DIR } from './src/conf
 import { createDebugLogger, debugLog } from './src/utils/debug.js';
 import { saveContext } from './src/modules/saveContext.js';
 import { initializeIntelligenceLearning } from './src/modules/intelligence.js';
+import { getSessionGuidance } from './src/modules/sessionGuidance.js';
 import { initializeGlobalIntelligence } from './src/utils/globalIntelligence.js';
 import { getRelevantContexts, formatForInjection } from './src/modules/contextInjector.js';
 import { listAvailableContexts, formatContextPreview, interactiveInject } from './src/modules/injectPrompt.js';
@@ -276,6 +277,11 @@ class ContextPlugin {
       hasInjectedContext = false;
       lastSession = null;
       logger(`[context-plugin] Session created: ${currentSessionId}`);
+
+      const guidance = await getSessionGuidance(this.directory, event?.session || { id: currentSessionId, ...event });
+      if (guidance) {
+        logger(`[context-plugin] Generated session guidance for: ${currentSessionId}`);
+      }
     }
 
     if (eventType === "session.updated") {
