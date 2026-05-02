@@ -23,7 +23,8 @@ jest.unstable_mockModule('../src/utils/debug.js', () => ({
 jest.unstable_mockModule('../src/utils/fileUtils.js', () => ({
   atomicWrite: jest.fn(),
   getTimestamp: jest.fn(() => '2026-04-21T10-30-00'),
-  recoverOrphanedTempFiles: jest.fn().mockResolvedValue(0)
+  recoverOrphanedTempFiles: jest.fn().mockResolvedValue(0),
+  withTimeout: jest.fn((p) => p)
 }));
 
 jest.unstable_mockModule('../src/modules/summaries.js', () => ({
@@ -197,8 +198,8 @@ describe('SaveContext Module', () => {
       expect(filepath).toMatch(/compact-2026-04-21T10-30-00\.md$/);
     });
 
-    it('should truncate messages longer than 2000 chars', async () => {
-      const longContent = 'x'.repeat(2500);
+    it('should truncate messages longer than 5000 chars', async () => {
+      const longContent = 'x'.repeat(5500);
       const session = {
         id: 'test-session',
         slug: 'test',
@@ -214,8 +215,9 @@ describe('SaveContext Module', () => {
       await saveContext(tempDir, session, 'compact');
 
       // Check that content in the saved file has been truncated
-      expect(savedContent).not.toContain('x'.repeat(2500));
+      expect(savedContent).not.toContain('x'.repeat(5500));
       expect(savedContent.length).toBeLessThan(longContent.length + 500); // Truncated + metadata
+      expect(savedContent).toContain('[...truncated');
     });
 
     it('should call updateDailySummary after saving', async () => {

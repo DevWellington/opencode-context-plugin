@@ -1,6 +1,7 @@
 import path from 'path';
 import { createDebugLogger } from '../utils/debug.js';
 import { findRelatedSessions, formatCrossProjectLink } from '../utils/crossProjectLinks.js';
+import { withTimeout } from '../utils/fileUtils.js';
 
 const logger = createDebugLogger('content-extractor');
 
@@ -26,11 +27,12 @@ async function callOpenCodeAI(client, sessionContent, prompt) {
   }
 
   try {
-    const response = await client.sessions.prompt('context-plugin-inference', {
-      messages: [
-        {
-          role: 'user',
-          content: `Analyze this session content and extract structured information.
+    const response = await withTimeout(
+      client.sessions.prompt('context-plugin-inference', {
+        messages: [
+          {
+            role: 'user',
+            content: `Analyze this session content and extract structured information.
 Return a JSON object with these fields: goal, accomplished, discoveries, confidence.
 Each confidence should be 0-1.
 
@@ -40,10 +42,13 @@ ${sessionContent.slice(0, 2000)}
 ${prompt}
 
 Return only valid JSON, no markdown formatting.`
-        }
-      ],
-      model: 'auto'
-    });
+          }
+        ],
+        model: 'auto'
+      }),
+      30000,
+      'callOpenCodeAI'
+    );
 
     return response.content;
   } catch (error) {

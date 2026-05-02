@@ -40,6 +40,22 @@ export function getTimestamp() {
 }
 
 /**
+ * Wrap a promise with a timeout
+ * @param {Promise} promise - Promise to wrap
+ * @param {number} ms - Timeout in milliseconds
+ * @param {string} label - Label for error message
+ * @returns {Promise} Resolves or rejects with timeout error
+ */
+export function withTimeout(promise, ms, label = 'operation') {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) =>
+      setTimeout(() => reject(new Error(`Timeout(${ms}ms): ${label}`)), ms)
+    )
+  ]);
+}
+
+/**
  * Find and remove orphaned temp files (.tmp-*) that were left behind
  * after crashes or failed writes. These are temp files that are older
  * than 1 hour and have no corresponding final file.

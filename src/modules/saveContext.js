@@ -9,7 +9,7 @@ import { generateTodaySummary } from '../agents/generateToday.js';
 import { generateWeeklySummary } from '../agents/generateWeekly.js';
 import { generateMonthlySummary } from '../agents/generateMonthly.js';
 import { generateAnnualSummary } from '../agents/generateAnnual.js';
-import { atomicWrite, getTimestamp, recoverOrphanedTempFiles } from '../utils/fileUtils.js';
+import { atomicWrite, getTimestamp, recoverOrphanedTempFiles, withTimeout } from '../utils/fileUtils.js';
 import { setLastSummarized, addToPendingQueue } from './state.js';
 import { countTokens } from './tokenLimit.js';
 import { validateAfterSave } from './contextValidator.js';
@@ -129,7 +129,8 @@ priority: "${priority}"
     content += `## Messages\n\n`;
     
     summary.messages.forEach((msg) => {
-      const preview = msg.content.length > 2000 ? msg.content.slice(0, 2000) : msg.content;
+      const MAX_MSG_SIZE = 5000;
+      const preview = msg.content.length > MAX_MSG_SIZE ? msg.content.slice(0, MAX_MSG_SIZE) + `\n\n[...truncated ${msg.content.length - MAX_MSG_SIZE} chars...]` : msg.content;
       content += `### Message ${msg.index} [${msg.role}]\n\n`;
       content += `${preview}\n\n`;
     });
@@ -176,18 +177,18 @@ priority: "${priority}"
     console.log(`[context-plugin] Updating reports...`);
 
     const steps = [
-      { label: 'today summary', fn: () => generateTodaySummary(directory) },
-      { label: 'weekly summary', fn: () => generateWeeklySummary(directory) },
-      { label: 'monthly summary', fn: () => generateMonthlySummary(directory, reportMonth) },
-      { label: 'annual summary', fn: () => generateAnnualSummary(directory, reportYear) },
-      { label: 'intelligence learning', fn: () => import('../agents/generateIntelligenceLearning.js').then(m => m.updateIntelligenceLearning(directory, opencodeClient)) }
+      { label: 'today summary', fn: () => generateTodaySummary(directory), timeout: 30000 },
+      { label: 'weekly summary', fn: () => generateWeeklySummary(directory), timeout: 30000 },
+      { label: 'monthly summary', fn: () => generateMonthlySummary(directory, reportMonth), timeout: 30000 },
+      { label: 'annual summary', fn: () => generateAnnualSummary(directory, reportYear), timeout: 30000 },
+      { label: 'intelligence learning', fn: () => import('../agents/generateIntelligenceLearning.js').then(m => m.updateIntelligenceLearning(directory, opencodeClient)), timeout: 60000 }
     ];
 
     for (let i = 0; i < steps.length; i++) {
       const step = steps[i];
       logger(`[saveContext] [${i + 1}/${steps.length}] Generating ${step.label}...`);
       try {
-        await step.fn();
+        await withTimeout(Promise.resolve(step.fn()), step.timeout, step.label);
         logger(`[saveContext] [${i + 1}/${steps.length}] ${step.label} ✓`);
       } catch (error) {
         logger(`[saveContext] [${i + 1}/${steps.length}] ${step.label} FAILED: ${error.message}`);
