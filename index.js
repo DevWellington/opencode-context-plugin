@@ -27,6 +27,7 @@ import {
   handleMessagePartDelta,
   handleMessagePartUpdated
 } from './src/handlers/messageHandlers.js';
+import { handleCommandExecuteBefore } from './src/handlers/commandHandlers.js';
 
 const logger = createDebugLogger('context-plugin');
 
@@ -306,10 +307,7 @@ class ContextPlugin {
     }
 
     if (eventType === "command.execute.before") {
-      const command = event?.command || event?.properties?.command || event?.properties?.name;
-      if (command === '/compact' || command === 'compact') {
-        logger('[context-plugin] /compact command detected');
-      }
+      handleCommandExecuteBefore(event);
     }
 
     if (eventType === "session.compacted" || eventType === "experimental.compaction.autocontinue") {
