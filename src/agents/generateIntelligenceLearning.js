@@ -30,73 +30,6 @@ const INTELLIGENCE_FILE = 'intelligence-learning.md';
 const MAX_ENTRIES = 20;
 
 /**
- * Hardcoded known issues from well-documented bugs across sessions
- * These are persistent issues that should ALWAYS appear in known issues
- */
-const HARDCODE_KNOWN_ISSUES = [
-  {
-    id: 'TOKEN-PROPAGATION',
-    description: 'Token propagation fails - stats from day summaries do not propagate to week/monthly reports correctly',
-    location: 'contentExtractor.js / summaries.js'
-  },
-  {
-    id: 'EMOJI-CORRUPTION',
-    description: 'Emoji corruption in aggregated content - emojis (💡, ✅, 🔧, etc.) appear as literal characters in summaries',
-    location: 'summaries.js:574,585 / linkBuilder.js'
-  },
-  {
-    id: 'PATH-INCONSISTENCY',
-    description: 'Path inconsistency between read and generate agents - hierarchical vs flat paths causing infinite loops',
-    location: 'readWeekly.js, readMonthly.js, readAnnual.js vs generators'
-  },
-  {
-    id: 'TRUNCATION-MARKERS',
-    description: 'Truncation markers (*(truncated)*, [truncated]) appearing in generated summaries instead of clean content',
-    location: 'contentExtractor.js / summaries.js'
-  },
-  {
-    id: 'WIKI-LINK-CONTAMINATION',
-    description: 'Wiki-link contamination - .opencode/context-session/ paths leaking into report content',
-    location: 'generateWeeklySummary.js, generateMonthlySummary.js'
-  },
-  {
-    id: 'ISO-WEEK-BUG',
-    description: 'ISO week calculation using Math.ceil(getDate()/7) instead of proper ISO week algorithm',
-    location: 'Multiple files (reportGenerator.js, summaries.js)'
-  },
-  {
-    id: 'EXTRACTSECTION-CRASH',
-    description: 'extractSectionFromContent called but function name is extractSection - causes crash in annual reports',
-    location: 'reportGenerator.js:756'
-  },
-  {
-    id: 'DEBOUNCE-STATIC-DELAY',
-    description: 'Debounce delay calculated at module load time instead of using dynamic config value',
-    location: 'reportGenerator.js (module-level config read)'
-  },
-  {
-    id: 'DUPLICATE-EXTRACTSECTION',
-    description: 'extractSection duplicated in multiple files causing inconsistency',
-    location: 'summaryUtils.js vs other files'
-  },
-  {
-    id: 'KEYWORD-DUPLICATION',
-    description: 'Duplicate keywords appearing in generated reports due to improper deduplication',
-    location: 'generateIntelligenceLearning.js'
-  },
-  {
-    id: 'DAY-SUMMARY-TRANSCRIPT',
-    description: 'Day summary includes full conversation transcripts instead of structured content only',
-    location: 'summaries.js (day-summary aggregation)'
-  },
-  {
-    id: 'RESIDUAL-ASTERISKS',
-    description: 'Residual ** in bullet points (e.g., "OpenCode Context Plugin**")',
-    location: 'linkBuilder.js, summaryUtils.js'
-  }
-];
-
-/**
  * Issue patterns to detect from discoveries text (multilingual)
  */
 const ISSUE_PATTERNS = [
@@ -286,9 +219,7 @@ function transformToReferenceSchema(allEntries, latestEntry, reportIntelligence 
     activePhase: 'intelligence-learning-reform'
   };
 
-  // Only include hardcoded known issues if config flag is set
-  const includeExampleIssues = config?.intelligence?.includeExampleIssues ?? false;
-  const knownIssues = includeExampleIssues ? [...HARDCODE_KNOWN_ISSUES] : [];
+  const knownIssues = [];
   const failedApproaches = [];
 
   // Extract known issues and failed approaches from bugs

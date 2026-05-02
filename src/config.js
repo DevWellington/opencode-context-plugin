@@ -67,9 +67,6 @@ export const defaultConfig = {
     patterns: [],             // Array of glob/regex patterns
     mode: 'content',           // 'content' = skip from summaries, 'session' = preserve entire session
     sessionsDir: '.opencode/context-session'  // Sessions directory to check
-  },
-  intelligence: {
-    includeExampleIssues: false  // Include hardcoded example issues in knownIssues
   }
 };
 
