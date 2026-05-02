@@ -20,7 +20,8 @@ import {
   handleSessionCreated,
   handleSessionUpdated,
   handleSessionEnd,
-  handleSessionIdle
+  handleSessionIdle,
+  handleSessionCompacted
 } from './src/handlers/sessionHandlers.js';
 import {
   handleMessageUpdatedOrCreated,
@@ -286,59 +287,31 @@ class ContextPlugin {
     logger(`[context-plugin] Parsed eventType: ${eventType}`);
     if (!eventType) return;
 
-    if (eventType === "session.created") {
-      await handleSessionCreated(event, this.directory);
-    }
+    const eventHandlers = {
+      'session.created': () => handleSessionCreated(event, this.directory),
+      'session.updated': () => handleSessionUpdated(event),
+      'session.end': () => this.getConfig() && handleSessionEnd(this.directory, this.client, this.getConfig()),
+      'server.instance.disposed': () => this.getConfig() && handleSessionEnd(this.directory, this.client, this.getConfig()),
+      'session.compacted': () => handleSessionCompacted(this.directory, this.client),
+      'experimental.compaction.autocontinue': () => handleSessionCompacted(this.directory, this.client),
+      'session.idle': () => {
+        const sessionId = event?.properties?.sessionID || event?.sessionId || getCurrentSessionId();
+        if (sessionId) handleSessionIdle(this.directory, this.client, sessionId);
+      },
+      'session.deleted': () => {
+        const sessionId = event?.properties?.sessionID || event?.sessionId || getCurrentSessionId();
+        if (sessionId) handleSessionIdle(this.directory, this.client, sessionId);
+      },
+      'message.updated': () => handleMessageUpdatedOrCreated(event),
+      'message.created': () => handleMessageUpdatedOrCreated(event),
+      'message.part.delta': () => handleMessagePartDelta(event),
+      'message.part.updated': () => handleMessagePartUpdated(event),
+      'command.execute.before': () => handleCommandExecuteBefore(event),
+    };
 
-    if (eventType === "session.updated") {
-      handleSessionUpdated(event);
-    }
-
-    if (eventType === "message.updated" || eventType === "message.created") {
-      handleMessageUpdatedOrCreated(event);
-    }
-
-    if (eventType === "message.part.delta") {
-      handleMessagePartDelta(event);
-    }
-
-    if (eventType === "message.part.updated") {
-      handleMessagePartUpdated(event);
-    }
-
-    if (eventType === "command.execute.before") {
-      handleCommandExecuteBefore(event);
-    }
-
-    if (eventType === "session.compacted" || eventType === "experimental.compaction.autocontinue") {
-      logger('[context-plugin] session.compacted event received - saving context');
-      const session = getLastSession();
-      if (session) {
-        await saveContext(this.directory, session, 'compact', this.client);
-      } else {
-        logger('[context-plugin] No lastSession available for compact save');
-      }
-
-      // Remote sync trigger (fire-and-forget) after session.compacted
-      const config = this.getConfig();
-      if (config.remoteSync?.enabled) {
-        syncToRemote(this.directory).catch(err => {
-          logger(`[context-plugin] Remote sync failed (non-blocking): ${err.message}`);
-        });
-      }
-    }
-
-    if (eventType === "session.end" || eventType === "server.instance.disposed") {
-      const config = this.getConfig();
-      await handleSessionEnd(this.directory, this.client, config, getSyncStatus);
-    }
-
-    if (eventType === "session.idle" || eventType === "session.deleted") {
-      const sessionId = event?.properties?.sessionID || event?.sessionId || getCurrentSessionId();
-      if (sessionId) {
-        logger(`[Pre-Exit] Session ${sessionId} ending, triggering compression...`);
-        await handleSessionIdle(this.directory, this.client, sessionId);
-      }
+    const handler = eventHandlers[eventType];
+    if (handler) {
+      await handler();
     }
   }
 

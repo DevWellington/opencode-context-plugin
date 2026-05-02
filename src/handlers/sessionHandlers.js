@@ -2,6 +2,7 @@ import { createDebugLogger } from '../utils/debug.js';
 import { getSessionGuidance } from '../modules/sessionGuidance.js';
 import { saveContext } from '../modules/saveContext.js';
 import { syncToRemote } from '../modules/remoteSync.js';
+import { getConfig } from '../config.js';
 
 const logger = createDebugLogger('context-plugin');
 
@@ -106,5 +107,21 @@ async function triggerPreExitCompression(directory, client, sessionId) {
     logger(`[Pre-Exit] Error during compression: ${error.message}`);
     console.error(`[context-plugin] Pre-exit compression error: ${error.message}`);
     return null;
+  }
+}
+
+export async function handleSessionCompacted(directory, client) {
+  const session = getLastSession();
+  if (session) {
+    await saveContext(directory, session, 'compact', client);
+  } else {
+    logger('[context-plugin] No lastSession available for compact save');
+  }
+
+  const config = getConfig();
+  if (config.remoteSync?.enabled) {
+    syncToRemote(directory).catch(err => {
+      logger(`[context-plugin] Remote sync failed (non-blocking): ${err.message}`);
+    });
   }
 }
