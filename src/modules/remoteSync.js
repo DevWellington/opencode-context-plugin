@@ -4,22 +4,12 @@ import os from "os";
 import { createDebugLogger } from '../utils/debug.js';
 import { atomicWrite } from '../utils/fileUtils.js';
 import { getGlobalIntelligencePath } from '../utils/globalIntelligence.js';
+import { loadSyncState, saveSyncState, getDefaultSyncState } from './syncState.js';
 
 const logger = createDebugLogger('remote-sync');
 
 // Configuration file path
 const CONFIG_PATH = path.join(os.homedir(), '.opencode', '.config', 'remote.json');
-
-// Sync state file path
-const STATE_PATH = path.join(os.homedir(), '.opencode', '.config', 'remote-state.json');
-
-// Default sync state
-const defaultSyncState = {
-  configured: false,
-  lastSync: null,
-  pendingChanges: false,
-  errors: []
-};
 
 /**
  * Remote Sync Provider Base Class
@@ -331,35 +321,9 @@ export class CustomSyncProvider extends RemoteSyncProvider {
 }
 
 // Internal state
-let syncState = { ...defaultSyncState };
+let syncState = { ...getDefaultSyncState() };
 let currentProvider = null;
 let currentConfig = null;
-
-/**
- * Load sync state from disk
- */
-async function loadSyncState() {
-  try {
-    const content = await fs.readFile(STATE_PATH, 'utf-8');
-    syncState = { ...defaultSyncState, ...JSON.parse(content) };
-  } catch {
-    syncState = { ...defaultSyncState };
-  }
-  return syncState;
-}
-
-/**
- * Save sync state to disk
- */
-async function saveSyncState() {
-  try {
-    const dir = path.dirname(STATE_PATH);
-    await fs.mkdir(dir, { recursive: true });
-    await atomicWrite(STATE_PATH, JSON.stringify(syncState, null, 2));
-  } catch (error) {
-    logger(`[RemoteSync] Failed to save sync state: ${error.message}`);
-  }
-}
 
 /**
  * Configure remote sync with provider and credentials
@@ -434,7 +398,7 @@ export async function configureRemoteSync(provider, config) {
   currentProvider = providerInstance;
   currentConfig = config;
   syncState.configured = true;
-  await saveSyncState();
+  await saveSyncState(syncState);
 
   logger(`[RemoteSync] Configuration saved successfully for ${provider}`);
 
@@ -527,14 +491,14 @@ export async function syncToRemote(directory) {
       syncState.errors.push(`Sync failed: ${pushResult.error || 'Unknown error'}`);
     }
 
-    await saveSyncState();
+    await saveSyncState(syncState);
     logger(`[RemoteSync] Sync completed: ${result.uploaded} uploaded, ${result.failed} failed`);
 
   } catch (error) {
     logger(`[RemoteSync] Sync error: ${error.message}`);
     result.errors.push(error.message);
     syncState.errors.push(error.message);
-    await saveSyncState();
+    await saveSyncState(syncState);
   }
 
   return result;
@@ -555,7 +519,7 @@ export async function syncGlobalIntelligence() {
  */
 export function markPendingChanges() {
   syncState.pendingChanges = true;
-  saveSyncState();
+  saveSyncState(syncState);
   logger(`[RemoteSync] Pending changes marked`);
 }
 
