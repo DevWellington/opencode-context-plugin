@@ -340,8 +340,14 @@ function transformToReferenceSchema(allEntries, latestEntry, reportIntelligence 
       for (const sentence of sentences.slice(0, 3)) {
         const cleanSentence = sentence.replace(/[#*`\[\]]/g, '').trim().slice(0, 80);
         if (cleanSentence.length > 15) {
-          const id = `ISSUE-${cleanSentence.slice(0, 15).replace(/\s+/g, '-').toUpperCase()}`;
-          if (!knownIssues.some(k => k.description.includes(cleanSentence.slice(0, 30)))) {
+          const id = `ISSUE-${cleanSentence.slice(0, 20).replace(/[^a-zA-Z0-9]/g, '-').toUpperCase()}`;
+          // Deduplicate by BOTH id and description to prevent near-duplicates
+          const isDuplicate = knownIssues.some(k => 
+            k.id === id || (k.description && cleanSentence && 
+              (k.description.slice(0, 40) === cleanSentence.slice(0, 40) || 
+               k.description.includes(cleanSentence.slice(0, 30))))
+          );
+          if (!isDuplicate) {
             knownIssues.push({
               id,
               description: cleanSentence,
