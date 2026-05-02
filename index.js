@@ -10,6 +10,18 @@ import { initializeGlobalIntelligence } from './src/utils/globalIntelligence.js'
 import { getRelevantContexts, formatForInjection } from './src/modules/contextInjector.js';
 import { listAvailableContexts, formatContextPreview, interactiveInject } from './src/modules/injectPrompt.js';
 import { syncToRemote, getSyncStatus, initializeRemoteSync } from './src/modules/remoteSync.js';
+import {
+  getCurrentSessionId,
+  setCurrentSessionId,
+  getHasInjectedContext,
+  setHasInjectedContext,
+  getLastSession,
+  setLastSession,
+  handleSessionCreated,
+  handleSessionUpdated,
+  handleSessionEnd,
+  handleSessionIdle
+} from './src/handlers/sessionHandlers.js';
 
 const logger = createDebugLogger('context-plugin');
 
@@ -20,10 +32,6 @@ const OLD_CONTEXTOS_DIR = '.opencode/contextos';
 function debugLogLegacy(message) {
   logger(message);
 }
-
-let currentSessionId = null;
-let hasInjectedContext = false;
-let lastSession = null;
 
 async function loadPreviousContexts(directory, limit = 5) {
   try {
@@ -273,24 +281,11 @@ class ContextPlugin {
     if (!eventType) return;
 
     if (eventType === "session.created") {
-      currentSessionId = event?.sessionId || event?.sessionID || event?.session?.id;
-      hasInjectedContext = false;
-      lastSession = null;
-      logger(`[context-plugin] Session created: ${currentSessionId}`);
-
-      const guidance = await getSessionGuidance(this.directory, event?.session || { id: currentSessionId, ...event });
-      if (guidance) {
-        logger(`[context-plugin] Generated session guidance for: ${currentSessionId}`);
-      }
+      await handleSessionCreated(event, this.directory);
     }
 
     if (eventType === "session.updated") {
-      const info = event?.properties?.info;
-      if (info) {
-        if (!lastSession) lastSession = {};
-        Object.assign(lastSession, info);
-        logger(`[context-plugin] Session metadata updated`);
-      }
+      handleSessionUpdated(event);
     }
 
     if (eventType === "message.updated" || eventType === "message.created") {
@@ -298,15 +293,16 @@ class ContextPlugin {
       const msgId = msgInfo?.id;
 
       if (msgId && msgInfo?.role) {
-        if (!lastSession) lastSession = { messages: [] };
-        if (!lastSession.messages) lastSession.messages = [];
+        if (!getLastSession()) setLastSession({ messages: [] });
+        const session = getLastSession();
+        if (!session.messages) session.messages = [];
 
-        const existingIdx = lastSession.messages.findIndex(m => m.id === msgId);
+        const existingIdx = session.messages.findIndex(m => m.id === msgId);
         if (existingIdx === -1) {
-          lastSession.messages.push({ ...msgInfo, content: '' });
-          logger(`[context-plugin] Message added: ${lastSession.messages.length} total`);
+          session.messages.push({ ...msgInfo, content: '' });
+          logger(`[context-plugin] Message added: ${session.messages.length} total`);
         } else {
-          Object.assign(lastSession.messages[existingIdx], msgInfo);
+          Object.assign(session.messages[existingIdx], msgInfo);
         }
       }
     }
@@ -315,8 +311,9 @@ class ContextPlugin {
       const msgId = event?.properties?.messageID;
       const delta = event?.properties?.delta;
 
-      if (msgId && delta && lastSession?.messages) {
-        const msg = lastSession.messages.find(m => m.id === msgId);
+      const session = getLastSession();
+      if (msgId && delta && session?.messages) {
+        const msg = session.messages.find(m => m.id === msgId);
         if (msg) {
           msg.content = (msg.content || '') + delta;
         }
@@ -327,8 +324,9 @@ class ContextPlugin {
       const msgId = event?.properties?.part?.messageID || event?.properties?.messageID;
       const text = event?.properties?.part?.text;
 
-      if (msgId && text && lastSession?.messages) {
-        const msg = lastSession.messages.find(m => m.id === msgId);
+      const session = getLastSession();
+      if (msgId && text && session?.messages) {
+        const msg = session.messages.find(m => m.id === msgId);
         if (msg && !msg.content) {
           msg.content = text;
           logger(`[context-plugin] Message content from part.updated: ${text.length} chars`);
@@ -345,8 +343,9 @@ class ContextPlugin {
 
     if (eventType === "session.compacted" || eventType === "experimental.compaction.autocontinue") {
       logger('[context-plugin] session.compacted event received - saving context');
-      if (lastSession) {
-        await saveContext(this.directory, lastSession, 'compact', this.client);
+      const session = getLastSession();
+      if (session) {
+        await saveContext(this.directory, session, 'compact', this.client);
       } else {
         logger('[context-plugin] No lastSession available for compact save');
       }
@@ -361,82 +360,16 @@ class ContextPlugin {
     }
 
     if (eventType === "session.end" || eventType === "server.instance.disposed") {
-      logger(`[context-plugin] Session ending event - lastSession has ${lastSession?.messages?.length || 0} messages, id: ${lastSession?.id || lastSession?.sessionID || 'none'}`);
-      if (lastSession) {
-        try {
-          await saveContext(this.directory, lastSession, 'exit', this.client);
-          logger(`[context-plugin] Exit context save completed successfully`);
-        } catch (err) {
-          logger(`[context-plugin] saveContext failed: ${err.message}`);
-          console.error(`[context-plugin] saveContext failed: ${err.message}`);
-        }
-      } else {
-        logger(`[context-plugin] No lastSession available for exit save`);
-      }
-
-      // Remote sync trigger (fire-and-forget) after session.end
       const config = this.getConfig();
-      if (config.remoteSync?.enabled) {
-        syncToRemote(this.directory).catch(err => {
-          logger(`[context-plugin] Remote sync failed (non-blocking): ${err.message}`);
-        });
-      }
+      await handleSessionEnd(this.directory, this.client, config, getSyncStatus);
     }
 
     if (eventType === "session.idle" || eventType === "session.deleted") {
-      const sessionId = event?.properties?.sessionID || event?.sessionId || currentSessionId;
+      const sessionId = event?.properties?.sessionID || event?.sessionId || getCurrentSessionId();
       if (sessionId) {
         logger(`[Pre-Exit] Session ${sessionId} ending, triggering compression...`);
-        await this.triggerPreExitCompression(sessionId);
+        await handleSessionIdle(this.directory, this.client, sessionId);
       }
-    }
-  }
-
-  async triggerPreExitCompression(sessionId) {
-    await this._ensureInitialized();
-    try {
-      logger(`[Pre-Exit] Triggering compression for session ${sessionId}`);
-      logger(`[Pre-Exit] this type: ${typeof this}, this.client type: ${typeof this?.client}`);
-      
-      // Guard: Check if client is available
-      if (!this.client || !this.client.sessions) {
-        logger(`[Pre-Exit] Client not available (this.client=${this?.client}, this.client.sessions=${this?.client?.sessions}), skipping compression`);
-        return null;
-      }
-      
-      // Fetch session data using client from closure
-      let session;
-      try {
-        logger(`[Pre-Exit] Attempting to call this.client.sessions.get(${sessionId})`);
-        session = await this.client.sessions.get(sessionId);
-        logger(`[Pre-Exit] Session fetched successfully`);
-      } catch (error) {
-        logger(`[Pre-Exit] Failed to fetch session ${sessionId}: ${error.message}`);
-        logger(`[Pre-Exit] Error stack: ${error.stack}`);
-        console.error(`[context-plugin] Pre-exit compression failed: ${error.message}`);
-        return null;
-      }
-      
-      if (!session) {
-        logger(`[Pre-Exit] Session ${sessionId} not found, skipping compression`);
-        return null;
-      }
-      
-      logger(`[Pre-Exit] Session fetched successfully, ${session.messages?.length || 0} messages`);
-      
-      // Save context with type='exit'
-      const result = await saveContext(this.directory, session, 'exit', this.client);
-      
-      if (result) {
-        logger(`[Pre-Exit] Compression completed: ${result}`);
-        console.log(`[context-plugin] Pre-exit compression completed: ${path.basename(result)}`);
-      }
-      
-      return result;
-    } catch (error) {
-      logger(`[Pre-Exit] Error during compression: ${error.message}`);
-      console.error(`[context-plugin] Pre-exit compression error: ${error.message}`);
-      return null;
     }
   }
 
@@ -501,7 +434,7 @@ class ContextPlugin {
       return messages;
     }
 
-    const isFirstMessage = messages.length === 1 && !hasInjectedContext;
+    const isFirstMessage = messages.length === 1 && !getHasInjectedContext();
 
     if (isFirstMessage) {
       logger('[context-plugin] First message detected - injecting context');
@@ -515,7 +448,7 @@ class ContextPlugin {
           const ctxNames = contexts.map(c => c.file.replace(/-[0-9]{4}-[0-9]{2}-[0-9]{2}T.*/, '')).join(', ');
           const notification = `\n\n> 📌 **Context Plugin**: Injected ${contexts.length} prior session contexts: ${ctxNames}\n`;
           firstMsg.content = notification + firstMsg.content + injection;
-          hasInjectedContext = true;
+          setHasInjectedContext(true);
           logger(`[context-plugin] Injected ${contexts.length} contexts into first message`);
         }
       }
