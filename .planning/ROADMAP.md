@@ -66,7 +66,7 @@
 - [INTEL-06] Keywords link to source code not summary files
 - [INTEL-07] inferSourceLocation() for cases without explicit file:line
 
-**Status:** Phase 18 complete
+**Status:** DEPRECATED - não implementado
 
 ## Phase 19: Token Propagation Fix
 
