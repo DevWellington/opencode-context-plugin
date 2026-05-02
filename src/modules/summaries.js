@@ -157,6 +157,114 @@ async function readDaySessions(dirPath) {
 }
 
 /**
+ * Group discoveries by type based on keywords
+ * @param {Array} discoveries - Array of {text, source} objects
+ * @returns {Object} { typeName: [discoveries] }
+ */
+function groupDiscoveriesByType(discoveries) {
+  const groups = {
+    'Bug Fixes': [],
+    'New Features': [],
+    'Refactoring': [],
+    'Documentation': [],
+    'Research': [],
+    'Other': []
+  };
+
+  for (const disc of discoveries) {
+    const text = disc.text.toLowerCase();
+    let categorized = false;
+
+    if (text.includes('fix') || text.includes('bug') || text.includes('error') || text.includes('crash')) {
+      groups['Bug Fixes'].push(disc);
+      categorized = true;
+    } else if (text.includes('add') || text.includes('implement') || text.includes('create') || text.includes('new')) {
+      groups['New Features'].push(disc);
+      categorized = true;
+    } else if (text.includes('refactor') || text.includes('improve') || text.includes('optimize') || text.includes('cleanup')) {
+      groups['Refactoring'].push(disc);
+      categorized = true;
+    } else if (text.includes('docs') || text.includes('readme') || text.includes('comment') || text.includes('document')) {
+      groups['Documentation'].push(disc);
+      categorized = true;
+    } else if (text.includes('research') || text.includes('investigate') || text.includes('explore') || text.includes('find')) {
+      groups['Research'].push(disc);
+      categorized = true;
+    }
+
+    if (!categorized) {
+      groups['Other'].push(disc);
+    }
+  }
+
+  Object.keys(groups).forEach(k => {
+    if (groups[k].length === 0) delete groups[k];
+  });
+
+  return groups;
+}
+
+/**
+ * Group files by project/module from path
+ * @param {Set} files - Set of file paths
+ * @returns {Object} { projectName: [files] }
+ */
+function groupFilesByProject(files) {
+  const groups = {};
+
+  for (const file of files) {
+    const parts = file.split('/');
+    let project = 'other';
+
+    if (parts.length >= 2) {
+      if (parts[0] === 'src') {
+        project = parts[1] || 'root';
+      } else if (parts[0] === 'tests') {
+        project = 'tests';
+      } else {
+        project = parts[0];
+      }
+    }
+
+    if (!groups[project]) groups[project] = [];
+    groups[project].push(file);
+  }
+
+  return groups;
+}
+
+/**
+ * Extract key decisions from session content
+ * @param {Array} sessionsData - Array of session data with extracted content
+ * @returns {Array} Array of decision strings
+ */
+function extractKeyDecisions(sessionsData) {
+  const decisions = [];
+  const decisionPatterns = [
+    /(?:decided|decision|chose|choice|went with|opted).*/i,
+    /(?:implemented|used|adopted).*(?:instead of|rather than|instead)/i,
+    /(?:refactored|moved|renamed).*to.*from/i
+  ];
+
+  for (const session of sessionsData) {
+    const text = session.extracted.accomplished || '';
+    const goal = session.extracted.goal || '';
+
+    for (const pattern of decisionPatterns) {
+      const match = text.match(pattern) || goal.match(pattern);
+      if (match) {
+        const decision = match[0].slice(0, 100);
+        if (!decisions.includes(decision)) {
+          decisions.push(decision);
+        }
+      }
+    }
+  }
+
+  return decisions.slice(0, 5);
+}
+
+/**
  * Format day content with structured sections
  * @param {string} dateStr - Date string (YYYY-MM-DD)
  * @param {Array} sessionsData - Array from readDaySessions
@@ -297,16 +405,21 @@ date: ${dateStr}
   
   // Discoveries section
   if (uniqueDiscoveries.length > 0) {
+    const groupedDiscoveries = groupDiscoveriesByType(uniqueDiscoveries);
     content += `## Discoveries\n\n`;
-    for (const disc of uniqueDiscoveries) {
-      // Strip existing bullet marker and any emoji
-      let cleanText = disc.text.replace(/^[-*]\s*/, '').trim();
-      cleanText = cleanText.replace(/^[✅💡🐛🔧📝🔍📦🚪]\s*/u, '');
-      if (cleanText.length > 0) {
-        content += `- ${cleanText}\n`;
+    for (const [type, items] of Object.entries(groupedDiscoveries)) {
+      if (items.length > 0) {
+        content += `### ${type}\n`;
+        for (const disc of items) {
+          let cleanText = disc.text.replace(/^[-*]\s*/, '').trim();
+          cleanText = cleanText.replace(/^[✅💡🐛🔧📝🔍📦🚪]\s*/u, '');
+          if (cleanText.length > 0) {
+            content += `- ${cleanText}\n`;
+          }
+        }
+        content += '\n';
       }
     }
-    content += '\n';
   }
   
   // Bugs Fixed section
@@ -323,13 +436,43 @@ date: ${dateStr}
   
   // Relevant Files section
   if (relevantFiles.size > 0) {
+    const groupedFiles = groupFilesByProject(relevantFiles);
     content += `## Relevant Files\n\n`;
-    for (const file of relevantFiles) {
-      content += `- ${file}\n`;
+    for (const [project, files] of Object.entries(groupedFiles)) {
+      content += `### ${project}\n`;
+      for (const file of files) {
+        content += `- ${file}\n`;
+      }
+      content += '\n';
+    }
+  }
+
+  // Key Decisions section
+  const keyDecisions = extractKeyDecisions(sessionsData);
+  if (keyDecisions.length > 0) {
+    content += `## Key Decisions\n\n`;
+    for (const decision of keyDecisions) {
+      content += `- ${decision}\n`;
     }
     content += '\n';
   }
-  
+
+  // Trend Note
+  if (sessionsData.length >= 3) {
+    const hasIncreasingGoals = uniqueGoals.length >= sessionsData.length * 0.5;
+    const hasGoodQuality = uniqueAccomplishments.length >= sessionsData.length * 0.5;
+    if (hasIncreasingGoals || hasGoodQuality) {
+      content += `## Trend Note\n\n`;
+      if (hasIncreasingGoals) {
+        content += `- **Goal-setting trend:** This session shows active goal-setting behavior\n`;
+      }
+      if (hasGoodQuality) {
+        content += `- **Productivity trend:** Good balance of accomplishments recorded\n`;
+      }
+      content += '\n';
+    }
+  }
+
   // Add Keywords (Obsidian) section with wiki-links
   if (allContent && year && month && week) {
     const contentKeywords = extractKeywordsFromContent(allContent, 15).filter(k =>
