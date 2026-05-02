@@ -22,6 +22,11 @@ import {
   handleSessionEnd,
   handleSessionIdle
 } from './src/handlers/sessionHandlers.js';
+import {
+  handleMessageUpdatedOrCreated,
+  handleMessagePartDelta,
+  handleMessagePartUpdated
+} from './src/handlers/messageHandlers.js';
 
 const logger = createDebugLogger('context-plugin');
 
@@ -289,49 +294,15 @@ class ContextPlugin {
     }
 
     if (eventType === "message.updated" || eventType === "message.created") {
-      const msgInfo = event?.properties?.info;
-      const msgId = msgInfo?.id;
-
-      if (msgId && msgInfo?.role) {
-        if (!getLastSession()) setLastSession({ messages: [] });
-        const session = getLastSession();
-        if (!session.messages) session.messages = [];
-
-        const existingIdx = session.messages.findIndex(m => m.id === msgId);
-        if (existingIdx === -1) {
-          session.messages.push({ ...msgInfo, content: '' });
-          logger(`[context-plugin] Message added: ${session.messages.length} total`);
-        } else {
-          Object.assign(session.messages[existingIdx], msgInfo);
-        }
-      }
+      handleMessageUpdatedOrCreated(event);
     }
 
     if (eventType === "message.part.delta") {
-      const msgId = event?.properties?.messageID;
-      const delta = event?.properties?.delta;
-
-      const session = getLastSession();
-      if (msgId && delta && session?.messages) {
-        const msg = session.messages.find(m => m.id === msgId);
-        if (msg) {
-          msg.content = (msg.content || '') + delta;
-        }
-      }
+      handleMessagePartDelta(event);
     }
 
     if (eventType === "message.part.updated") {
-      const msgId = event?.properties?.part?.messageID || event?.properties?.messageID;
-      const text = event?.properties?.part?.text;
-
-      const session = getLastSession();
-      if (msgId && text && session?.messages) {
-        const msg = session.messages.find(m => m.id === msgId);
-        if (msg && !msg.content) {
-          msg.content = text;
-          logger(`[context-plugin] Message content from part.updated: ${text.length} chars`);
-        }
-      }
+      handleMessagePartUpdated(event);
     }
 
     if (eventType === "command.execute.before") {
