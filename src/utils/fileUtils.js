@@ -45,9 +45,10 @@ export function getTimestamp() {
  * than 1 hour and have no corresponding final file.
  */
 export async function recoverOrphanedTempFiles(baseDir = CONTEXT_SESSION_DIR) {
-  const MAX_AGE_MS = 60 * 60 * 1000; // 1 hour
+  const MAX_AGE_MS = 5 * 60 * 1000; // 5 minutes
   const now = Date.now();
   let cleaned = 0;
+  const deletedFiles = [];
 
   try {
     const entries = await fs.readdir(baseDir, { withFileTypes: true });
@@ -64,9 +65,10 @@ export async function recoverOrphanedTempFiles(baseDir = CONTEXT_SESSION_DIR) {
         const age = now - stats.mtimeMs;
 
         if (age > MAX_AGE_MS) {
-          // Temp file is older than 1 hour - likely orphaned
+          // Temp file is older than 5 minutes - likely orphaned
           logger(`[recover] Removing orphaned temp file: ${fullPath} (age: ${Math.round(age / 1000)}s)`);
           await fs.unlink(fullPath);
+          deletedFiles.push({ path: fullPath, age: Math.round(age / 1000) });
           cleaned++;
         }
       }
@@ -76,6 +78,10 @@ export async function recoverOrphanedTempFiles(baseDir = CONTEXT_SESSION_DIR) {
     if (error.code !== 'ENOENT') {
       logger(`[recover] Error scanning ${baseDir}: ${error.message}`);
     }
+  }
+
+  if (cleaned > 0) {
+    logger(`[recover] Cleanup complete: deleted ${cleaned} file(s) - ${JSON.stringify(deletedFiles)}`);
   }
 
   return cleaned;
