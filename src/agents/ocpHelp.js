@@ -118,7 +118,6 @@ const PLUGIN_FUNCTIONALITIES = [
 
 export function showHelp(agentName = null) {
   if (agentName) {
-    // Find by exact name or keyword match
     const help = AGENT_HELP[agentName] ||
       Object.values(AGENT_HELP).find(h =>
         h.keywords.includes(agentName.toLowerCase()) ||
@@ -145,8 +144,6 @@ function formatAgentHelp(name, help) {
 
 ${help.params?.length ? `**Parameters:**
 ${help.params.map(p => `- ${p}`).join('\n')}` : ''}
-
-**Keywords:** ${help.keywords.join(', ')}
 `;
 }
 
@@ -174,20 +171,6 @@ ${agentList}
 ## Plugin Functionalities
 
 ${funcList}
-
-## Obsidian Integration
-
-All generated files use Obsidian-style keyword linking:
-- Keywords extracted from actual session content
-- [[wiki links]] for cross-referencing between files
-- Frontmatter with keywords for effective graph views
-
-## SOLID Principles
-
-All plugin operations follow SOLID principles:
-- Single Responsibility: Each module has one job
-- Open/Closed: Open for extension, closed for modification
-- Interface Segregation: Small, specific functions
 
 ---
 Use \`@ocp-help <agent-name>\` for detailed help on a specific agent.

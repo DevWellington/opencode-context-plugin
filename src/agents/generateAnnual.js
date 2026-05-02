@@ -151,7 +151,10 @@ function formatAnnualContent(year, monthlyFiles) {
   }
   
   // Aggregate Relevant Files from all months
-  const allFiles = monthlyFiles.flatMap(m => m.files);
+  const allFiles = monthlyFiles.flatMap(m => m.files).filter(f => {
+    const lower = f.toLowerCase();
+    return !lower.includes('no files') && !lower.includes('currently relevant') && f.length > 10;
+  });
   if (allFiles.length > 0) {
     content += `## Relevant Files\n\n`;
     const uniqueFiles = [...new Set(allFiles.map(f => f.replace(/^[✅💡🐛🔧📝🔍📦🚪]\s*/u, '').trim()))];

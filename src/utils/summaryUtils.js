@@ -28,8 +28,11 @@ export function extractSection(content, sectionHeading) {
 
   // Additional words that appear in "No files or directories are currently relevant" message
   const relevantFilesGarbageWords = new Set([
-    'no', 'files', 'or', 'directories', 'are', 'currently', 'relevant', 
-    'note', 'this', 'appears', 'to', 'be', 'the', 'start', 'of', 'a', 'new', 'conversation'
+    'no', 'files', 'or', 'directories', 'are', 'currently', 'relevant',
+    'note', 'this', 'appears', 'to', 'be', 'the', 'start', 'of', 'a', 'new', 'conversation',
+    'being', 'done', 'looking', 'actually', 'need', 'needs', 'thought', 'thinking',
+    'wanted', 'trying', 'starting', 'stopped', 'paused', 'resumed', 'following',
+    'mentioned', 'noticed', 'realized', 'found', 'saw', 'heard'
   ]);
 
   /**
@@ -38,16 +41,8 @@ export function extractSection(content, sectionHeading) {
    * @returns {boolean} - True if it looks like a legitimate file reference
    */
   function isRelevantFileLine(text) {
-    // Return false if the line looks like fragments of the "No files..." message
-    const words = text.toLowerCase().split(/\s+/).filter(w => w.length > 0);
-    
-    // If it's a single word that's part of the garbage message, reject it
-    if (words.length === 1 && relevantFilesGarbageWords.has(words[0])) {
-      return false;
-    }
-    
-    // If it's a short phrase that's likely part of the garbage message, reject it
-    if (words.length <= 3 && words.every(w => relevantFilesGarbageWords.has(w))) {
+    const lowerText = text.toLowerCase();
+    if (lowerText.includes('no files') || lowerText.includes('currently relevant')) {
       return false;
     }
     

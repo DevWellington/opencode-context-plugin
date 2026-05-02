@@ -10,7 +10,7 @@ export default async function({ session, args }) {
   
   try {
     const result = await generateAnnualSummary(directory, year);
-    return `✅ Annual summary generated to reports/annual-*.md!\n\n${result}`;
+    return `✅ Annual summary generated!\n\n**Summary:**\n- Generated annual report\n[View file](${directory}/reports/annual-${year}.md)`;
   } catch (error) {
     return `❌ Error generating annual summary: ${error.message}`;
   }

@@ -154,15 +154,15 @@ Implement user authentication with JWT tokens.
     });
     
     it('should maintain sequential generation order', async () => {
-      // This test verifies the "SEQUENTIAL GENERATION START" log appears
-      // indicating reports are generated in order, not in parallel
       const consoleSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
       
       await saveContext(tempDir, TEST_SESSION, 'compact');
       
-      // Check that sequential log was produced
       expect(consoleSpy).toHaveBeenCalledWith(
-        expect.stringContaining('SEQUENTIAL GENERATION START')
+        expect.stringContaining('Updating reports...')
+      );
+      expect(consoleSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Reports updated')
       );
       
       consoleSpy.mockRestore();

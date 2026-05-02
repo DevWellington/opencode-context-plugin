@@ -1,0 +1,54 @@
+{
+  "$schema": "https://raw.githubusercontent.com/DevWellington/opencode-context-plugin/main/config-schema.json",
+  "maxContexts": 5,
+  "debug": false,
+  "debounceMs": 2000,
+  "injection": {
+    "enabled": false,
+    "autoInject": true,
+    "maxContexts": 5,
+    "maxTokens": 8000,
+    "cache": {
+      "enabled": true,
+      "ttlMs": 300000
+    }
+  },
+  "relevanceScoring": {
+    "enabled": true,
+    "weights": {
+      "recency": 0.4,
+      "keywords": 0.35,
+      "affinity": 0.25
+    }
+  },
+  "search": {
+    "enabled": true,
+    "maxResults": 10
+  },
+  "report": {
+    "enabled": true,
+    "autoGenerate": true
+  },
+  "remoteSync": {
+    "enabled": false,
+    "provider": "s3",
+    "options": {
+      "endpoint": "",
+      "bucket": "",
+      "credentials": {}
+    }
+  },
+  "protected": {
+    "enabled": true,
+    "maxDays": -1
+  },
+  "globalIntelligence": {
+    "enabled": true,
+    "path": "~/.opencode/global-intelligence.md"
+  },
+  "logRotation": {
+    "enabled": true,
+    "maxFiles": 10,
+    "maxSizeBytes": 10485760
+  }
+}

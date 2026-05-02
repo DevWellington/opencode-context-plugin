@@ -77,7 +77,7 @@ export function extractSessionSummary(session) {
  * @param {Object} opencodeClient - OpenCode client for AI inference (optional)
  */
 export async function saveContext(directory, session, type = 'compact', opencodeClient = null) {
-  console.log(`[saveContext] FUNCTION CALLED - directory=${directory}, type=${type}, hasClient=${!!opencodeClient}`);
+  logger(`[saveContext] START - directory=${directory}, type=${type}, hasClient=${!!opencodeClient}`);
   logger(`[saveContext] START - type=${type}, sessionId=${session?.id || session?.sessionID}, messages=${session?.messages?.length || 0}`);
 
   // Clean up orphaned temp files from previous crashes/failed writes
@@ -173,34 +173,28 @@ priority: "${priority}"
     const reportYear = reportDate.getFullYear();
     const reportMonth = `${reportYear}-${String(reportDate.getMonth() + 1).padStart(2, '0')}`;
     logger(`[saveContext] Starting report regeneration: ${directory}, month: ${reportMonth}`);
-    console.log(`[saveContext] Starting report regeneration: ${directory}, month: ${reportMonth}`);
+    console.log(`[context-plugin] Updating reports...`);
 
-    console.log('[saveContext] SEQUENTIAL GENERATION START - this line must appear');
-    logger(`[saveContext] SEQUENTIAL GENERATION START - this line must appear`);
+    const steps = [
+      { label: 'today summary', fn: () => generateTodaySummary(directory) },
+      { label: 'weekly summary', fn: () => generateWeeklySummary(directory) },
+      { label: 'monthly summary', fn: () => generateMonthlySummary(directory, reportMonth) },
+      { label: 'annual summary', fn: () => generateAnnualSummary(directory, reportYear) },
+      { label: 'intelligence learning', fn: () => import('../agents/generateIntelligenceLearning.js').then(m => m.updateIntelligenceLearning(directory, opencodeClient)) }
+    ];
 
-    logger(`[saveContext] [1/5] Generating today summary...`);
-    await generateTodaySummary(directory);
-
-    logger(`[saveContext] [2/5] Generating weekly summary...`);
-    await generateWeeklySummary(directory);
-
-    logger(`[saveContext] [3/5] Generating monthly summary...`);
-    await generateMonthlySummary(directory, reportMonth);
-
-    logger(`[saveContext] [4/5] Generating annual summary...`);
-    await generateAnnualSummary(directory, reportYear);
-
-    // Step 5: Update intelligence learning on every session save
-    logger(`[saveContext] [5/5] Updating intelligence learning...`);
-    try {
-      const { updateIntelligenceLearning } = await import('../agents/generateIntelligenceLearning.js');
-      await updateIntelligenceLearning(directory, opencodeClient);
-    } catch (error) {
-      logger(`[saveContext] Intelligence learning update failed (non-fatal): ${error.message}`);
+    for (let i = 0; i < steps.length; i++) {
+      const step = steps[i];
+      logger(`[saveContext] [${i + 1}/${steps.length}] Generating ${step.label}...`);
+      try {
+        await step.fn();
+        logger(`[saveContext] [${i + 1}/${steps.length}] ${step.label} ✓`);
+      } catch (error) {
+        logger(`[saveContext] [${i + 1}/${steps.length}] ${step.label} FAILED: ${error.message}`);
+      }
     }
 
-    console.log(`[saveContext] Report regeneration completed`);
-    logger(`[saveContext] Report regeneration completed`);
+    console.log(`[context-plugin] Reports updated ✓`);
 
     logger(`[Daily Summary] Updated with ${filename}`);
     

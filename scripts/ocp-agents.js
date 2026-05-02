@@ -159,6 +159,19 @@ const commands = {
     console.log('[ocp-agents] Updating agents...\n');
     await this.install();
   },
+
+  async initConfig() {
+    const initScript = path.join(__dirname, 'init-config.js');
+    try {
+      await fs.access(initScript);
+    } catch {
+      console.error('[ocp-agents] init-config script not found');
+      process.exit(1);
+    }
+    
+    const { exec } = await import('child_process');
+    exec(`node ${initScript} ${process.argv.slice(3).join(' ')}`, { stdio: 'inherit' });
+  },
   
   help() {
     console.log(`
@@ -167,16 +180,19 @@ const commands = {
 Usage: ocp-agents <command>
 
 Commands:
-  install   - Install agents to ~/.config/opencode/agents/
-  list      - List available agents
-  status    - Check which agents are installed
-  update    - Update installed agents
-  help      - Show this help message
+  install       - Install agents to ~/.config/opencode/agents/
+  list          - List available agents
+  status        - Check which agents are installed
+  update        - Update installed agents
+  init-config   - Generate context-plugin.json config file
+  help          - Show this help message
 
 Examples:
-  npx ocp-agents install    # Install all agents
-  npx ocp-agents list       # List available agents
-  npx ocp-agents status     # Check installation status
+  npx ocp-agents install            # Install all agents
+  npx ocp-agents list               # List available agents
+  npx ocp-agents status             # Check installation status
+  npx ocp-agents init-config        # Create config file
+  npx ocp-agents init-config --dry-run  # Preview config
 `);
   }
 };

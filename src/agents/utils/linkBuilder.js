@@ -87,6 +87,9 @@ export function extractKeywordsFromContent(content, maxKeywords = 20) {
     'issue', 'content', 'actual', 'directories', 'relevant', 'current',
     'checking', 'added', 'appear', 'relevant', 'start', 'conversation',
     'phase', 'week', 'section', 'para', 'format', 'issues', 'look', 'failed',
+    'thought', 'thinking', 'wanted', 'trying', 'starting', 'stopped',
+    'paused', 'resumed', 'following', 'mentioned', 'noticed', 'realized',
+    'found', 'saw', 'heard',
   ]);
 
   // Extract words

@@ -453,20 +453,33 @@ class ContextPlugin {
     if (lastMsg?.role === 'user' && lastMsg?.content?.includes('/inject')) {
       logger('[context-plugin] /inject command detected');
 
-      // Parse /inject arguments: /inject N or /inject --all
+      // Parse /inject arguments: /inject N or /inject --all or /inject help
       const injectMatch = lastMsg.content.match(/\/inject(?:\s+(\d+))?(?:\s+--all)?/);
+      const isAllFlag = /\/inject\s+--all/.test(lastMsg.content);
+      const isHelp = /\/inject\s+(?:help|-h|--help)/.test(lastMsg.content);
 
       const contexts = await listAvailableContexts({ messages }, {
-        maxContexts: 10,
-        maxTokens: 16000
+        maxContexts: 50,
+        maxTokens: 32000
       });
 
       if (contexts.length > 0) {
         // Replace /inject command with empty string first
-        lastMsg.content = lastMsg.content.replace(/\/inject(?:\s+\d+)?(?:\s+--all)?/, '').trim();
+        lastMsg.content = lastMsg.content.replace(/\/inject(?:\s+\d+)?(?:\s+--all)?(?:\s+help|-h|--help)?/, '').trim();
 
-        // If specific index requested, inject just that context
-        if (injectMatch?.[1]) {
+        if (isHelp) {
+          lastMsg.content += '\n\n' +
+            '## /inject Help\n\n' +
+            '- `/inject` - Show available contexts with scores\n' +
+            '- `/inject N` - Inject context #N from the list\n' +
+            '- `/inject --all` - Inject all available contexts\n' +
+            '- `/inject help` - Show this help message\n';
+        } else if (isAllFlag) {
+          const indices = contexts.map((_, i) => i);
+          const injection = await interactiveInject({ messages }, indices);
+          lastMsg.content += '\n\n' + injection;
+          logger(`[context-plugin] Injected all ${contexts.length} contexts`);
+        } else if (injectMatch?.[1]) {
           const idx = parseInt(injectMatch[1]) - 1;
           if (idx >= 0 && idx < contexts.length) {
             const injection = await interactiveInject({ messages }, [idx]);
@@ -478,10 +491,10 @@ class ContextPlugin {
         } else {
           // Show context list for selection
           const preview = formatContextPreview(contexts);
-          lastMsg.content += '\n\n' + preview + '\n\nUse `/inject N` to inject context #N';
+          lastMsg.content += '\n\n' + preview + '\n\nUse `/inject N` to inject context #N, or `/inject --all` to get all';
         }
       } else {
-        lastMsg.content = lastMsg.content.replace(/\/inject(?:\s+\d+)?(?:\s+--all)?/, '').trim();
+        lastMsg.content = lastMsg.content.replace(/\/inject(?:\s+\d+)?(?:\s+--all)?(?:\s+help|-h|--help)?/, '').trim();
         lastMsg.content += '\n\nNo relevant contexts found.';
       }
 
@@ -499,7 +512,9 @@ class ContextPlugin {
         const firstMsg = messages[0];
 
         if (firstMsg.content) {
-          firstMsg.content = firstMsg.content + injection;
+          const ctxNames = contexts.map(c => c.file.replace(/-[0-9]{4}-[0-9]{2}-[0-9]{2}T.*/, '')).join(', ');
+          const notification = `\n\n> 📌 **Context Plugin**: Injected ${contexts.length} prior session contexts: ${ctxNames}\n`;
+          firstMsg.content = notification + firstMsg.content + injection;
           hasInjectedContext = true;
           logger(`[context-plugin] Injected ${contexts.length} contexts into first message`);
         }

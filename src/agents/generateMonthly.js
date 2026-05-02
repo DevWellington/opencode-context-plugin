@@ -148,7 +148,10 @@ function formatMonthlyContent(year, monthStr, weekSummaries) {
   }
   
   // Aggregate Relevant Files from all weeks
-  const allFiles = weekSummaries.flatMap(w => w.files);
+  const allFiles = weekSummaries.flatMap(w => w.files).filter(f => {
+    const lower = f.toLowerCase();
+    return !lower.includes('no files') && !lower.includes('currently relevant') && f.length > 10;
+  });
   if (allFiles.length > 0) {
     content += `## Relevant Files\n\n`;
     const uniqueFiles = [...new Set(allFiles.map(f => f.replace(/^[✅💡🐛🔧📝🔍📦🚪]\s*/u, '').trim()))];

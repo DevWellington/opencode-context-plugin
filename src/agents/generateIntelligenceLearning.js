@@ -523,18 +523,18 @@ export async function updateIntelligenceLearning(directory, opencodeClient = nul
   // Gather new session information from recent files
   const newSessionInfo = await gatherRecentSessionInfo(directory);
 
-  // Deduplicate by session content (title + firstUserMessage), not by ID
+  // Deduplicate by file path (stable ID), not by content which changes on edit
   const existingKeys = new Set();
   for (const entry of existingEntries) {
     for (const session of (entry.sessions || [])) {
-      const key = `${session.title || ''}|${session.firstUserMessage || ''}`;
+      const key = session.filepath || `${session.title || ''}|${session.firstUserMessage || ''}`;
       existingKeys.add(key);
     }
   }
 
-  // Filter out sessions that already exist (by content, not by ID)
+  // Filter out sessions that already exist (by path, which is stable across edits)
   const newSessions = (newSessionInfo.sessions || []).filter(session => {
-    const key = `${session.title || ''}|${session.firstUserMessage || ''}`;
+    const key = session.filepath || `${session.title || ''}|${session.firstUserMessage || ''}`;
     if (existingKeys.has(key)) {
       return false;
     }
@@ -795,6 +795,7 @@ async function gatherRecentSessionInfo(directory) {
     
     sessionSummaries.push({
       filename: file,
+      filepath: fullPath,
       title: title,
       firstUserMessage: firstUserMessage,
       goal: extracted.goal || inferred.goal || '',
@@ -913,6 +914,17 @@ function parseExistingEntries(content) {
  * Generate updated intelligence learning content
  */
 /**
+ * Strip markdown section headers from field values
+ * e.g. "## Goal\nMy goal content" -> "My goal content"
+ * Prevents duplicate headers when writing session fields back to intelligence file
+ */
+function stripFieldHeader(value, header) {
+  if (!value || typeof value !== 'string') return value;
+  const pattern = new RegExp(`^##\\s+${header}\\s*\\n`, 'i');
+  return value.replace(pattern, '');
+}
+
+/**
  * Clean old/deprecated links from content
  * Removes references to old flat reports/ structure
  */
@@ -986,18 +998,18 @@ lastUpdated: ${new Date().toISOString()}
         content += `#### ${session.title}\n`;
         
         // Use template format for structured content
-        // Clean old links before writing
+        // Clean old links and strip duplicate section headers before writing
         if (session.goal) {
-          content += `## Goal\n${cleanOldLinks(session.goal)}\n\n`;
+          content += `## Goal\n${cleanOldLinks(stripFieldHeader(session.goal, 'Goal'))}\n\n`;
         }
         if (session.firstUserMessage) {
-          content += `## Instructions\n${cleanOldLinks(session.firstUserMessage)}\n\n`;
+          content += `## Instructions\n${cleanOldLinks(stripFieldHeader(session.firstUserMessage, 'Instructions'))}\n\n`;
         }
         if (session.discoveries) {
-          content += `## Discoveries\n${cleanOldLinks(session.discoveries)}\n\n`;
+          content += `## Discoveries\n${cleanOldLinks(stripFieldHeader(session.discoveries, 'Discoveries'))}\n\n`;
         }
         if (session.accomplished) {
-          content += `## Accomplished\n${cleanOldLinks(session.accomplished)}\n\n`;
+          content += `## Accomplished\n${cleanOldLinks(stripFieldHeader(session.accomplished, 'Accomplished'))}\n\n`;
         }
         if (session.relevantFiles?.length) {
           content += `## Relevant Files\n${session.relevantFiles.map(f => `- ${f}`).join('\n')}\n\n`;

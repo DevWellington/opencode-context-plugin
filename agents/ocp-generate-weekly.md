@@ -10,7 +10,7 @@ export default async function({ session, args }) {
   
   try {
     const result = await generateWeeklySummary(directory, date);
-    return `✅ Weekly summary generated to week-summary.md!\n\n${result}`;
+    return `✅ Weekly summary generated!\n\n**Summary:**\n- Generated week-summary.md\n[View file](${directory}/week-summary.md)`;
   } catch (error) {
     return `❌ Error generating weekly summary: ${error.message}`;
   }

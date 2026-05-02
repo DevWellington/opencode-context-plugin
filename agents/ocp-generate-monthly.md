@@ -10,7 +10,7 @@ export default async function({ session, args }) {
   
   try {
     const result = await generateMonthlySummary(directory, month);
-    return `✅ Monthly summary generated to reports/monthly-*.md!\n\n${result}`;
+    return `✅ Monthly summary generated!\n\n**Summary:**\n- Generated monthly report\n[View file](${directory}/reports/monthly-${month}.md)`;
   } catch (error) {
     return `❌ Error generating monthly summary: ${error.message}`;
   }
