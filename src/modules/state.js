@@ -3,6 +3,9 @@
  * Enables resume after restart without re-processing same content
  * 
  * State file: .opencode/context-session/.state.json
+ * 
+ * Uses optimistic locking with version numbers to prevent race conditions
+ * when multiple processes save state concurrently.
  */
 
 import fs from 'fs/promises';
@@ -12,7 +15,8 @@ import { createDebugLogger } from '../utils/debug.js';
 
 const logger = createDebugLogger('context-plugin');
 const STATE_FILE = '.opencode/context-session/.state.json';
-const STATE_VERSION = 1;
+const STATE_VERSION = 2; // Bumped for optimistic locking
+const MAX_LOCK_RETRIES = 3;
 
 /**
  * Create default state object
@@ -38,7 +42,7 @@ export async function loadState(baseDir) {
   try {
     const content = await fs.readFile(statePath, 'utf-8');
     const state = JSON.parse(content);
-    logger(`[state] Loaded state from ${statePath}`);
+    logger(`[state] Loaded state from ${statePath} (version ${state.version})`);
     return state;
   } catch {
     logger(`[state] No existing state, returning default`);
@@ -47,15 +51,27 @@ export async function loadState(baseDir) {
 }
 
 /**
- * Save state to disk atomically
+ * Save state to disk atomically with optimistic locking
  * @param {string} baseDir - Project base directory
  * @param {State} state - State to save
+ * @param {number} expectedVersion - Expected version for optimistic lock (from loadState)
  */
-export async function saveState(baseDir, state) {
+export async function saveState(baseDir, state, expectedVersion = null) {
   const statePath = path.join(baseDir, STATE_FILE);
+  
+  // If expectedVersion provided, validate no race condition
+  if (expectedVersion !== null && state.version !== expectedVersion) {
+    logger(`[state] Version mismatch: expected ${expectedVersion}, got ${state.version} - retrying`);
+    // Retry with fresh load
+    const fresh = await loadState(baseDir);
+    return saveState(baseDir, fresh, fresh.version);
+  }
+  
+  state.version = (state.version || 0) + 1;
   state.lastUpdated = new Date().toISOString();
+  
   await atomicWrite(statePath, JSON.stringify(state, null, 2));
-  logger(`[state] Saved state to ${statePath}`);
+  logger(`[state] Saved state to ${statePath} (version ${state.version})`);
 }
 
 /**
@@ -81,7 +97,7 @@ export async function setLastSummarized(baseDir, key, info) {
     ...info,
     timestamp: Date.now()
   };
-  await saveState(baseDir, state);
+  await saveState(baseDir, state, state.version);
 }
 
 /**
@@ -107,7 +123,7 @@ export async function addToPendingQueue(baseDir, item) {
       ...item,
       addedAt: Date.now()
     });
-    await saveState(baseDir, state);
+    await saveState(baseDir, state, state.version);
   }
 }
 
@@ -123,7 +139,7 @@ export async function clearPendingQueue(baseDir, type = null) {
   } else {
     state.pending = [];
   }
-  await saveState(baseDir, state);
+  await saveState(baseDir, state, state.version);
 }
 
 /**
@@ -144,7 +160,7 @@ export async function markSummaryComplete(baseDir, key, info) {
     timestamp: Date.now()
   };
   
-  await saveState(baseDir, state);
+  await saveState(baseDir, state, state.version);
 }
 
 /**
