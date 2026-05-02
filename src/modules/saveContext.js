@@ -12,6 +12,7 @@ import { generateAnnualSummary } from '../agents/generateAnnual.js';
 import { atomicWrite, getTimestamp, recoverOrphanedTempFiles } from '../utils/fileUtils.js';
 import { setLastSummarized, addToPendingQueue } from './state.js';
 import { countTokens } from './tokenLimit.js';
+import { validateAfterSave } from './contextValidator.js';
 
 const logger = createDebugLogger('context-plugin');
 
@@ -136,6 +137,10 @@ priority: "${priority}"
     await atomicWrite(filepath, content);
     logger(`[context-plugin] Saved context to: ${filepath}`);
     console.log(`[context-plugin] Context saved: ${filename}`);
+
+    validateAfterSave(directory, content, filepath).catch(err => {
+      logger(`[saveContext] Context validation failed (non-fatal): ${err.message}`);
+    });
     
     // Invalidate context cache on new save
     if (getConfig().injection?.cache?.enabled) {
