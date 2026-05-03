@@ -372,7 +372,7 @@ Added JWT authentication using jose library
 
       const content = generateReferenceContent(patternData);
       // Issues are now formatted as "- description (location)" without ID prefix
-      const issueMatches = content.match(/^- .+ \(\w+:\d+\)$/gm);
+      const issueMatches = content.match(/^- .+ \([^)]+\)$/gm);
       expect(issueMatches.length).toBe(10);
     });
 

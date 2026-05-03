@@ -179,8 +179,12 @@ export function transformToReferenceSchema(allEntries, latestEntry, reportIntell
 
       if (containsIssuePattern(acc)) continue;
 
+      // Allow accomplishments starting with action verbs - these are valid outcomes
+      const actionVerbPattern = /^(Added|Fixed|Improved|Implemented|Refactored|Created|Updated)\s+/i;
+      const hasActionVerb = actionVerbPattern.test(acc);
+
       if (isLowQualityPattern(acc)) continue;
-      if (isLowQualityAccomplishment(acc)) continue;
+      if (!hasActionVerb && isLowQualityAccomplishment(acc)) continue;
 
       const cleanAcc = acc.replace(/[#*`\[\]]/g, '').replace(/\d+\.\d+:/g, '').trim();
       if (cleanAcc.length < 25) continue;

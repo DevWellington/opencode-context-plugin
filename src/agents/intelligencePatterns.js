@@ -71,8 +71,7 @@ export const LOW_QUALITY_ACCOMPLISHMENT_PATTERNS = [
   /\bran\s+(agent|trigger|test|script)[- ]/i,
   /\bexecuted\s+/i,
   /\bcompleted\s+/i,
-  /\bgenerated\s+(the\s+)?(report|summary|output)/i,
-  /^(Both|Key difference|The main|This is)/i
+  /\bgenerated\s+(the\s+)?(report|summary|output)/i
 ];
 
 export function containsIssuePattern(text) {
@@ -91,7 +90,7 @@ export function containsIssuePattern(text) {
 export function isLowQualityAccomplishment(text) {
   if (!text) return true;
   const lower = text.toLowerCase();
-  if (lower.length < 20) return true;
+  if (lower.length < 12) return true;
   if (LOW_QUALITY_ACCOMPLISHMENT_PATTERNS.some(p => p.test(text))) return true;
   if (containsIssuePattern(text)) return true;
   if (isLowQualityPattern(text)) return true;
