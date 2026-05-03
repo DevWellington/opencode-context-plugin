@@ -106,7 +106,7 @@ describe('Intelligence Reference Format', () => {
 
       const content = generateReferenceContent(patternData);
       
-      expect(content).toContain('NULL-1');
+      // Issue title is now the full description, not the truncated ID
       expect(content).toContain('null pointer exception');
       expect(content).toContain('src/utils/helper.js:42');
     });
@@ -371,8 +371,8 @@ Added JWT authentication using jose library
       };
 
       const content = generateReferenceContent(patternData);
-      // CORRECT: Match BUG-NULL-PTR format (hyphenated uppercase)
-      const issueMatches = content.match(/^- BUG-[A-Z0-9-]+:\s+.+/gm);
+      // Issues are now formatted as "- description (location)" without ID prefix
+      const issueMatches = content.match(/^- .+ \(\w+:\d+\)$/gm);
       expect(issueMatches.length).toBe(10);
     });
 

@@ -142,6 +142,11 @@ export function transformToReferenceSchema(allEntries, latestEntry, reportIntell
       for (const sentence of sentences.slice(0, 3)) {
         const cleanSentence = sentence.replace(/[#*`\[\]]/g, '').trim();
         if (cleanSentence.length > 15) {
+          // Filter out architectural observations (not actual bugs)
+          // Handle English, Portuguese, Spanish terms
+          const lowerClean = cleanSentence.toLowerCase();
+          if (/\b(arquitetura|architecture|inverted|invertida)\b/.test(lowerClean)) continue;
+
           // Use first 60 chars of description for ID but keep full cleanSentence for display
           const idKey = cleanSentence.slice(0, 60).replace(/[^a-zA-Z0-9]/g, '-').toUpperCase();
           const id = `ISSUE-${idKey}`;
@@ -153,7 +158,8 @@ export function transformToReferenceSchema(allEntries, latestEntry, reportIntell
           if (!isDuplicate) {
             knownIssues.push({
               id,
-              description: cleanSentence.slice(0, 120),
+              title: cleanSentence,
+              description: cleanSentence,
               location: session.title || ''
             });
           }
@@ -199,11 +205,17 @@ export function transformToReferenceSchema(allEntries, latestEntry, reportIntell
 
   if (reportIntelligence) {
     for (const pending of (reportIntelligence.pendingItems || [])) {
-      const id = `ISSUE-${(pending.issue || 'unknown').slice(0, 15).replace(/\s+/g, '-').toUpperCase()}`;
+      const issueText = pending.issue || '';
+      // Filter out architectural observations (not actual bugs)
+      const lowerIssue = issueText.toLowerCase();
+      if (/\b(arquitetura|architecture|inverted|invertida)\b/.test(lowerIssue)) continue;
+
+      const id = `ISSUE-${issueText.slice(0, 15).replace(/\s+/g, '-').toUpperCase()}`;
       if (!knownIssues.some(k => k.description === pending.issue)) {
         knownIssues.push({
           id,
-          description: pending.issue,
+          title: issueText,
+          description: issueText,
           location: pending.source || ''
         });
       }

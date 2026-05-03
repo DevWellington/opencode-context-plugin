@@ -31,7 +31,7 @@ export function generateReferenceContent(patternData) {
   if (patternData.knownIssues && patternData.knownIssues.length > 0) {
     for (const issue of patternData.knownIssues.slice(0, 10)) {
       const loc = issue.location ? ` (${issue.location})` : '';
-      lines.push(`- ${issue.id || 'ISSUE'}: ${issue.description}${loc}`);
+      lines.push(`- ${issue.title || issue.description}${loc}`);
     }
   } else {
     lines.push('- No known issues');
