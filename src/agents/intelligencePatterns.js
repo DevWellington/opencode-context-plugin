@@ -49,12 +49,14 @@ export const ISSUE_ANTI_PATTERNS = [
   /documentation/i,
   /docs?\s*(page|section|file)?/i,
   /key\s+(features?|differentiators?|capabilities?)/i,
-  /user\s+pointed\s+out\s+(an?\s+)?(bug|issue|error|problem)/i,
+  /pointed\s+out\s+(that\s+)?(the\s+)?(bug|issue|error|problem)/i,
   /discussed\s+(a\s+)?(bug|issue|error|problem)/i,
   /during\s+the\s+session.*(bug|issue|error|problem)/i,
+  /during\s+the\s+session/i,  // Any mention of "during the session" in issue context
   /^during\s+the\s+session/i,
   /^\s*during\s+(the|this)\s+(session|meeting|call)/i,
-  /^\d+$/  // Pure numbers are not issues
+  /^\d+$/,  // Pure numbers are not issues
+  /\(Revisar tudo\)$/  // Fragments ending with parenthetical notes
 ];
 
 /**
