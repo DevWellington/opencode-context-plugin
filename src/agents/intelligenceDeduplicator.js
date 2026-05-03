@@ -140,9 +140,11 @@ export function transformToReferenceSchema(allEntries, latestEntry, reportIntell
     if (containsIssuePattern(discoveries)) {
       const sentences = discoveries.split(/[.!?]+/).filter(s => containsIssuePattern(s));
       for (const sentence of sentences.slice(0, 3)) {
-        const cleanSentence = sentence.replace(/[#*`\[\]]/g, '').trim().slice(0, 80);
+        const cleanSentence = sentence.replace(/[#*`\[\]]/g, '').trim();
         if (cleanSentence.length > 15) {
-          const id = `ISSUE-${cleanSentence.slice(0, 20).replace(/[^a-zA-Z0-9]/g, '-').toUpperCase()}`;
+          // Use first 60 chars of description for ID but keep full cleanSentence for display
+          const idKey = cleanSentence.slice(0, 60).replace(/[^a-zA-Z0-9]/g, '-').toUpperCase();
+          const id = `ISSUE-${idKey}`;
           const isDuplicate = knownIssues.some(k =>
             k.id === id || (k.description && cleanSentence &&
               (k.description.slice(0, 40) === cleanSentence.slice(0, 40) ||
@@ -151,7 +153,7 @@ export function transformToReferenceSchema(allEntries, latestEntry, reportIntell
           if (!isDuplicate) {
             knownIssues.push({
               id,
-              description: cleanSentence,
+              description: cleanSentence.slice(0, 120),
               location: session.title || ''
             });
           }

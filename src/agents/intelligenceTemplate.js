@@ -65,8 +65,39 @@ export function generateReferenceContent(patternData) {
   lines.push('');
   lines.push('## Recent Patterns');
   if (patternData.recentPatterns && patternData.recentPatterns.length > 0) {
-    for (const pattern of patternData.recentPatterns.slice(0, 10)) {
-      lines.push(`- ${pattern.type}: ${pattern.name} (${pattern.frequency} sessions)`);
+    // Group patterns by concrete context (file/module) not just generic theme
+    const patternGroups = new Map();
+    for (const pattern of patternData.recentPatterns) {
+      // Extract concrete context from pattern name - look for file-like or module-like parts
+      const words = pattern.name.split(/[\s\-_:]+/);
+      const concreteParts = words.filter(w =>
+        w.length > 3 &&
+        /^[a-zA-Z]/.test(w) &&
+        !/^(the|and|for|from|with|that|this|when|then|than)$/i.test(w) &&
+        !/^(theme|pattern|approach|issue|bug|fix|feature)$/i.test(w)
+      );
+      const concreteContext = concreteParts.slice(0, 2).join('-').toLowerCase() || pattern.name.slice(0, 20).toLowerCase();
+
+      if (!patternGroups.has(concreteContext)) {
+        patternGroups.set(concreteContext, {
+          type: pattern.type,
+          context: concreteContext,
+          names: [],
+          totalFrequency: 0
+        });
+      }
+      const group = patternGroups.get(concreteContext);
+      group.names.push(pattern.name);
+      group.totalFrequency += pattern.frequency;
+    }
+
+    // Output grouped patterns with concrete context
+    for (const [ctx, group] of patternGroups) {
+      const uniqueNames = [...new Set(group.names)].slice(0, 3);
+      const nameStr = uniqueNames.length > 1
+        ? uniqueNames.map(n => n.slice(0, 25)).join(', ')
+        : uniqueNames[0] || ctx;
+      lines.push(`- ${group.type}: ${nameStr} (${group.totalFrequency} sessions)`);
     }
   } else {
     lines.push('- No patterns detected yet');

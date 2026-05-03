@@ -16,6 +16,32 @@ export const ISSUE_PATTERNS = [
 ];
 
 /**
+ * Anti-patterns: phrases that look like issues but are NOT actual issues
+ * Used to filter false positives in containsIssuePattern
+ */
+export const ISSUE_ANTI_PATTERNS = [
+  /bug\s*(fixed|resolved|resolvido)/i,
+  /issue\s*(fixed|resolved|resolvido)/i,
+  /error\s*(fixed|resolved|resolvido)/i,
+  /problem\s*(fixed|resolved|solved)/i,
+  /fixed\s+(the\s+)?(bug|issue|error|problem)/i,
+  /resolved\s+(the\s+)?(bug|issue|error|problem)/i,
+  /solved\s+(the\s+)?(bug|issue|error|problem)/i,
+  /key\s+differentiators?/i,
+  /auto-?learn/i,
+  /learn\s+patterns?/i,
+  /feature[sd]?\s+(implemented|added|created|introduced)/i,
+  /accomplishment/i,
+  /successfully/i,
+  /^ran\s+agent/i,
+  /agent[- ]based\s+(generation|analysis)/i,
+  /README/i,
+  /documentation/i,
+  /docs?\s*(page|section|file)?/i,
+  /key\s+(features?|differentiators?|capabilities?)/i
+];
+
+/**
  * Failed approach patterns from discoveries
  */
 export const FAILED_APPROACH_PATTERNS = [
@@ -42,6 +68,11 @@ export const LOW_QUALITY_ACCOMPLISHMENT_PATTERNS = [
 
 export function containsIssuePattern(text) {
   if (!text) return false;
+  // First check if text matches any anti-pattern (not an issue)
+  for (const antiPattern of ISSUE_ANTI_PATTERNS) {
+    if (antiPattern.test(text)) return false;
+  }
+  // Then check if it matches any actual issue pattern
   for (const pattern of ISSUE_PATTERNS) {
     if (pattern.test(text)) return true;
   }
