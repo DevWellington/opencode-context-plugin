@@ -116,6 +116,13 @@ export function transformToReferenceSchema(allEntries, latestEntry, reportIntell
           const symptomLower = (bug.symptom || '').toLowerCase();
           if (/\b(arquitetura|architecture|inverted|invertida)\b/.test(symptomLower)) continue;
 
+          // Filter out parenthetical fragments and session artifacts
+          const symptom = bug.symptom || '';
+          if (/\(Revisar tudo\)$/.test(symptom)) continue;
+          if (/^\d+\s*\(/.test(symptom)) continue;  // "2 (Revisar tudo)" type fragments
+          if (/^md\)/.test(symptom)) continue;  // "md) or text..." fragments
+          if (/^js\)/.test(symptom)) continue;  // "js:756" style entries should have been caught by extractBugs
+
           const id = `BUG-${(bug.symptom || 'unknown').slice(0, 20).replace(/\s+/g, '-').toUpperCase()}`;
           if (!knownIssues.some(k => k.id === id)) {
             knownIssues.push({
