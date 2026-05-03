@@ -1,4 +1,4 @@
-import { findPatterns } from '../modules/contentExtractor.js';
+import { findPatterns, isValidBugSymptom } from '../modules/contentExtractor.js';
 import { FAILED_APPROACH_PATTERNS, containsIssuePattern, isLowQualityAccomplishment } from './intelligencePatterns.js';
 import { isLowQualityPattern } from './reportExtractor.js';
 
@@ -112,18 +112,13 @@ export function transformToReferenceSchema(allEntries, latestEntry, reportIntell
             location: session.relevantFiles?.[0] ? `${session.relevantFiles[0]}:${bug.line || 0}` : ''
           });
         } else {
-          // Filter out architectural observations (not actual bugs)
+          // Apply comprehensive validation using isValidBugSymptom
+          // This filters out: file:line refs, fragments, module names, truncated content
+          if (!isValidBugSymptom(bug.symptom)) continue;
+
+          // Also filter architectural observations
           const symptomLower = (bug.symptom || '').toLowerCase();
           if (/\b(arquitetura|architecture|inverted|invertida)\b/.test(symptomLower)) continue;
-
-          // Filter out parenthetical fragments and session artifacts
-          const symptom = bug.symptom || '';
-          if (/\(Revisar tudo\)$/.test(symptom)) continue;
-          if (/^\d+\(/.test(symptom)) continue;  // FIXED: "2 (Revisar tudo)" without space requirement
-          if (/^md\)/.test(symptom)) continue;
-          if (/^[a-z]+:\d/.test(symptom)) continue;  // NEW: "js:756", "ts:123"
-          if (/^(md|js|ts|contentExtractor|linkBuilder)\b/i.test(symptom)) continue;  // NEW: module names
-          if (/^[a-z]\s/.test(symptom)) continue;  // NEW: "e (Revisar tudo)" single letter + space
 
           const id = `BUG-${(bug.symptom || 'unknown').slice(0, 20).replace(/\s+/g, '-').toUpperCase()}`;
           if (!knownIssues.some(k => k.id === id)) {
@@ -175,6 +170,10 @@ export function transformToReferenceSchema(allEntries, latestEntry, reportIntell
 
           // Also filter if session title indicates architectural review
           if (/\b(arquitetura|architecture)\b/.test(sessionTitleLower)) continue;
+
+          // Apply bug symptom validation to filter out malformed entries
+          // (file:line references, fragments, module names, etc.)
+          if (!isValidBugSymptom(cleanSentence)) continue;
 
           // Use first 60 chars of description for ID but keep full cleanSentence for display
           const idKey = cleanSentence.slice(0, 60).replace(/[^a-zA-Z0-9]/g, '-').toUpperCase();

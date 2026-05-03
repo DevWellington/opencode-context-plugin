@@ -178,3 +178,22 @@
 - [x] [INTEL-REFORM-05] Add tests validating new format structure and content
 
 **Status:** Phase 24 complete
+
+## Phase 28: Intelligence-Learning Generation Bugfix
+
+**Goal:** Fix three critical bugs in intelligence-learning.md generation: malformed bug symptoms polluting Known Issues, multiline accomplishments breaking markdown bullets, and fragment filter regex failures.
+
+**Plans:** 1/1 plans complete
+
+**Status:** Planning complete
+
+### Plans
+
+- [ ] 28-intelligence-gen-bugfix-01-PLAN.md — Fix bug symptom validation, accomplishment multiline handling, and fragment filter regex
+
+### Requirements
+
+- [ ] [BUGFIX-01] Fix regex to reject file:line references as bug symptoms
+- [ ] [BUGFIX-02] Fix regex to reject numbered fragments and session artifacts
+- [ ] [BUGFIX-03] Replace newlines with spaces before accomplishment truncation
+- [ ] [BUGFIX-04] Escape newlines in pattern output to prevent broken bullets
