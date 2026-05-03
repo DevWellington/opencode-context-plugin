@@ -227,7 +227,7 @@ export function transformToReferenceSchema(allEntries, latestEntry, reportIntell
         if (isLowQualityAccomplishment(acc)) continue;
       }
 
-      const cleanAcc = acc.replace(/[#*`\[\]]/g, '').replace(/\d+\.\d+:/g, '').trim();
+      const cleanAcc = cleanAccomplishmentText(acc);
       if (cleanAcc.length < 20) continue;
 
       // Filter out generic observations/narratives (not actual accomplishments)
@@ -254,15 +254,32 @@ export function transformToReferenceSchema(allEntries, latestEntry, reportIntell
         frequency: 1,
         location: session.relevantFiles?.[0] || ''
       });
-    }
-  }
+}
+}
 
-  // NOTE: pendingItems from reports are NOT real issues - they are TODOs/work items
-  // Disabled to break the feedback loop where reports generate noise -> intelligence picks it up -> cycle repeats
-  // Real issues come from actual bugs in session code, not from pending work items
-  // if (reportIntelligence) {
-  //   for (const pending of (reportIntelligence.pendingItems || [])) { ... }
-  // }
+/**
+ * Cleans accomplishment text by replacing newlines with spaces.
+ * Prevents mid-bullet line breaks that break markdown formatting.
+ * @param {string} text - Raw accomplishment text
+ * @returns {string} - Cleaned text with newlines replaced by spaces
+ */
+function cleanAccomplishmentText(text) {
+  if (!text) return '';
+  // Replace newlines with spaces, then clean markdown markers
+  return text
+    .replace(/\n+/g, ' ')  // Convert multiline to single line
+    .replace(/[#*`\[\]]/g, '')  // Remove markdown markers
+    .replace(/\d+\.\d+:/g, '')  // Remove timestamps like "14.30:"
+    .replace(/\s+/g, ' ')  // Normalize multiple spaces to single
+    .trim();
+}
+
+// NOTE: pendingItems from reports are NOT real issues - they are TODOs/work items
+// Disabled to break the feedback loop where reports generate noise -> intelligence picks it up -> cycle repeats
+// Real issues come from actual bugs in session code, not from pending work items
+// if (reportIntelligence) {
+//   for (const pending of (reportIntelligence.pendingItems || [])) { ... }
+// }
 
   // Extract failed and successful approaches from reports (but NOT pendingItems)
   if (reportIntelligence) {
