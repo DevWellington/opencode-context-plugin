@@ -30,8 +30,14 @@ export function generateReferenceContent(patternData) {
   lines.push('## Known Issues');
   if (patternData.knownIssues && patternData.knownIssues.length > 0) {
     for (const issue of patternData.knownIssues.slice(0, 10)) {
-      const loc = issue.location ? ` (${issue.location})` : '';
-      lines.push(`- ${issue.title || issue.description}${loc}`);
+      let loc = issue.location || '';
+      // Sanitize location - filter out architectural session titles
+      const locLower = loc.toLowerCase();
+      if (/\b(arquitetura de summaries invertida|arquitetura de|inverted architecture)\b/.test(locLower)) {
+        loc = '';
+      }
+      const locStr = loc ? ` (${loc})` : '';
+      lines.push(`- ${issue.title || issue.description}${locStr}`);
     }
   } else {
     lines.push('- No known issues');

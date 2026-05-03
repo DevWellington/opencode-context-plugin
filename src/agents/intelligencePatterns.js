@@ -5,7 +5,10 @@ import { isLowQualityPattern } from './reportExtractor.js';
  */
 export const ISSUE_PATTERNS = [
   /\b(não funciona|does not work|is broken|not working|broken)\b/i,
-  /\b(bug|error|problema|issue)\b/i,
+  /\b(bug|error|problema|issue)[:\s]/i,
+  /\bfound\s+a\s+bug/i,
+  /\bbug\s+was\s+found/i,
+  /\berror\s+was\s+discovered/i,
   /\b(causando|causing|caused by|causes)\b/i,
   /\b(fail(ed)?|failing|fails)\b/i,
   /\b(crash|crashed|crashing)\b/i,
@@ -27,6 +30,10 @@ export const ISSUE_ANTI_PATTERNS = [
   /fixed\s+(the\s+)?(bug|issue|error|problem)/i,
   /resolved\s+(the\s+)?(bug|issue|error|problem)/i,
   /solved\s+(the\s+)?(bug|issue|error|problem)/i,
+  /foi\s+(corrigido|implementado|adicionado)/i,
+  /^bug encontrado/i,
+  /^revisar tudo$/i,
+  /hierarchical flow/i,
   /key\s+differentiators?/i,
   /auto-?learn/i,
   /learn\s+patterns?/i,
@@ -41,7 +48,13 @@ export const ISSUE_ANTI_PATTERNS = [
   /README/i,
   /documentation/i,
   /docs?\s*(page|section|file)?/i,
-  /key\s+(features?|differentiators?|capabilities?)/i
+  /key\s+(features?|differentiators?|capabilities?)/i,
+  /user\s+pointed\s+out\s+(an?\s+)?(bug|issue|error|problem)/i,
+  /discussed\s+(a\s+)?(bug|issue|error|problem)/i,
+  /during\s+the\s+session.*(bug|issue|error|problem)/i,
+  /^during\s+the\s+session/i,
+  /^\s*during\s+(the|this)\s+(session|meeting|call)/i,
+  /^\d+$/  // Pure numbers are not issues
 ];
 
 /**

@@ -99,6 +99,10 @@ export function transformToReferenceSchema(allEntries, latestEntry, reportIntell
   const failedApproaches = [];
 
   for (const session of allSessions) {
+    // Skip entire session if title indicates architectural review (not a bug report)
+    const sessionTitleLower = (session.title || '').toLowerCase();
+    if (/\b(arquitetura|architecture)\b/.test(sessionTitleLower)) continue;
+
     if (session.bugs?.length) {
       for (const bug of session.bugs) {
         if (bug.solution || bug.resolution) {
@@ -108,6 +112,10 @@ export function transformToReferenceSchema(allEntries, latestEntry, reportIntell
             location: session.relevantFiles?.[0] ? `${session.relevantFiles[0]}:${bug.line || 0}` : ''
           });
         } else {
+          // Filter out architectural observations (not actual bugs)
+          const symptomLower = (bug.symptom || '').toLowerCase();
+          if (/\b(arquitetura|architecture|inverted|invertida)\b/.test(symptomLower)) continue;
+
           const id = `BUG-${(bug.symptom || 'unknown').slice(0, 20).replace(/\s+/g, '-').toUpperCase()}`;
           if (!knownIssues.some(k => k.id === id)) {
             knownIssues.push({
@@ -122,6 +130,10 @@ export function transformToReferenceSchema(allEntries, latestEntry, reportIntell
   }
 
   for (const session of allSessions) {
+    // Skip architectural review sessions
+    const sessionTitleLower = (session.title || '').toLowerCase();
+    if (/\b(arquitetura|architecture)\b/.test(sessionTitleLower)) continue;
+
     const discoveries = session.discoveries || '';
     if (!discoveries) continue;
 
@@ -138,7 +150,12 @@ export function transformToReferenceSchema(allEntries, latestEntry, reportIntell
     }
 
     if (containsIssuePattern(discoveries)) {
-      const sentences = discoveries.split(/[.!?]+/).filter(s => containsIssuePattern(s));
+      const sentences = discoveries.split(/[.!?]+/)
+        .map(s => s.trim())
+        .filter(s => s.length >= 15)  // Remove very short fragments
+        .filter(s => !/^[()\[\]]/.test(s))  // Remove parenthetical-only fragments
+        .filter(s => !/^\d+$/.test(s))  // Remove pure numbers
+        .filter(s => containsIssuePattern(s));
       for (const sentence of sentences.slice(0, 3)) {
         const cleanSentence = sentence.replace(/[#*`\[\]]/g, '').trim();
         if (cleanSentence.length > 15) {
@@ -146,6 +163,9 @@ export function transformToReferenceSchema(allEntries, latestEntry, reportIntell
           // Handle English, Portuguese, Spanish terms
           const lowerClean = cleanSentence.toLowerCase();
           if (/\b(arquitetura|architecture|inverted|invertida)\b/.test(lowerClean)) continue;
+
+          // Also filter if session title indicates architectural review
+          if (/\b(arquitetura|architecture)\b/.test(sessionTitleLower)) continue;
 
           // Use first 60 chars of description for ID but keep full cleanSentence for display
           const idKey = cleanSentence.slice(0, 60).replace(/[^a-zA-Z0-9]/g, '-').toUpperCase();
@@ -210,9 +230,29 @@ export function transformToReferenceSchema(allEntries, latestEntry, reportIntell
   if (reportIntelligence) {
     for (const pending of (reportIntelligence.pendingItems || [])) {
       const issueText = pending.issue || '';
+      const sourceText = pending.source || '';
       // Filter out architectural observations (not actual bugs)
+      // Check both issue text AND source text (parenthetical notes may be in source)
       const lowerIssue = issueText.toLowerCase();
+      const lowerSource = sourceText.toLowerCase();
       if (/\b(arquitetura|architecture|inverted|invertida)\b/.test(lowerIssue)) continue;
+      if (/\b(arquitetura|architecture|inverted|invertida)\b/.test(lowerSource)) continue;
+
+      // Filter out already resolved issues (Portuguese/English)
+      if (/\bfoi\s+(corrigido|implementado|adicionado)\b/i.test(issueText)) continue;
+      if (/\bfixed|resolved|implemented|added\b/i.test(issueText) && /issue|bug|problem/i.test(lowerIssue)) continue;
+
+      // Filter out uncertain/unverified bugs
+      if (/^bug encontrado/i.test(issueText)) continue;
+
+      // Filter out architecture description fragments
+      if (/hierarchical flow/i.test(issueText)) continue;
+
+      // Filter out very short entries
+      if (issueText.length < 20) continue;
+
+      // Filter out all-uppercase fragments (likely labels)
+      if (issueText === issueText.toUpperCase() && /[A-Z]/.test(issueText)) continue;
 
       const id = `ISSUE-${issueText.slice(0, 15).replace(/\s+/g, '-').toUpperCase()}`;
       if (!knownIssues.some(k => k.description === pending.issue)) {
@@ -238,6 +278,11 @@ export function transformToReferenceSchema(allEntries, latestEntry, reportIntell
     for (const success of (reportIntelligence.successfulApproaches || [])) {
       if (success.pattern && !seenAccomplishments.has(success.pattern)) {
         const cleanPattern = success.pattern.replace(/[#*`\[\]]/g, '').trim();
+
+        // Filter out generic observations/narratives (not actual accomplishments)
+        const lowerClean = cleanPattern.toLowerCase();
+        if (/^(both|key difference|the main|this is)/i.test(lowerClean)) continue;
+        if (/\b(both paths|key difference|path structure)/i.test(lowerClean)) continue;
 
         if (isLowQualityPattern(cleanPattern)) continue;
         if (isLowQualityAccomplishment(cleanPattern)) continue;
