@@ -258,6 +258,12 @@ export function transformToReferenceSchema(allEntries, latestEntry, reportIntell
       // Filter out very short entries
       if (issueText.length < 20) continue;
 
+      // Filter out parenthetical fragments and session artifacts
+      if (/\(Revisar tudo\)$/.test(issueText)) continue;
+      if (/^\d+\s*\(/.test(issueText)) continue;  // "2 (Revisar tudo)" type
+      if (/^md\)/.test(issueText)) continue;  // "md) or text..." fragments
+      if (/^js:/.test(issueText)) continue;  // "js:756" should have file:line format
+
       // Filter out all-uppercase fragments (likely labels)
       if (issueText === issueText.toUpperCase() && /[A-Z]/.test(issueText)) continue;
 
