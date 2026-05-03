@@ -3,7 +3,7 @@
  */
 
 import { jest, describe, it, expect, beforeEach, afterEach } from '@jest/globals';
-import { extractSessionContent, extractBugs, inferMissingFields, findPatterns, extractPersistentPatterns, normalizePattern, dedupePatterns, filterPinnedFromRecent } from '../src/modules/contentExtractor.js';
+import { extractSessionContent, extractBugs, inferMissingFields, findPatterns, extractPersistentPatterns, normalizePattern, dedupePatterns, filterPinnedFromRecent, isValidBugSymptom } from '../src/modules/contentExtractor.js';
 
 describe('contentExtractor Module', () => {
   describe('extractSessionContent', () => {
@@ -731,6 +731,38 @@ Create user authentication system with JWT
       expect(filterPinnedFromRecent([], [])).toEqual([]);
       expect(filterPinnedFromRecent(null, [])).toEqual([]);
       expect(filterPinnedFromRecent([], null)).toEqual([]);
+    });
+  });
+
+  describe('isValidBugSymptom', () => {
+    it('rejects file:line references', () => {
+      expect(isValidBugSymptom('js:756 - would crash')).toBe(false);
+      expect(isValidBugSymptom('js:467-468 was not deduplicating')).toBe(false);
+      expect(isValidBugSymptom('ts:123')).toBe(false);
+    });
+
+    it('rejects (Revisar tudo) suffix fragments', () => {
+      expect(isValidBugSymptom('content (Revisar tudo)')).toBe(false);
+      expect(isValidBugSymptom('e (Revisar tudo)')).toBe(false);
+      expect(isValidBugSymptom('(review)')).toBe(false);
+    });
+
+    it('rejects numbered fragments', () => {
+      expect(isValidBugSymptom('2 (Revisar tudo)')).toBe(false);
+      expect(isValidBugSymptom('1 some text')).toBe(false);
+      expect(isValidBugSymptom('3 (review)')).toBe(false);
+    });
+
+    it('rejects standalone module names', () => {
+      expect(isValidBugSymptom('md itself')).toBe(false);
+      expect(isValidBugSymptom('contentExtractor')).toBe(false);
+      expect(isValidBugSymptom('linkBuilder')).toBe(false);
+    });
+
+    it('accepts valid bug descriptions', () => {
+      expect(isValidBugSymptom('ISO Week calculation used Math.ceil incorrectly')).toBe(true);
+      expect(isValidBugSymptom('Wiki-link prefix bug: full paths leaked into content')).toBe(true);
+      expect(isValidBugSymptom('Critical Crash: extractSectionFromContent missing in reportGenerator')).toBe(true);
     });
   });
 });

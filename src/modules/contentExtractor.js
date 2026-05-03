@@ -286,8 +286,14 @@ export function extractBugs(sessionContent) {
         bugs.push(finishBug(currentBug, currentBugContent));
       }
       
-      // Start new bug
-      currentBug = { symptom: bugHeaderMatch[1] || '', line: i };
+      // Extract and validate symptom
+      const symptomCandidate = bugHeaderMatch[1] || '';
+      if (!isValidBugSymptom(symptomCandidate)) {
+        continue;  // Skip malformed bug headers
+      }
+      
+      // Start new bug with validated symptom
+      currentBug = { symptom: symptomCandidate, line: i };
       currentBugContent = [];
       inBugSection = true;
       sectionDepth = (trimmedLine.startsWith('###') ? 1 : 0);
@@ -380,6 +386,34 @@ function finishBug(bug, content) {
     solution: extractBugField(content, ['solution', 'fix', 'resolution', 'resolved by', 'workaround']),
     prevention: extractBugField(content, ['prevention', 'prevent', 'avoid', 'next time'])
   };
+}
+
+/**
+ * Validates that a bug symptom is not a malformed fragment or artifact.
+ * @param {string} symptom - Candidate bug symptom text
+ * @returns {boolean} - True if symptom is valid, false if malformed
+ */
+export function isValidBugSymptom(symptom) {
+  if (!symptom || symptom.length < 10) return false;
+  
+  // Reject file:line references (e.g., "js:756", "js:467-468")
+  if (/^[a-z]+:\d/.test(symptom)) return false;
+  
+  // Reject truncated fragments ending with "(Revisar tudo)" or similar
+  if (/\(Revisar tudo\)$/.test(symptom)) return false;
+  if (/\(review\)$/.test(symptom)) return false;
+  
+  // Reject standalone file/module names (session artifacts)
+  if (/^(md|js|ts|contentExtractor|linkBuilder)\b/i.test(symptom)) return false;
+  
+  // Reject pure numbers or number+paren fragments
+  if (/^\d+\s/.test(symptom)) return false;
+  if (/^\d+\(/.test(symptom)) return false;  // "2 (Revisar tudo)"
+  
+  // Reject fragments starting with lowercase letter followed by space
+  if (/^[a-z]\s/.test(symptom)) return false;  // "e (Revisar tudo)"
+  
+  return true;
 }
 
 /**
