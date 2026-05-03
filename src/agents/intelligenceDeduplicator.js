@@ -200,30 +200,53 @@ export function transformToReferenceSchema(allEntries, latestEntry, reportIntell
 
   for (const session of allSessions) {
     const acc = session.accomplished;
-    if (acc && acc.length >= 20 && !seenAccomplishments.has(acc)) {
+    if (acc && acc.length >= 15 && !seenAccomplishments.has(acc)) {
+      // Skip truncated content
       if (acc.endsWith('...')) continue;
-      if (/[a-z]\s*$/i.test(acc)) continue;
+      // Skip incomplete sentences - only if ends with single letter followed by space
+      // (e.g., "Fixing bug i" or "Implementing feature a")
+      // But allow complete words ending in lowercase (e.g., "construtor", "bug", "feature")
+      if (/^[a-z]\s*$/.test(acc.slice(-2))) continue;
 
-      if (containsIssuePattern(acc)) continue;
+      // Strip leading bullets and emojis before checking action verbs
+      // e.g., "- ✅ Implementado..." -> "Implementado..."
+      const strippedAcc = acc.replace(/^[-*]\s*/, '').replace(/^[✅💡🐛🔧📝🔍📦🚪]\s*/u, '').trim();
 
-      // Allow accomplishments starting with action verbs - these are valid outcomes
-      const actionVerbPattern = /^(Added|Fixed|Improved|Implemented|Refactored|Created|Updated)\s+/i;
-      const hasActionVerb = actionVerbPattern.test(acc);
+      // Allow accomplishments that START with action verbs - these are valid outcomes
+      // e.g., "Fixed X bug", "Implemented Y feature", "Refactored Z module"
+      // Support both English and Portuguese action verbs
+      const actionVerbPattern = /^(Added|Fixed|Improved|Implemented|Refactored|Created|Updated|Removed|Resolved|Corrected|Built|Migrated|Implementado|Corrigido|Melhorado|Removido|Atualizado|Criado|Resolvido|Migrado|Construído)\s+/i;
+      const hasActionVerb = actionVerbPattern.test(strippedAcc);
 
-      if (isLowQualityPattern(acc)) continue;
-      if (!hasActionVerb && isLowQualityAccomplishment(acc)) continue;
+      // Only apply issue filter if NOT an action verb (fixing a bug IS an accomplishment!)
+      if (!hasActionVerb && containsIssuePattern(acc)) continue;
+
+      // Only apply low-quality filters if NOT an action verb
+      if (!hasActionVerb) {
+        if (isLowQualityPattern(acc)) continue;
+        if (isLowQualityAccomplishment(acc)) continue;
+      }
 
       const cleanAcc = acc.replace(/[#*`\[\]]/g, '').replace(/\d+\.\d+:/g, '').trim();
-      if (cleanAcc.length < 25) continue;
+      if (cleanAcc.length < 20) continue;
+
+      // Filter out generic observations/narratives (not actual accomplishments)
+      const lowerClean = cleanAcc.toLowerCase();
+      if (/^(both|key difference|the main|this is|ran|trigger)/i.test(lowerClean)) continue;
+      if (/\b(both paths|key difference|path structure|consistent reports)/i.test(lowerClean)) continue;
 
       const normalizedKey = cleanAcc.slice(0, 50).toLowerCase();
       if (seenAccomplishments.has(normalizedKey)) continue;
       seenAccomplishments.add(normalizedKey);
       seenAccomplishments.add(cleanAcc);
 
-      const patternText = session.goal && session.goal.length > 3
-        ? `when ${session.goal.slice(0, 30)}, do ${cleanAcc.slice(0, 80)}`
-        : cleanAcc.slice(0, 120);
+      // For action verbs, use the full accomplishment text
+      // For others, wrap with goal context if available
+      const patternText = hasActionVerb
+        ? cleanAcc.slice(0, 120)
+        : (session.goal && session.goal.length > 3
+          ? `when ${session.goal.slice(0, 30)}, do ${cleanAcc.slice(0, 80)}`
+          : cleanAcc.slice(0, 120));
 
       successfulApproaches.push({
         pattern: patternText,
@@ -234,50 +257,15 @@ export function transformToReferenceSchema(allEntries, latestEntry, reportIntell
     }
   }
 
+  // NOTE: pendingItems from reports are NOT real issues - they are TODOs/work items
+  // Disabled to break the feedback loop where reports generate noise -> intelligence picks it up -> cycle repeats
+  // Real issues come from actual bugs in session code, not from pending work items
+  // if (reportIntelligence) {
+  //   for (const pending of (reportIntelligence.pendingItems || [])) { ... }
+  // }
+
+  // Extract failed and successful approaches from reports (but NOT pendingItems)
   if (reportIntelligence) {
-    for (const pending of (reportIntelligence.pendingItems || [])) {
-      const issueText = pending.issue || '';
-      const sourceText = pending.source || '';
-      // Filter out architectural observations (not actual bugs)
-      // Check both issue text AND source text (parenthetical notes may be in source)
-      const lowerIssue = issueText.toLowerCase();
-      const lowerSource = sourceText.toLowerCase();
-      if (/\b(arquitetura|architecture|inverted|invertida)\b/.test(lowerIssue)) continue;
-      if (/\b(arquitetura|architecture|inverted|invertida)\b/.test(lowerSource)) continue;
-
-      // Filter out already resolved issues (Portuguese/English)
-      if (/\bfoi\s+(corrigido|implementado|adicionado)\b/i.test(issueText)) continue;
-      if (/\bfixed|resolved|implemented|added\b/i.test(issueText) && /issue|bug|problem/i.test(lowerIssue)) continue;
-
-      // Filter out uncertain/unverified bugs
-      if (/^bug encontrado/i.test(issueText)) continue;
-
-      // Filter out architecture description fragments
-      if (/hierarchical flow/i.test(issueText)) continue;
-
-      // Filter out very short entries
-      if (issueText.length < 20) continue;
-
-      // Filter out parenthetical fragments and session artifacts
-      if (/\(Revisar tudo\)$/.test(issueText)) continue;
-      if (/^\d+\s*\(/.test(issueText)) continue;  // "2 (Revisar tudo)" type
-      if (/^md\)/.test(issueText)) continue;  // "md) or text..." fragments
-      if (/^js:/.test(issueText)) continue;  // "js:756" should have file:line format
-
-      // Filter out all-uppercase fragments (likely labels)
-      if (issueText === issueText.toUpperCase() && /[A-Z]/.test(issueText)) continue;
-
-      const id = `ISSUE-${issueText.slice(0, 15).replace(/\s+/g, '-').toUpperCase()}`;
-      if (!knownIssues.some(k => k.description === pending.issue)) {
-        knownIssues.push({
-          id,
-          title: issueText,
-          description: issueText,
-          location: pending.source || ''
-        });
-      }
-    }
-
     for (const failed of (reportIntelligence.failedApproaches || [])) {
       if (failed.antiPattern && !failedApproaches.some(f => f.antiPattern === failed.antiPattern)) {
         failedApproaches.push({
