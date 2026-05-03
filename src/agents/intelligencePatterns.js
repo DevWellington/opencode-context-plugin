@@ -66,7 +66,13 @@ export const LOW_QUALITY_ACCOMPLISHMENT_PATTERNS = [
   /^\s*07\.\d+:/i,
   /^(Su|Success|Successfully)/i,
   /^\.\.\./i,
-  /^\(truncated\)/i
+  /^\(truncated\)/i,
+  // Generic action-based accomplishments (not actual outcomes)
+  /\bran\s+(agent|trigger|test|script)[- ]/i,
+  /\bexecuted\s+/i,
+  /\bcompleted\s+/i,
+  /\bgenerated\s+(the\s+)?(report|summary|output)/i,
+  /^(Both|Key difference|The main|This is)/i
 ];
 
 export function containsIssuePattern(text) {
