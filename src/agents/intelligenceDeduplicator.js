@@ -119,9 +119,11 @@ export function transformToReferenceSchema(allEntries, latestEntry, reportIntell
           // Filter out parenthetical fragments and session artifacts
           const symptom = bug.symptom || '';
           if (/\(Revisar tudo\)$/.test(symptom)) continue;
-          if (/^\d+\s*\(/.test(symptom)) continue;  // "2 (Revisar tudo)" type fragments
-          if (/^md\)/.test(symptom)) continue;  // "md) or text..." fragments
-          if (/^js\)/.test(symptom)) continue;  // "js:756" style entries should have been caught by extractBugs
+          if (/^\d+\(/.test(symptom)) continue;  // FIXED: "2 (Revisar tudo)" without space requirement
+          if (/^md\)/.test(symptom)) continue;
+          if (/^[a-z]+:\d/.test(symptom)) continue;  // NEW: "js:756", "ts:123"
+          if (/^(md|js|ts|contentExtractor|linkBuilder)\b/i.test(symptom)) continue;  // NEW: module names
+          if (/^[a-z]\s/.test(symptom)) continue;  // NEW: "e (Revisar tudo)" single letter + space
 
           const id = `BUG-${(bug.symptom || 'unknown').slice(0, 20).replace(/\s+/g, '-').toUpperCase()}`;
           if (!knownIssues.some(k => k.id === id)) {
