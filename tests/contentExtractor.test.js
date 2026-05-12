@@ -741,6 +741,13 @@ Create user authentication system with JWT
       expect(isValidBugSymptom('ts:123')).toBe(false);
     });
 
+    it('rejects file:line references embedded in text', () => {
+      expect(isValidBugSymptom('extractSectionFromContent missing in reportGenerator.js:756')).toBe(false);
+      expect(isValidBugSymptom('crash in contentExtractor.js:467-468')).toBe(false);
+      expect(isValidBugSymptom('bug at linkBuilder.ts:1234')).toBe(false);
+      expect(isValidBugSymptom('error in summaries.js:89')).toBe(false);
+    });
+
     it('rejects (Revisar tudo) suffix fragments', () => {
       expect(isValidBugSymptom('content (Revisar tudo)')).toBe(false);
       expect(isValidBugSymptom('e (Revisar tudo)')).toBe(false);
@@ -759,10 +766,16 @@ Create user authentication system with JWT
       expect(isValidBugSymptom('linkBuilder')).toBe(false);
     });
 
+    it('rejects md artifacts', () => {
+      expect(isValidBugSymptom('md itself, causing self-inclusion')).toBe(false);
+      expect(isValidBugSymptom('md)')).toBe(false);
+      expect(isValidBugSymptom('md file was corrupted')).toBe(false);
+    });
+
     it('accepts valid bug descriptions', () => {
       expect(isValidBugSymptom('ISO Week calculation used Math.ceil incorrectly')).toBe(true);
       expect(isValidBugSymptom('Wiki-link prefix bug: full paths leaked into content')).toBe(true);
-      expect(isValidBugSymptom('Critical Crash: extractSectionFromContent missing in reportGenerator')).toBe(true);
+      expect(isValidBugSymptom('Critical Crash: extractSectionFromContent missing')).toBe(true);
     });
   });
 });

@@ -396,8 +396,11 @@ function finishBug(bug, content) {
 export function isValidBugSymptom(symptom) {
   if (!symptom || symptom.length < 10) return false;
   
-  // Reject file:line references (e.g., "js:756", "js:467-468")
+  // Reject file:line references anywhere in the string (e.g., "js:756", "js:467-468")
+  // Matches both at start AND embedded like "...in reportGenerator.js:756"
   if (/^[a-z]+:\d/.test(symptom)) return false;
+  if (/\.[a-z]+:\d/.test(symptom)) return false;  // "reportGenerator.js:756"
+  if (/[a-z]+:\d{3,}/.test(symptom)) return false;  // "js:756", "ts:1234" anywhere
   
   // Reject truncated fragments ending with "(Revisar tudo)" or similar
   if (/\(Revisar tudo\)$/.test(symptom)) return false;
@@ -412,6 +415,10 @@ export function isValidBugSymptom(symptom) {
   
   // Reject fragments starting with lowercase letter followed by space
   if (/^[a-z]\s/.test(symptom)) return false;  // "e (Revisar tudo)"
+  
+  // Reject artifacts like "md itself" or "md)" 
+  if (/^md\s/i.test(symptom)) return false;
+  if (/^md\)/i.test(symptom)) return false;
   
   return true;
 }
