@@ -185,15 +185,15 @@
 
 **Plans:** 1/1 plans complete
 
-**Status:** Planning complete
+**Status:** Phase complete
 
 ### Plans
 
-- [ ] 28-intelligence-gen-bugfix-01-PLAN.md — Fix bug symptom validation, accomplishment multiline handling, and fragment filter regex
+- [x] 28-intelligence-gen-bugfix-01-PLAN.md — Fix bug symptom validation, accomplishment multiline handling, and fragment filter regex
 
 ### Requirements
 
-- [ ] [BUGFIX-01] Fix regex to reject file:line references as bug symptoms
-- [ ] [BUGFIX-02] Fix regex to reject numbered fragments and session artifacts
-- [ ] [BUGFIX-03] Replace newlines with spaces before accomplishment truncation
-- [ ] [BUGFIX-04] Escape newlines in pattern output to prevent broken bullets
+- [x] [BUGFIX-01] Fix regex to reject file:line references as bug symptoms (including embedded like "js:756")
+- [x] [BUGFIX-02] Fix regex to reject numbered fragments and session artifacts
+- [x] [BUGFIX-03] Replace newlines with spaces before accomplishment truncation
+- [x] [BUGFIX-04] Escape newlines in pattern output to prevent broken bullets

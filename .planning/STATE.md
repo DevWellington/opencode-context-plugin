@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: Phase complete — ready for verification
-last_updated: "2026-05-03T16:45:35.907Z"
+last_updated: "2026-05-12T00:00:00.000Z"
 progress:
   total_phases: 9
-  completed_phases: 7
+  completed_phases: 8
   total_plans: 22
-  completed_plans: 15
+  completed_plans: 16
 ---
 
 # Project State
@@ -16,10 +16,19 @@ progress:
 ## Current Position
 
 Milestone: v1.1 - In Progress
-Phase: 24 (intelligence-learning-reform) — COMPLETE
+Phase: 28 (intelligence-gen-bugfix) — COMPLETE
 Plan: 1 of 1 (all complete)
 
 ## Completed Work
+
+### Phase 28: Intelligence Generation Bugfix
+
+- Extended isValidBugSymptom to reject file:line references embedded anywhere in text (not just start)
+- Added regex patterns: `/\.[a-z]+:\d/` and `/[a-z]+:\d{3,}/` for embedded file:line
+- Added newline escaping in intelligenceTemplate.js for all output sections
+- Added md artifact rejection in isValidBugSymptom
+- 7 new tests added for file:line embedded and md artifacts
+- All 329 tests passing
 
 ### Phase 24: Intelligence Learning Reform
 
