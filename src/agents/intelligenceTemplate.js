@@ -36,8 +36,10 @@ export function generateReferenceContent(patternData) {
       if (/\b(arquitetura de summaries invertida|arquitetura de|inverted architecture)\b/.test(locLower)) {
         loc = '';
       }
-      const locStr = loc ? ` (${loc})` : '';
-      lines.push(`- ${issue.title || issue.description}${locStr}`);
+      const locStr = loc ? ` (${loc.replace(/\n/g, ' ')})` : '';
+      // Escape newlines to prevent broken bullets
+      const title = (issue.title || issue.description || '').replace(/\n/g, ' ');
+      lines.push(`- ${title}${locStr}`);
     }
   } else {
     lines.push('- No known issues');
@@ -47,8 +49,10 @@ export function generateReferenceContent(patternData) {
   if (patternData.successfulApproaches && patternData.successfulApproaches.length > 0) {
     for (const approach of patternData.successfulApproaches.slice(0, 10)) {
       const freq = approach.frequency ? ` (seen ${approach.frequency} times)` : '';
-      const loc = approach.location ? ` (${approach.location})` : '';
-      lines.push(`- ${approach.pattern}${freq}${loc}`);
+      const loc = approach.location ? ` (${approach.location.replace(/\n/g, ' ')})` : '';
+      // Escape newlines in pattern to prevent broken bullets
+      const pattern = (approach.pattern || '').replace(/\n/g, ' ');
+      lines.push(`- ${pattern}${freq}${loc}`);
     }
   } else {
     lines.push('- No patterns recorded yet');
@@ -57,12 +61,15 @@ export function generateReferenceContent(patternData) {
   lines.push('## Failed Approaches');
   if (patternData.failedApproaches && patternData.failedApproaches.length > 0) {
     for (const approach of patternData.failedApproaches.slice(0, 10)) {
-      const loc = approach.location ? ` (${approach.location})` : '';
-      const hasBecauseInAnti = approach.antiPattern.includes(' because');
+      const loc = approach.location ? ` (${approach.location.replace(/\n/g, ' ')})` : '';
+      // Escape newlines to prevent broken bullets
+      const antiPattern = (approach.antiPattern || '').replace(/\n/g, ' ');
+      const reason = (approach.reason || '').replace(/\n/g, ' ');
+      const hasBecauseInAnti = antiPattern.includes(' because');
       if (approach.reason && !hasBecauseInAnti) {
-        lines.push(`- ANTI-PATTERN: ${approach.antiPattern} because ${approach.reason}${loc}`);
+        lines.push(`- ANTI-PATTERN: ${antiPattern} because ${reason}${loc}`);
       } else {
-        lines.push(`- ANTI-PATTERN: ${approach.antiPattern}${loc}`);
+        lines.push(`- ANTI-PATTERN: ${antiPattern}${loc}`);
       }
     }
   } else {
@@ -100,9 +107,10 @@ export function generateReferenceContent(patternData) {
     // Output grouped patterns with concrete context
     for (const [ctx, group] of patternGroups) {
       const uniqueNames = [...new Set(group.names)].slice(0, 3);
+      // Escape newlines in pattern names to prevent broken bullets
       const nameStr = uniqueNames.length > 1
-        ? uniqueNames.map(n => n.slice(0, 25)).join(', ')
-        : uniqueNames[0] || ctx;
+        ? uniqueNames.map(n => n.replace(/\n/g, ' ').slice(0, 25)).join(', ')
+        : (uniqueNames[0] || ctx).replace(/\n/g, ' ');
       lines.push(`- ${group.type}: ${nameStr} (${group.totalFrequency} sessions)`);
     }
   } else {
