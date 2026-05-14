@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: Phase complete — ready for verification
-last_updated: "2026-05-12T00:00:00.000Z"
+status: Ready to execute
+last_updated: "2026-05-14T17:13:23.401Z"
 progress:
   total_phases: 9
-  completed_phases: 8
+  completed_phases: 7
   total_plans: 22
-  completed_plans: 16
+  completed_plans: 17
 ---
 
 # Project State
@@ -16,10 +16,18 @@ progress:
 ## Current Position
 
 Milestone: v1.1 - In Progress
-Phase: 28 (intelligence-gen-bugfix) — COMPLETE
-Plan: 1 of 1 (all complete)
+Phase: 22 (bugfix-p0p1) — IN PROGRESS
+Plan: 2 of 5 complete
 
 ## Completed Work
+
+### Phase 22: P0/P1 Bug Fix Round - Plan 01
+
+- Fixed wiki-link paths by removing CONTEXT_SESSION_DIR prefix (vault-root-relative paths)
+- Added cleanExtractedText() helper for comprehensive text cleaning
+- Verified truncation marker stripping (implementation already correct)
+- All 329 tests passing
+- Commits: 2ee8ff5, 2ef712c
 
 ### Phase 28: Intelligence Generation Bugfix
 
