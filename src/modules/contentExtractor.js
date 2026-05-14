@@ -159,6 +159,32 @@ export function extractSessionContent(sessionContent) {
 }
 
 /**
+ * Clean extracted text to remove emojis, truncation markers, and headers
+ * @param {string} text - Text to clean
+ * @returns {string} - Cleaned text
+ */
+function cleanExtractedText(text) {
+  if (!text) return '';
+  
+  // Strip *(truncated)* markers (case-insensitive, with optional surrounding whitespace)
+  let cleaned = text.replace(/\*\(truncated\)\*/gi, '');
+  
+  // Strip emoji characters using Unicode ranges
+  cleaned = cleaned.replace(/[\u{1F300}-\u{1F9FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]|[\u{1F000}-\u{1F02F}]|[\u{1F0A0}-\u{1F0FF}]|[\u{1F100}-\u{1F64F}]|[\u{1F680}-\u{1F6FF}]/gu, '');
+  
+  // Strip markdown headers
+  cleaned = cleaned.replace(/^#+\s*/gm, '');
+  
+  // Collapse multiple newlines to single newlines
+  cleaned = cleaned.replace(/\n{2,}/g, '\n');
+  
+  // Trim whitespace
+  cleaned = cleaned.trim();
+  
+  return cleaned;
+}
+
+/**
  * Save parsed section content to result object
  */
 function saveSection(result, section, content) {
@@ -168,13 +194,13 @@ function saveSection(result, section, content) {
   
   switch (section) {
     case 'goal':
-      result.goal = joined;
+      result.goal = cleanExtractedText(joined);
       break;
     case 'accomplished':
-      result.accomplished = joined;
+      result.accomplished = cleanExtractedText(joined);
       break;
     case 'discoveries':
-      result.discoveries = joined;
+      result.discoveries = cleanExtractedText(joined);
       break;
     case 'relevant files':
       result.relevantFiles = parseRelevantFiles(joined);
