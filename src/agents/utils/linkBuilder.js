@@ -209,11 +209,12 @@ export function generateKeywordLinks(options) {
   const currentMonth = month ? String(month).padStart(2, '0') : String(new Date().getMonth() + 1).padStart(2, '0');
 
   // Define target files with correct paths (relative to vault root)
+  // Vault root IS .opencode/context-session/, so wiki-links should NOT include the prefix
   const targets = [
-    { file: `${CONTEXT_SESSION_DIR}/intelligence-learning.md`, label: 'Intelligence' },
-    { file: `${CONTEXT_SESSION_DIR}/daily-summary.md`, label: 'Daily' },
-    { file: `${CONTEXT_SESSION_DIR}/${currentYear}/${currentMonth}/monthly-${currentYear}-${currentMonth}.md`, label: 'Monthly' },
-    { file: `${CONTEXT_SESSION_DIR}/${currentYear}/annual-${currentYear}.md`, label: 'Annual' }
+    { file: 'intelligence-learning.md', label: 'Intelligence' },
+    { file: 'daily-summary.md', label: 'Daily' },
+    { file: `${currentYear}/${currentMonth}/monthly-${currentYear}-${currentMonth}.md`, label: 'Monthly' },
+    { file: `${currentYear}/annual-${currentYear}.md`, label: 'Annual' }
   ];
 
   // Filter out current file
@@ -262,31 +263,32 @@ export function addKeywordNavigation(context) {
 
   // Hierarchical navigation based on current report type
   // All paths are relative to VAULT root for Obsidian compatibility
+  // Vault root IS .opencode/context-session/, so wiki-links should NOT include the prefix
   switch (type) {
     case 'daily':
-      links.push({ text: 'Today', file: `${CONTEXT_SESSION_DIR}/daily-summary.md` });
-      links.push({ text: 'This Week', file: `${CONTEXT_SESSION_DIR}/${y}/${m}/${w}/week-summary.md` });
-      links.push({ text: 'Intelligence', file: `${CONTEXT_SESSION_DIR}/intelligence-learning.md` });
+      links.push({ text: 'Today', file: 'daily-summary.md' });
+      links.push({ text: 'This Week', file: `${y}/${m}/${w}/week-summary.md` });
+      links.push({ text: 'Intelligence', file: 'intelligence-learning.md' });
       break;
     case 'weekly':
-      links.push({ text: 'Daily Summary', file: `${CONTEXT_SESSION_DIR}/daily-summary.md` });
-      links.push({ text: 'This Month', file: `${CONTEXT_SESSION_DIR}/${y}/${m}/monthly-${y}-${m}.md` });
-      links.push({ text: 'Intelligence', file: `${CONTEXT_SESSION_DIR}/intelligence-learning.md` });
+      links.push({ text: 'Daily Summary', file: 'daily-summary.md' });
+      links.push({ text: 'This Month', file: `${y}/${m}/monthly-${y}-${m}.md` });
+      links.push({ text: 'Intelligence', file: 'intelligence-learning.md' });
       break;
     case 'monthly':
-      links.push({ text: 'Weekly Summaries', file: `${CONTEXT_SESSION_DIR}/${y}/${m}/${w}/week-summary.md` });
-      links.push({ text: 'Annual', file: `${CONTEXT_SESSION_DIR}/${y}/annual-${y}.md` });
-      links.push({ text: 'Intelligence', file: `${CONTEXT_SESSION_DIR}/intelligence-learning.md` });
+      links.push({ text: 'Weekly Summaries', file: `${y}/${m}/${w}/week-summary.md` });
+      links.push({ text: 'Annual', file: `${y}/annual-${y}.md` });
+      links.push({ text: 'Intelligence', file: 'intelligence-learning.md' });
       break;
     case 'annual':
-      links.push({ text: 'January', file: `${CONTEXT_SESSION_DIR}/${y}/01/monthly-${y}-01.md` });
-      links.push({ text: 'Intelligence', file: `${CONTEXT_SESSION_DIR}/intelligence-learning.md` });
+      links.push({ text: 'January', file: `${y}/01/monthly-${y}-01.md` });
+      links.push({ text: 'Intelligence', file: 'intelligence-learning.md' });
       break;
     case 'intelligence':
-      links.push({ text: 'Daily', file: `${CONTEXT_SESSION_DIR}/daily-summary.md` });
-      links.push({ text: 'This Week', file: `${CONTEXT_SESSION_DIR}/${y}/${m}/${w}/week-summary.md` });
-      links.push({ text: 'This Month', file: `${CONTEXT_SESSION_DIR}/${y}/${m}/monthly-${y}-${m}.md` });
-      links.push({ text: 'Annual', file: `${CONTEXT_SESSION_DIR}/${y}/annual-${y}.md` });
+      links.push({ text: 'Daily', file: 'daily-summary.md' });
+      links.push({ text: 'This Week', file: `${y}/${m}/${w}/week-summary.md` });
+      links.push({ text: 'This Month', file: `${y}/${m}/monthly-${y}-${m}.md` });
+      links.push({ text: 'Annual', file: `${y}/annual-${y}.md` });
       break;
   }
 
