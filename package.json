@@ -38,6 +38,7 @@
     "test:coverage": "node --experimental-vm-modules node_modules/jest/bin/jest.js --coverage",
     "search": "node src/cli/search.js",
     "validate": "node scripts/validate-reports.js",
+    "regenerate": "node scripts/regenerate-summaries.js",
     "postinstall": "node scripts/install-agents.js && node scripts/install-obsidian-plugin.js"
   },
   "bundledPlugins": {
