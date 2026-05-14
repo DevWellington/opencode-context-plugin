@@ -148,4 +148,45 @@ oi
       expect(result.reason).toContain('No new meaningful sessions');
     });
   });
+
+  describe('cleanOldLinks filtering', () => {
+    it('should filter old reports/ links from existing content', async () => {
+      const agent = await import('../src/agents/generateIntelligenceLearning.js');
+      const { cleanOldLinks } = await import('../src/agents/intelligenceDeduplicator.js');
+      
+      // Test the cleanOldLinks function directly
+      const contentWithOldLinks = `## Related
+- [[reports/daily-summary.md]]
+- [[reports/week-summary.md]]
+- [[.opencode/context-session/reports/monthly-2026-04.md]]
+- [[intelligence-learning.md]]
+`;
+      
+      const cleaned = cleanOldLinks(contentWithOldLinks);
+      
+      // Should remove reports/ links
+      expect(cleaned).not.toContain('reports/');
+      expect(cleaned).not.toContain('[[reports/');
+      expect(cleaned).not.toContain('[[.opencode/context-session/reports/');
+      // Should keep non-reports links
+      expect(cleaned).toContain('[[intelligence-learning.md]]');
+    });
+
+    it('should strip *(truncated)* and [truncated] markers', async () => {
+      const { cleanOldLinks } = await import('../src/agents/intelligenceDeduplicator.js');
+      
+      const contentWithMarkers = `## Goal
+Implement auth *(truncated)*
+## Discoveries
+Found bug [truncated]
+`;
+      
+      const cleaned = cleanOldLinks(contentWithMarkers);
+      
+      expect(cleaned).not.toContain('*(truncated)*');
+      expect(cleaned).not.toContain('[truncated]');
+      expect(cleaned).toContain('Implement auth');
+      expect(cleaned).toContain('Found bug');
+    });
+  });
 });
