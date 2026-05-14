@@ -84,6 +84,59 @@ function cleanOldLinks(content) {
     .trim();
 }
 
+/**
+ * Transform session data into reference schema format for compact intelligence-learning.md
+ *
+ * **Schema Transformation Flow:**
+ *
+ * Input: Session bugs from extractBugs() which returns [{ symptom, cause, solution, prevention }]
+ *
+ * Transformation rules:
+ * 1. Unresolved bug (no solution/fix) → knownIssues with { id, description, location }
+ * 2. Resolved bug (has solution) → failedApproaches with { antiPattern, reason, location }
+ *    - Bug.symptom becomes antiPattern text
+ *    - Bug.cause becomes reason text
+ *    - Bug.line number + relevantFiles → location
+ *
+ * ID generation: BUG-${symptom.slice(0, 20).replace(/\s+/g, '-').toUpperCase()}
+ * Location format: ${session.relevantFiles[0]}:${bug.line || 0}
+ *
+ * Overflow enforcement: Each section capped at 10 items via .slice(0, 10)
+ *
+ * @param {Array} allEntries - Historical session entries
+ * @param {Object} latestEntry - Most recent session entry
+ * @param {Object|null} reportIntelligence - Intelligence extracted from weekly/monthly/annual reports
+ * @param {Object|null} config - Configuration object
+ * @returns {Object} Reference schema: { projectState, knownIssues, successfulApproaches, failedApproaches, recentPatterns }
+ */
+/**
+ * Transform session data into reference schema format for intelligence-learning.md
+ * 
+ * **Schema Transformation Flow:**
+ * 
+ * Input: Session bugs from extractBugs() which returns:
+ * - `[{ symptom, cause, solution, prevention }]` (NOT { id, description, location })
+ * 
+ * Transformation Rules:
+ * - Unresolved bug (no solution/fix) → knownIssues with `{ id, description, location }`
+ * - Resolved bug (has solution) → failedApproaches with `{ antiPattern, reason, location }`
+ *   - Bug.symptom becomes antiPattern text
+ *   - Bug.cause becomes reason text
+ * 
+ * ID Generation:
+ * - Format: `BUG-${symptom.slice(0, 20).replace(/\s+/g, '-').toUpperCase()}`
+ * - Example: "null pointer exception" → "BUG-NULL-POINTER-EXCEP"
+ * 
+ * Location Format:
+ * - Pattern: `${session.relevantFiles[0]}:${bug.line || 0}`
+ * - Example: "src/utils/helper.js:42"
+ * 
+ * @param {Array} allEntries - Array of session entries with bugs, accomplishments, discoveries
+ * @param {Object} latestEntry - Most recent session entry
+ * @param {Object} reportIntelligence - Intelligence extracted from week/monthly/annual reports
+ * @param {Object} config - Configuration object
+ * @returns {Object} Reference schema with { projectState, knownIssues, successfulApproaches, failedApproaches, recentPatterns }
+ */
 export function transformToReferenceSchema(allEntries, latestEntry, reportIntelligence = null, config = null) {
   const timestamp = new Date().toISOString().split('T')[0];
   const allSessions = allEntries.flatMap(e => e.sessions || []);
