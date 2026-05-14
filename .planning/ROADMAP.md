@@ -130,7 +130,7 @@
 
 **Goal:** Fix critical and high-priority bugs in generated markdown files: truncation marker propagation, invalid wiki-link paths, missing frontmatter, month zero-padding, emoji/header leakage, and stale reports/ links.
 
-**Plans:** 3/5 plans executed
+**Plans:** 5/5 plans complete
 
 **Status:** Phase complete
 
