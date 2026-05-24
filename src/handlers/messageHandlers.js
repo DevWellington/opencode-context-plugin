@@ -2,6 +2,7 @@ import { createDebugLogger } from '../utils/debug.js';
 import { getLastSession, setLastSession } from './sessionHandlers.js';
 
 const logger = createDebugLogger('context-plugin');
+const MAX_CONTENT_SIZE = 100000;
 
 export function handleMessageUpdatedOrCreated(event) {
   const msgInfo = event?.properties?.info;
@@ -31,6 +32,10 @@ export function handleMessagePartDelta(event) {
     const msg = session.messages.find(m => m.id === msgId);
     if (msg) {
       msg.content = (msg.content || '') + delta;
+      if (msg.content.length > MAX_CONTENT_SIZE) {
+        msg.content = msg.content.slice(0, MAX_CONTENT_SIZE);
+        logger(`[context-plugin] Message ${msg.id} content truncated at ${MAX_CONTENT_SIZE} chars`);
+      }
     }
   }
 }

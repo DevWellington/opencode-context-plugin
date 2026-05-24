@@ -353,3 +353,68 @@ describe('Event Handler Integration Tests', () => {
     });
   });
 });
+
+// Separate describe block for handleMessagePartDelta cap tests
+// These test the function directly rather than through the plugin
+describe('handleMessagePartDelta cap', () => {
+  let tempDir;
+
+  beforeEach(async () => {
+    jest.clearAllMocks();
+    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'delta-cap-test-'));
+  });
+
+  afterEach(async () => {
+    try {
+      await fs.rm(tempDir, { recursive: true });
+    } catch {}
+  });
+
+  it('should accumulate deltas normally when under 100KB cap', async () => {
+    const { setLastSession, getLastSession } = await import('../src/handlers/sessionHandlers.js');
+    const { handleMessagePartDelta } = await import('../src/handlers/messageHandlers.js');
+
+    setLastSession({ messages: [{ id: 'msg-1', content: '' }] });
+    handleMessagePartDelta({
+      properties: { messageID: 'msg-1', delta: 'Hello world' }
+    });
+
+    const session = getLastSession();
+    expect(session.messages[0].content).toBe('Hello world');
+  });
+
+  it('should truncate content at 100KB and log warning', async () => {
+    const { setLastSession, getLastSession } = await import('../src/handlers/sessionHandlers.js');
+    const { handleMessagePartDelta } = await import('../src/handlers/messageHandlers.js');
+
+    setLastSession({ messages: [{ id: 'msg-2', content: '' }] });
+
+    // Accumulate past 100KB with many deltas
+    const bigDelta = 'x'.repeat(5000);
+    for (let i = 0; i < 25; i++) {
+      handleMessagePartDelta({
+        properties: { messageID: 'msg-2', delta: bigDelta }
+      });
+    }
+
+    const session = getLastSession();
+    // After 25 * 5000 = 125000 chars, it should be capped at 100000
+    expect(session.messages[0].content.length).toBe(100000);
+  });
+
+  it('should not affect messages under limit', async () => {
+    const { setLastSession, getLastSession } = await import('../src/handlers/sessionHandlers.js');
+    const { handleMessagePartDelta } = await import('../src/handlers/messageHandlers.js');
+
+    // Start with 50000 chars
+    setLastSession({ messages: [{ id: 'msg-3', content: 'a'.repeat(50000) }] });
+
+    handleMessagePartDelta({
+      properties: { messageID: 'msg-3', delta: 'b'.repeat(1000) }
+    });
+
+    const session = getLastSession();
+    // 50000 + 1000 = 51000, well under 100000, so no truncation
+    expect(session.messages[0].content.length).toBe(51000);
+  });
+});
