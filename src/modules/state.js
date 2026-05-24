@@ -58,18 +58,33 @@ export async function loadState(baseDir) {
  */
 export async function saveState(baseDir, state, expectedVersion = null) {
   const statePath = path.join(baseDir, STATE_FILE);
-  
-  // If expectedVersion provided, validate no race condition
-  if (expectedVersion !== null && state.version !== expectedVersion) {
-    logger(`[state] Version mismatch: expected ${expectedVersion}, got ${state.version} - retrying`);
-    // Retry with fresh load
-    const fresh = await loadState(baseDir);
-    return saveState(baseDir, fresh, fresh.version);
+
+  let stateExists = true;
+  let diskState = null;
+  try {
+    const content = await fs.readFile(statePath, 'utf-8');
+    diskState = JSON.parse(content);
+  } catch (error) {
+    if (error?.code === 'ENOENT') {
+      stateExists = false;
+      diskState = null;
+    } else {
+      throw error;
+    }
   }
-  
-  state.version = (state.version || 0) + 1;
+
+  const diskVersion = diskState?.version ?? 0;
+  const expected = expectedVersion ?? state.version ?? diskVersion;
+
+  if (stateExists && expectedVersion !== null && diskVersion !== expectedVersion) {
+    throw new Error(`State conflict: expected version ${expectedVersion}, found ${diskVersion}`);
+  }
+
+  state.version = diskVersion + 1;
   state.lastUpdated = new Date().toISOString();
-  
+
+  await fs.mkdir(path.dirname(statePath), { recursive: true });
+
   await atomicWrite(statePath, JSON.stringify(state, null, 2));
   logger(`[state] Saved state to ${statePath} (version ${state.version})`);
 }
@@ -97,7 +112,11 @@ export async function setLastSummarized(baseDir, key, info) {
     ...info,
     timestamp: Date.now()
   };
-  await saveState(baseDir, state, state.version);
+  try {
+    await saveState(baseDir, state, state.version);
+  } catch (error) {
+    logger(`[state] Failed to save lastSummarized for "${key}": ${error.message}`);
+  }
 }
 
 /**
@@ -123,7 +142,11 @@ export async function addToPendingQueue(baseDir, item) {
       ...item,
       addedAt: Date.now()
     });
-    await saveState(baseDir, state, state.version);
+    try {
+      await saveState(baseDir, state, state.version);
+    } catch (error) {
+      logger(`[state] Failed to save pending queue for "${item.key}": ${error.message}`);
+    }
   }
 }
 
@@ -139,7 +162,11 @@ export async function clearPendingQueue(baseDir, type = null) {
   } else {
     state.pending = [];
   }
-  await saveState(baseDir, state, state.version);
+  try {
+    await saveState(baseDir, state, state.version);
+  } catch (error) {
+    logger(`[state] Failed to clear pending queue: ${error.message}`);
+  }
 }
 
 /**
@@ -160,7 +187,11 @@ export async function markSummaryComplete(baseDir, key, info) {
     timestamp: Date.now()
   };
   
-  await saveState(baseDir, state, state.version);
+  try {
+    await saveState(baseDir, state, state.version);
+  } catch (error) {
+    logger(`[state] Failed to mark summary "${key}" complete: ${error.message}`);
+  }
 }
 
 /**
