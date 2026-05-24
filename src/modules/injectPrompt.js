@@ -26,7 +26,8 @@ export async function listAvailableContexts(currentSession, options = {}) {
   try {
     const scoredContexts = await getRelevantContexts(currentSession, {
       maxContexts,
-      maxTokens
+      maxTokens,
+      baseDir: options.baseDir
     });
     
     const contexts = scoredContexts.map(item => ({
@@ -77,11 +78,12 @@ export function formatContextPreview(contexts) {
  * @param {Array|null} selectedIndices - Array of indices to inject (0-based), or null for top 5
  * @returns {string} Formatted injection text
  */
-export async function interactiveInject(currentSession, selectedIndices = null) {
+export async function interactiveInject(currentSession, selectedIndices = null, baseDir = process.cwd()) {
   try {
     const scoredContexts = await getRelevantContexts(currentSession, {
       maxContexts: 10,
-      maxTokens: 16000
+      maxTokens: 16000,
+      baseDir
     });
     
     let selectedContexts;

@@ -155,7 +155,7 @@ priority: "${priority}"
     // Invalidate context cache on new save
     if (getConfig().injection?.cache?.enabled) {
       const { invalidateCache } = await import('./contextCache.js');
-      await invalidateCache();
+      await invalidateCache(directory);
     }
     
     // Update day summary in hierarchical folder (not debounced, fast operation)

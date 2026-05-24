@@ -7,12 +7,15 @@ import { estimateTokens, truncateToTokenLimit, distributeTokenBudget } from './t
 import { createDebugLogger } from '../utils/debug.js';
 
 const logger = createDebugLogger('context-injector');
-const CONTEXT_SESSION_DIR = '.opencode/context-session';
+
+function getContextDir(baseDir) {
+  return path.join(baseDir, '.opencode/context-session');
+}
 
 /**
  * Get all context files from context-session directory
  */
-async function getAllContextFiles() {
+async function getAllContextFiles(baseDir) {
   const contexts = [];
   
   async function scanDir(dir) {
@@ -31,7 +34,7 @@ async function getAllContextFiles() {
     }
   }
   
-  await scanDir(CONTEXT_SESSION_DIR);
+  await scanDir(getContextDir(baseDir));
   return contexts.sort().reverse(); // Most recent first
 }
 
@@ -61,14 +64,15 @@ export async function getRelevantContexts(currentSession, options = {}) {
   const config = getConfig();
   const maxContexts = options.maxContexts || config.injection?.maxContexts || 5;
   const maxTokens = options.maxTokens || config.injection?.maxTokens || 8000;
+  const baseDir = options.baseDir || process.cwd();
   
   // Check cache first
   if (config.injection?.cache?.enabled) {
-    const cached = await getCachedContexts();
+    const cached = await getCachedContexts(baseDir);
     const validCached = [];
     
     for (const entry of cached) {
-      if (await isCacheValid(entry.contextId)) {
+      if (await isCacheValid(entry.contextId, baseDir)) {
         validCached.push(entry);
       }
     }
@@ -84,7 +88,7 @@ export async function getRelevantContexts(currentSession, options = {}) {
   }
   
   // Load and score all contexts
-  const contextPaths = await getAllContextFiles();
+  const contextPaths = await getAllContextFiles(baseDir);
   const contexts = await Promise.all(contextPaths.map(loadContext));
   
   // Score each context
@@ -117,7 +121,7 @@ export async function getRelevantContexts(currentSession, options = {}) {
       cachedAt: new Date().toISOString(),
       content: r.content
     }));
-    await saveToCache(cacheEntries);
+    await saveToCache(cacheEntries, baseDir);
   }
   
   return result;
@@ -138,8 +142,8 @@ export async function selectContextsInteractively(contexts) {
  * Inject contexts into current session prompt
  * Called when user triggers manual injection
  */
-export async function injectContextPrompt(currentSession) {
-  const scoredContexts = await getRelevantContexts(currentSession);
+export async function injectContextPrompt(currentSession, baseDir = process.cwd()) {
+  const scoredContexts = await getRelevantContexts(currentSession, { baseDir });
   const selectedIds = await selectContextsInteractively(scoredContexts);
 
   const selectedContexts = scoredContexts.filter(

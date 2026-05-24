@@ -5,8 +5,11 @@ import { atomicWrite, getTimestamp } from '../utils/fileUtils.js';
 import { createDebugLogger } from '../utils/debug.js';
 
 const logger = createDebugLogger('context-cache');
-const CACHE_DIR = '.opencode/context-session/cache';
 const INDEX_FILE = 'index.json';
+
+function getCacheDir(baseDir) {
+  return path.join(baseDir, '.opencode/context-session/cache');
+}
 
 /**
  * Cache entry structure
@@ -21,8 +24,8 @@ const INDEX_FILE = 'index.json';
 /**
  * Get all cached contexts
  */
-export async function getCachedContexts() {
-  const indexPath = path.join(CACHE_DIR, INDEX_FILE);
+export async function getCachedContexts(baseDir) {
+  const indexPath = path.join(getCacheDir(baseDir), INDEX_FILE);
   try {
     const content = await fs.readFile(indexPath, 'utf-8');
     const index = JSON.parse(content);
@@ -35,19 +38,19 @@ export async function getCachedContexts() {
 /**
  * Get a specific context from cache
  */
-export async function getCachedContext(contextId) {
-  const contexts = await getCachedContexts();
+export async function getCachedContext(contextId, baseDir) {
+  const contexts = await getCachedContexts(baseDir);
   return contexts.find(c => c.contextId === contextId);
 }
 
 /**
  * Check if cache is valid (not stale)
  */
-export async function isCacheValid(contextId) {
+export async function isCacheValid(contextId, baseDir) {
   const config = getConfig();
   const ttlHours = config.injection?.cache?.ttlHours || 24;
   
-  const entry = await getCachedContext(contextId);
+  const entry = await getCachedContext(contextId, baseDir);
   if (!entry) return false;
   
   const cachedAt = new Date(entry.cachedAt);
@@ -60,12 +63,12 @@ export async function isCacheValid(contextId) {
 /**
  * Save contexts to cache
  */
-export async function saveToCache(contexts) {
+export async function saveToCache(contexts, baseDir) {
   const index = { contexts, updatedAt: new Date().toISOString() };
-  const indexPath = path.join(CACHE_DIR, INDEX_FILE);
+  const indexPath = path.join(getCacheDir(baseDir), INDEX_FILE);
   
   // Ensure cache directory exists
-  await fs.mkdir(CACHE_DIR, { recursive: true });
+  await fs.mkdir(getCacheDir(baseDir), { recursive: true });
   
   await atomicWrite(indexPath, JSON.stringify(index, null, 2));
   logger(`[context-cache] Saved ${contexts.length} contexts to cache`);
@@ -74,8 +77,8 @@ export async function saveToCache(contexts) {
 /**
  * Invalidate entire cache (called when new context is saved)
  */
-export async function invalidateCache() {
-  const indexPath = path.join(CACHE_DIR, INDEX_FILE);
+export async function invalidateCache(baseDir) {
+  const indexPath = path.join(getCacheDir(baseDir), INDEX_FILE);
   try {
     await fs.unlink(indexPath);
     logger('[context-cache] Cache invalidated');
@@ -87,8 +90,8 @@ export async function invalidateCache() {
 /**
  * Get cache statistics
  */
-export async function getCacheStats() {
-  const contexts = await getCachedContexts();
+export async function getCacheStats(baseDir) {
+  const contexts = await getCachedContexts(baseDir);
   const totalTokens = contexts.reduce((sum, c) => sum + (c.tokens || 0), 0);
   return {
     count: contexts.length,

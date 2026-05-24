@@ -48,24 +48,57 @@ async function loadPreviousContexts(directory, limit = 5) {
     } catch {
       return [];
     }
-    
-    const files = await fs.readdir(ctxDir);
-    const mdFiles = files
-      .filter(f => f.endsWith('.md'))
-      .sort()
-      .reverse()
+
+    const skipNames = new Set([
+      'daily-summary.md',
+      'day-summary.md',
+      'week-summary.md',
+      'monthly-summary.md',
+      'annual-summary.md',
+      'intelligence-learning.md'
+    ]);
+
+    const contexts = [];
+
+    async function scan(dir) {
+      const entries = await fs.readdir(dir, { withFileTypes: true });
+
+      for (const entry of entries) {
+        const fullPath = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+          if (entry.name === 'cache' || entry.name === 'reports') continue;
+          await scan(fullPath);
+          continue;
+        }
+
+        if (!entry.name.endsWith('.md')) continue;
+        if (skipNames.has(entry.name)) continue;
+        if (!/^(exit|compact)-/.test(entry.name)) continue;
+
+        const stat = await fs.stat(fullPath);
+        contexts.push({
+          file: path.relative(ctxDir, fullPath),
+          filepath: fullPath,
+          mtimeMs: stat.mtimeMs
+        });
+      }
+    }
+
+    await scan(ctxDir);
+
+    const recentContexts = contexts
+      .sort((a, b) => b.mtimeMs - a.mtimeMs)
       .slice(0, limit);
-    
-    const contexts = await Promise.all(
-      mdFiles.map(async (file) => {
-        const filepath = path.join(ctxDir, file);
-        const content = await fs.readFile(filepath, 'utf-8');
-        return { file, content };
+
+    const loaded = await Promise.all(
+      recentContexts.map(async (ctx) => {
+        const content = await fs.readFile(ctx.filepath, 'utf-8');
+        return { file: ctx.file, content };
       })
     );
-    
-    logger(`[context-plugin] Loaded ${contexts.length} previous contexts`);
-    return contexts;
+
+    logger(`[context-plugin] Loaded ${loaded.length} previous contexts`);
+    return loaded;
   } catch (error) {
     logger(`[context-plugin] Error loading contexts: ${error.message}`);
     return [];
@@ -160,7 +193,8 @@ export async function autoInjectContexts(session) {
   try {
     const scoredContexts = await getRelevantContexts(session, {
       maxContexts: config.injection.maxContexts,
-      maxTokens: config.injection.maxTokens
+      maxTokens: config.injection.maxTokens,
+      baseDir: session.directory
     });
 
     if (scoredContexts.length === 0) {
@@ -335,7 +369,8 @@ class ContextPlugin {
 
       const contexts = await listAvailableContexts({ messages }, {
         maxContexts: 50,
-        maxTokens: 32000
+        maxTokens: 32000,
+        baseDir: this.directory
       });
 
       if (contexts.length > 0) {
@@ -351,13 +386,13 @@ class ContextPlugin {
             '- `/inject help` - Show this help message\n';
         } else if (isAllFlag) {
           const indices = contexts.map((_, i) => i);
-          const injection = await interactiveInject({ messages }, indices);
+          const injection = await interactiveInject({ messages }, indices, this.directory);
           lastMsg.content += '\n\n' + injection;
           logger(`[context-plugin] Injected all ${contexts.length} contexts`);
         } else if (injectMatch?.[1]) {
           const idx = parseInt(injectMatch[1]) - 1;
           if (idx >= 0 && idx < contexts.length) {
-            const injection = await interactiveInject({ messages }, [idx]);
+            const injection = await interactiveInject({ messages }, [idx], this.directory);
             lastMsg.content += '\n\n' + injection;
             logger(`[context-plugin] Injected context #${injectMatch[1]}`);
           } else {
@@ -387,7 +422,7 @@ class ContextPlugin {
         const firstMsg = messages[0];
 
         if (firstMsg.content) {
-          const ctxNames = contexts.map(c => c.file.replace(/-[0-9]{4}-[0-9]{2}-[0-9]{2}T.*/, '')).join(', ');
+          const ctxNames = contexts.map(c => path.basename(c.file).replace(/-[0-9]{4}-[0-9]{2}-[0-9]{2}T.*/, '')).join(', ');
           const notification = `\n\n> 📌 **Context Plugin**: Injected ${contexts.length} prior session contexts: ${ctxNames}\n`;
           firstMsg.content = notification + firstMsg.content + injection;
           setHasInjectedContext(true);

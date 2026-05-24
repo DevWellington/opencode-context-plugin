@@ -28,7 +28,8 @@ async function main() {
 
   const scoredContexts = await getRelevantContexts(currentSession, {
     maxContexts,
-    maxTokens
+    maxTokens,
+    baseDir: directory
   });
 
   if (scoredContexts.length === 0) {
