@@ -112,8 +112,8 @@ async function scanDirectory(dir) {
       const fullPath = path.join(dir, entry.name);
 
       if (entry.isDirectory()) {
-        // Skip .index directory
-        if (entry.name === '.index') continue;
+        // Skip .index, cache, and reports directories
+        if (entry.name === '.index' || entry.name === 'cache' || entry.name === 'reports') continue;
         const subResults = await scanDirectory(fullPath);
         results.push(...subResults);
       } else if (entry.name.startsWith('exit-') || entry.name.startsWith('compact-')) {
