@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: Phase complete — ready for verification
-last_updated: "2026-05-14T17:55:10.061Z"
+last_updated: "2026-05-24T18:56:00.000Z"
 progress:
-  total_phases: 9
-  completed_phases: 9
-  total_plans: 22
-  completed_plans: 23
+  total_phases: 12
+  completed_phases: 10
+  total_plans: 28
+  completed_plans: 29
 ---
 
 # Project State
@@ -16,8 +16,8 @@ progress:
 ## Current Position
 
 Milestone: v1.1 - In Progress
-Phase: 22 (bugfix-p0p1) — IN PROGRESS
-Plan: 5 of 5 complete
+Phase: 28.1 (code-review-critical-bug-fixes) — COMPLETE
+Plans: 3 of 3 complete
 
 ## Completed Work
 
@@ -28,6 +28,14 @@ Plan: 5 of 5 complete
 - Verified truncation marker stripping (implementation already correct)
 - All 329 tests passing
 - Commits: 2ee8ff5, 2ef712c
+
+### Phase 28.1: Code Review - Critical Bug Fixes
+
+- **Plan 01:** Added null guard after `extractSessionSummary` in saveContext — prevents TypeError crash on null/undefined session
+- **Plan 02:** Replaced hardcoded CWD-relative `.opencode/context-session` paths with `baseDir`-parameterized resolution across contextCache.js, contextInjector.js, and all callers
+- **Plan 03:** Wrapped all 4 `saveState()` calls in state.js (setLastSummarized, addToPendingQueue, clearPendingQueue, markSummaryComplete) with try/catch — prevents StateConflict errors from crashing the plugin
+- All 333 tests passing (no regressions)
+- Commits: 8717490, 6345af7, e1eceb7
 
 ### Phase 28: Intelligence Generation Bugfix
 
@@ -132,10 +140,14 @@ None.
 - Phase 19 completed
 - Phase 20 completed
 - Phase 21 completed
+- Phase 28.1 completed
 - intelligence-learning.md regenerated
 
 ## Recent Commits
 
+- e1eceb7: fix(28.1-03): wrap saveState calls in try/catch to prevent crash on state conflict
+- 6345af7: fix(28.1-02): make CACHE_DIR and CONTEXT_SESSION_DIR resolve relative to project baseDir
+- 8717490: fix(28.1-01): add null guard after extractSessionSummary call in saveContext
 - c0afa13: test(24-01): update existing test to check for new reference format
 - fb89334: test(24-01): add comprehensive tests for new reference format
 - a0c6364: feat(24-01): add generateReferenceContent function for compact intelligence format
