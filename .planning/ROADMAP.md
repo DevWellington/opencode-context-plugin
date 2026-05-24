@@ -202,16 +202,17 @@
 
 **Goal:** Fix critical bugs found in code review: null pointer in saveContext, absolute path in contextCache, and missing error handling in state.js callers.
 **Requirements**: 
-- [ ] [CRIT-01] saveContext guards against null summary before accessing messageCount
-- [ ] [CRIT-02] contextCache CACHE_DIR is relative to project directory, not CWD
-- [ ] [CRIT-03] All 4 callers of saveState catch errors properly
+- [x] [CRIT-01] saveContext guards against null summary before accessing messageCount
+- [x] [CRIT-02] contextCache CACHE_DIR is relative to project directory, not CWD
+- [x] [CRIT-03] All 4 callers of saveState catch errors properly
 **Depends on:** Phase 28
 **Plans:** 3 plans
+**Status:** Phase complete
 
 Plans:
-- [ ] 28.1-bug-fix-round-2-code-review-issues-fase-1-critical-01-PLAN.md — Fix null pointer crash in saveContext when extractSessionSummary returns null
-- [ ] 28.1-bug-fix-round-2-code-review-issues-fase-1-critical-02-PLAN.md — Fix CACHE_DIR/CONTEXT_SESSION_DIR to resolve relative to project baseDir
-- [ ] 28.1-bug-fix-round-2-code-review-issues-fase-1-critical-03-PLAN.md — Wrap all 4 saveState calls in setLastSummarized/addToPendingQueue/clearPendingQueue/markSummaryComplete with try/catch
+- [x] 28.1-bug-fix-round-2-code-review-issues-fase-1-critical-01-PLAN.md — Fix null pointer crash in saveContext when extractSessionSummary returns null
+- [x] 28.1-bug-fix-round-2-code-review-issues-fase-1-critical-02-PLAN.md — Fix CACHE_DIR/CONTEXT_SESSION_DIR to resolve relative to project baseDir
+- [x] 28.1-bug-fix-round-2-code-review-issues-fase-1-critical-03-PLAN.md — Wrap all 4 saveState calls in setLastSummarized/addToPendingQueue/clearPendingQueue/markSummaryComplete with try/catch
 
 ### Phase 28.2: Code Review - Medium Bug Fixes (INSERTED)
 
@@ -223,6 +224,7 @@ Plans:
 - [x] [MED-04] handleMessagePartDelta caps content growth
 **Depends on:** Phase 28.1
 **Plans:** 4/4 plans complete
+**Status:** Phase complete
 
 Plans:
 - [x] 28.2-01-PLAN.md — Fix chat log detection in saveContext (## → ## Goal)
@@ -234,13 +236,14 @@ Plans:
 
 **Goal:** Fix code quality issues: centralized CONTEXT_SESSION_DIR constant, remove dead code, factor contentExtractor.js.
 **Requirements**: 
-- [ ] [MAINT-01] CONTEXT_SESSION_DIR imported from config.js, not redefined
-- [ ] [MAINT-02] Remove dead getSyncStatus parameter in sessionHandlers.js
-- [ ] [MAINT-03] Factor contentExtractor.js (~1300 lines) into smaller modules
+- [x] [MAINT-01] CONTEXT_SESSION_DIR imported from config.js, not redefined
+- [x] [MAINT-02] Remove dead getSyncStatus parameter in sessionHandlers.js
+- [x] [MAINT-03] Factor contentExtractor.js (~1300 lines) into smaller modules
 **Depends on:** Phase 28.2
 **Plans:** 3 plans
+**Status:** Phase complete
 
 Plans:
-- [ ] 28.3-01-PLAN.md — Centralize CONTEXT_SESSION_DIR constant (6 files import from config.js)
-- [ ] 28.3-02-PLAN.md — Remove dead getSyncStatus parameter from handleSessionEnd
-- [ ] 28.3-03-PLAN.md — Decompose contentExtractor.js into 4 sub-modules
+- [x] 28.3-01-PLAN.md — Centralize CONTEXT_SESSION_DIR constant (6 files import from config.js)
+- [x] 28.3-02-PLAN.md — Remove dead getSyncStatus parameter from handleSessionEnd
+- [x] 28.3-03-PLAN.md — Decompose contentExtractor.js into 4 sub-modules

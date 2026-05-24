@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: Phase complete — ready for verification
-last_updated: "2026-05-24T19:12:00.000Z"
+last_updated: "2026-05-24T19:41:00.000Z"
 progress:
   total_phases: 12
   completed_phases: 11
   total_plans: 33
-  completed_plans: 34
+  completed_plans: 37
 ---
 
 # Project State
@@ -16,8 +16,8 @@ progress:
 ## Current Position
 
 Milestone: v1.1 - In Progress
-Phase: 28.2 (code-review-medium-bug-fixes) — COMPLETE
-Plans: 4 of 4 complete
+Phase: 28.3 (code-review-maintainability-fixes) — COMPLETE
+Plans: 3 of 3 complete
 
 ## Completed Work
 
@@ -28,6 +28,14 @@ Plans: 4 of 4 complete
 - Verified truncation marker stripping (implementation already correct)
 - All 329 tests passing
 - Commits: 2ee8ff5, 2ef712c
+
+### Phase 28.3: Code Review - Maintainability Fixes
+
+- **Plan 01:** Centralized CONTEXT_SESSION_DIR — removed 6 duplicate local definitions, all files now import from src/config.js
+- **Plan 02:** Removed dead `getSyncStatus` parameter from `handleSessionEnd` signature
+- **Plan 03:** Decomposed 1303-line contentExtractor.js into 4 focused sub-modules (sectionExtractor, bugExtractor, patternDetector, llmEnricher) with barrel re-export
+- All 345 tests passing (no regressions, no test file changes)
+- Commits: 5b12119, b451b47, e3c7f15, a56c92d, 450fd60, 70ff64a
 
 ### Phase 28.2: Code Review - Medium Bug Fixes
 
@@ -152,8 +160,21 @@ None.
 - Phase 28.1 completed
 - intelligence-learning.md regenerated
 
+### Phase 28.1-28.3: Code Review Bug Fix Round
+
+- **Phase 28.1:** 3 critical bugs fixed (null guard, cache path, state error handling) — 333 tests
+- **Phase 28.2:** 4 medium bugs fixed (chatlog, cache budget, searchIndexer, deltas) — +12 tests, 345 total
+- **Phase 28.3:** 3 maintainability fixes (const centralization, dead code, contentExtractor decomposition)
+- 10 commits across all 3 phases
+
 ## Recent Commits
 
+- 70ff64a: feat(28.3-03): rewrite contentExtractor.js as barrel re-export
+- 450fd60: feat(28.3-03): create patternDetector.js and llmEnricher.js sub-modules
+- a56c92d: feat(28.3-03): create sectionExtractor.js and bugExtractor.js sub-modules
+- e3c7f15: fix(28.3-02): remove dead getSyncStatus parameter from handleSessionEnd
+- b451b47: feat(28.3-01): centralize CONTEXT_SESSION_DIR in linkBuilder and fileUtils
+- 5b12119: feat(28.3-01): centralize CONTEXT_SESSION_DIR in saveContext, searchIndexer, intelligence, contextValidator
 - 8303510: fix(28.2-04): cap delta accumulation at 100KB in handleMessagePartDelta
 - 97f62ec: fix(28.2-03): extend searchIndexer.scanDirectory to skip cache/ and reports/ dirs
 - 1241244: fix(28.2-02): apply distributeTokenBudget to cached contexts (was bypassing maxTokens)
