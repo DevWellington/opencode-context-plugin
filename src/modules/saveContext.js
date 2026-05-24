@@ -100,6 +100,10 @@ export async function saveContext(directory, session, type = 'compact', opencode
     const filepath = path.join(dirPath, filename);
     
     const summary = extractSessionSummary(session);
+    if (!summary) {
+      logger(`[saveContext] Cannot save context: invalid session (null/undefined)`);
+      return null;
+    }
     const now = new Date().toISOString();
 
     // Classify session priority based on content
