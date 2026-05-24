@@ -2,12 +2,10 @@ import fs from "fs/promises";
 import path from "path";
 import { createDebugLogger } from '../utils/debug.js';
 import { atomicWrite } from '../utils/fileUtils.js';
-import { getConfig } from '../config.js';
+import { getConfig, CONTEXT_SESSION_DIR } from '../config.js';
 import { extractPersistentPatterns, extractSessionContent, extractBugs, findPatterns } from './contentExtractor.js';
 
 const logger = createDebugLogger('intelligence');
-
-const CONTEXT_SESSION_DIR = '.opencode/context-session';
 
 /**
  * Check if session is high priority and should be preserved

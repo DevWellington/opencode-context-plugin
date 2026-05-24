@@ -7,8 +7,7 @@
 import fs from 'fs/promises';
 import path from 'path';
 import matter from 'gray-matter';
-
-const CONTEXT_SESSION_DIR = '.opencode/context-session';
+import { CONTEXT_SESSION_DIR } from '../config.js';
 const INDEX_DIR = '.opencode/context-session/.index';
 
 /**

@@ -2,9 +2,9 @@ import fs from 'fs/promises';
 import path from 'path';
 import { createDebugLogger } from '../utils/debug.js';
 import { extractSessionContent } from './contentExtractor.js';
+import { CONTEXT_SESSION_DIR } from '../config.js';
 
 const logger = createDebugLogger('context-validator');
-const CONTEXT_SESSION_DIR = '.opencode/context-session';
 
 /**
  * Validation result object

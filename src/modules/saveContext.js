@@ -1,7 +1,7 @@
 import fs from "fs/promises";
 import path from "path";
 import { getWeek } from "date-fns";
-import { getConfig } from '../config.js';
+import { getConfig, CONTEXT_SESSION_DIR } from '../config.js';
 import { createDebugLogger } from '../utils/debug.js';
 import { updateDaySummary } from './summaries.js';
 import { classifySessionPriority } from './contentExtractor.js';
@@ -17,9 +17,6 @@ import { validateAfterSave } from './contextValidator.js';
 const logger = createDebugLogger('context-plugin');
 
 export { createDebugLogger };
-
-// Constants
-const CONTEXT_SESSION_DIR = '.opencode/context-session';
 
 /**
  * Atomic write using temp file + rename pattern for crash safety

@@ -12,7 +12,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // Mock dependencies
 jest.unstable_mockModule('../src/config.js', () => ({
-  getConfig: jest.fn(() => ({ debug: false, debounceMs: 500 }))
+  getConfig: jest.fn(() => ({ debug: false, debounceMs: 500 })),
+  CONTEXT_SESSION_DIR: '.opencode/context-session'
 }));
 
 jest.unstable_mockModule('../src/utils/debug.js', () => ({
