@@ -73,6 +73,26 @@ export const defaultConfig = {
 // Internal config storage
 let currentConfig = { ...defaultConfig };
 
+function isPlainObject(value) {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function deepMerge(base, override) {
+  if (!isPlainObject(base) || !isPlainObject(override)) {
+    return override === undefined ? base : override;
+  }
+
+  const result = { ...base };
+
+  for (const [key, value] of Object.entries(override)) {
+    result[key] = isPlainObject(base[key]) && isPlainObject(value)
+      ? deepMerge(base[key], value)
+      : value;
+  }
+
+  return result;
+}
+
 /**
  * Load configuration from context-plugin.json in the project directory
  * NOT from opencode.json (which is reserved for OpenCode's own config)
@@ -94,10 +114,7 @@ export async function loadConfig(directory) {
     }
 
     // Merge with defaults
-    currentConfig = {
-      ...defaultConfig,
-      ...pluginConfig
-    };
+    currentConfig = deepMerge(defaultConfig, pluginConfig);
     
     // Debug log configuration loading
     try {

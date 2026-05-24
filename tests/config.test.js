@@ -73,6 +73,35 @@ describe('Config Module', () => {
       expect(config.logLevel).toBe('debug');
       expect(config.debug).toBe(false); // default
     });
+
+    it('should deep merge nested config blocks', async () => {
+      const configPath = path.join(tempDir, 'context-plugin.json');
+      await fs.writeFile(configPath, JSON.stringify({
+        contextPlugin: {
+          injection: {
+            enabled: true,
+            cache: {
+              ttlHours: 12
+            }
+          },
+          protected: {
+            enabled: true,
+            patterns: ['**/*.secret']
+          }
+        }
+      }));
+
+      const config = await loadConfig(tempDir);
+
+      expect(config.injection.enabled).toBe(true);
+      expect(config.injection.autoInject).toBe(false);
+      expect(config.injection.maxTokens).toBe(8000);
+      expect(config.injection.cache.enabled).toBe(true);
+      expect(config.injection.cache.ttlHours).toBe(12);
+      expect(config.protected.enabled).toBe(true);
+      expect(config.protected.patterns).toEqual(['**/*.secret']);
+      expect(config.protected.mode).toBe('content');
+    });
   });
 
   describe('getConfig()', () => {
