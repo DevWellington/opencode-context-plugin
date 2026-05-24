@@ -1,7 +1,9 @@
+import { CONTEXT_SESSION_DIR } from '../../config.js';
+
 /**
  * Constants for file paths - ensures consistency across all agents
  */
-export const CONTEXT_SESSION_DIR = '.opencode/context-session';
+export { CONTEXT_SESSION_DIR };
 
 export const REPORT_PATHS = {
   today: `${CONTEXT_SESSION_DIR}/daily-summary.md`,

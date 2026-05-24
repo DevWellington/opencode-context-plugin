@@ -1,13 +1,11 @@
 import fs from "fs/promises";
 import path from "path";
+import { CONTEXT_SESSION_DIR } from '../config.js';
 import { createDebugLogger } from '../utils/debug.js';
 
 const logger = createDebugLogger('context-plugin');
 
-export { createDebugLogger };
-
-// Constants
-export const CONTEXT_SESSION_DIR = '.opencode/context-session';
+export { createDebugLogger, CONTEXT_SESSION_DIR };
 
 /**
  * Atomic write using temp file + rename pattern for crash safety
