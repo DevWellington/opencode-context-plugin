@@ -139,7 +139,7 @@ priority: "${priority}"
       content += `${preview}\n\n`;
     });
 
-    if (!content.includes('## ')) {
+    if (!content.includes('## Goal')) {
       content += `\n> **Note:** This session appears to be a chat log without structured sections. Consider adding ## Goal, ## Accomplished, and ## Discoveries sections for better analysis.\n`;
       logger(`[saveContext] Chat log detected, appended soft warning to: ${filepath}`);
     }

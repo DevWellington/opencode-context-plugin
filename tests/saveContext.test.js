@@ -262,6 +262,72 @@ describe('SaveContext Module', () => {
     });
   });
 
+  describe('chat log detection', () => {
+    it('should append chat log note when content has no user-authored sections', async () => {
+      const session = {
+        id: 'chat-log-session',
+        slug: 'chat-log',
+        title: 'Chat Log Only',
+        messages: [
+          { id: '1', role: 'user', content: 'Hello' },
+          { id: '2', role: 'assistant', content: 'Hi there' }
+        ]
+      };
+
+      let savedContent = '';
+      atomicWrite.mockImplementation(async (filepath, content) => {
+        savedContent = content;
+      });
+
+      await saveContext(tempDir, session, 'compact');
+
+      // Should include the chat log note since there's no ## Goal section
+      expect(savedContent).toContain('This session appears to be a chat log');
+    });
+
+    it('should NOT append chat log note when content has ## Goal section', async () => {
+      const session = {
+        id: 'goal-session',
+        slug: 'goal-session',
+        title: 'Has Goal',
+        messages: [
+          { id: '1', role: 'user', content: '## Goal\n\nFix the login bug' },
+          { id: '2', role: 'assistant', content: 'Here is the fix...' }
+        ]
+      };
+
+      let savedContent = '';
+      atomicWrite.mockImplementation(async (filepath, content) => {
+        savedContent = content;
+      });
+
+      await saveContext(tempDir, session, 'compact');
+
+      // Should NOT include the chat log note since ## Goal is present
+      expect(savedContent).not.toContain('appears to be a chat log');
+    });
+
+    it('existing behavior unchanged - should truncate messages longer than 5000 chars', async () => {
+      const longContent = 'x'.repeat(5500);
+      const session = {
+        id: 'truncation-check',
+        slug: 'trunc',
+        title: 'Truncation Check',
+        messages: [{ id: '1', role: 'user', content: longContent }]
+      };
+
+      let savedContent = '';
+      atomicWrite.mockImplementation(async (filepath, content) => {
+        savedContent = content;
+      });
+
+      await saveContext(tempDir, session, 'compact');
+
+      expect(savedContent).not.toContain('x'.repeat(5500));
+      expect(savedContent).toContain('[...truncated');
+    });
+  });
+
   describe('ensureHierarchicalDir(baseDir)', () => {
     it('should return path components', async () => {
       const result = await ensureHierarchicalDir(tempDir);
