@@ -41,7 +41,7 @@ export function handleSessionUpdated(event) {
   }
 }
 
-export async function handleSessionEnd(directory, client, config, getSyncStatus) {
+export async function handleSessionEnd(directory, client, config) {
   logger(`[context-plugin] Session ending event - lastSession has ${_lastSession?.messages?.length || 0} messages, id: ${_lastSession?.id || _lastSession?.sessionID || 'none'}`);
   if (_lastSession) {
     try {
