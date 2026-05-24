@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: Phase complete — ready for verification
-last_updated: "2026-05-24T18:56:00.000Z"
+last_updated: "2026-05-24T19:12:00.000Z"
 progress:
   total_phases: 12
-  completed_phases: 10
-  total_plans: 28
-  completed_plans: 29
+  completed_phases: 11
+  total_plans: 33
+  completed_plans: 34
 ---
 
 # Project State
@@ -16,8 +16,8 @@ progress:
 ## Current Position
 
 Milestone: v1.1 - In Progress
-Phase: 28.1 (code-review-critical-bug-fixes) — COMPLETE
-Plans: 3 of 3 complete
+Phase: 28.2 (code-review-medium-bug-fixes) — COMPLETE
+Plans: 4 of 4 complete
 
 ## Completed Work
 
@@ -28,6 +28,15 @@ Plans: 3 of 3 complete
 - Verified truncation marker stripping (implementation already correct)
 - All 329 tests passing
 - Commits: 2ee8ff5, 2ef712c
+
+### Phase 28.2: Code Review - Medium Bug Fixes
+
+- **Plan 01:** Fixed chat log detection condition from `!content.includes('## ')` (always false) to `!content.includes('## Goal')` in saveContext.js
+- **Plan 02:** Applied `distributeTokenBudget` to cached context results in contextInjector.js — cached paths were bypassing the maxTokens budget
+- **Plan 03:** Extended searchIndexer.scanDirectory to skip `cache/` and `reports/` directories alongside `.index/`
+- **Plan 04:** Capped streaming delta accumulation at 100KB in handleMessagePartDelta to prevent unbounded memory growth
+- All 345 tests passing (12 new tests added, no regressions)
+- Commits: b0174b9, 1241244, 97f62ec, 8303510
 
 ### Phase 28.1: Code Review - Critical Bug Fixes
 
@@ -145,6 +154,10 @@ None.
 
 ## Recent Commits
 
+- 8303510: fix(28.2-04): cap delta accumulation at 100KB in handleMessagePartDelta
+- 97f62ec: fix(28.2-03): extend searchIndexer.scanDirectory to skip cache/ and reports/ dirs
+- 1241244: fix(28.2-02): apply distributeTokenBudget to cached contexts (was bypassing maxTokens)
+- b0174b9: fix(28.2-01): fix chat log detection to check for ## Goal instead of ## (always false)
 - e1eceb7: fix(28.1-03): wrap saveState calls in try/catch to prevent crash on state conflict
 - 6345af7: fix(28.1-02): make CACHE_DIR and CONTEXT_SESSION_DIR resolve relative to project baseDir
 - 8717490: fix(28.1-01): add null guard after extractSessionSummary call in saveContext

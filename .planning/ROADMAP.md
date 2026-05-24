@@ -217,25 +217,30 @@ Plans:
 
 **Goal:** Fix medium-priority bugs: chat log detection logic inverted, cache bypasses maxTokens, searchIndexer scanning cache/reports, unbounded delta accumulation.
 **Requirements**: 
-- [MED-01] Chat log detection in saveContext works correctly (not always true)
-- [MED-02] Cache re-applies maxTokens budget before returning contexts
-- [MED-03] searchIndexer skips cache/ and reports/ directories
-- [MED-04] handleMessagePartDelta caps content growth
+- [x] [MED-01] Chat log detection in saveContext works correctly (not always true)
+- [x] [MED-02] Cache re-applies maxTokens budget before returning contexts
+- [x] [MED-03] searchIndexer skips cache/ and reports/ directories
+- [x] [MED-04] handleMessagePartDelta caps content growth
 **Depends on:** Phase 28.1
-**Plans:** 0 plans
+**Plans:** 4/4 plans complete
 
 Plans:
-- [ ] TBD
+- [x] 28.2-01-PLAN.md — Fix chat log detection in saveContext (## → ## Goal)
+- [x] 28.2-02-PLAN.md — Apply distributeTokenBudget to cached context results
+- [x] 28.2-03-PLAN.md — Extend searchIndexer.scanDirectory to skip cache/ and reports/
+- [x] 28.2-04-PLAN.md — Cap delta accumulation at 100KB in handleMessagePartDelta
 
 ### Phase 28.3: Code Review - Maintainability Fixes (INSERTED)
 
 **Goal:** Fix code quality issues: centralized CONTEXT_SESSION_DIR constant, remove dead code, factor contentExtractor.js.
 **Requirements**: 
-- [MAINT-01] CONTEXT_SESSION_DIR imported from config.js, not redefined
-- [MAINT-02] Remove dead getSyncStatus parameter in sessionHandlers.js
-- [MAINT-03] Factor contentExtractor.js (~1300 lines) into smaller modules
+- [ ] [MAINT-01] CONTEXT_SESSION_DIR imported from config.js, not redefined
+- [ ] [MAINT-02] Remove dead getSyncStatus parameter in sessionHandlers.js
+- [ ] [MAINT-03] Factor contentExtractor.js (~1300 lines) into smaller modules
 **Depends on:** Phase 28.2
-**Plans:** 0 plans
+**Plans:** 3 plans
 
 Plans:
-- [ ] TBD
+- [ ] 28.3-01-PLAN.md — Centralize CONTEXT_SESSION_DIR constant (6 files import from config.js)
+- [ ] 28.3-02-PLAN.md — Remove dead getSyncStatus parameter from handleSessionEnd
+- [ ] 28.3-03-PLAN.md — Decompose contentExtractor.js into 4 sub-modules
