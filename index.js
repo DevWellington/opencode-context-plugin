@@ -325,7 +325,6 @@ class ContextPlugin {
       'session.created': () => handleSessionCreated(event, this.directory),
       'session.updated': () => handleSessionUpdated(event),
       'session.end': () => this.getConfig() && handleSessionEnd(this.directory, this.client, this.getConfig()),
-      'server.instance.disposed': () => this.getConfig() && handleSessionEnd(this.directory, this.client, this.getConfig()),
       'session.compacted': () => handleSessionCompacted(this.directory, this.client),
       'experimental.compaction.autocontinue': () => handleSessionCompacted(this.directory, this.client),
       'session.idle': () => {
