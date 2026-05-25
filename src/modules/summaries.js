@@ -59,18 +59,6 @@ export function hasNewSessions(existingSummary, newSessions) {
 }
 
 /**
- * Get session age in days
- * @param {string} sessionPath - Path to session file
- * @returns {Promise<number>} Days since last modified
- */
-async function getSessionAge(sessionPath) {
-  const stats = await fs.stat(sessionPath);
-  const now = new Date();
-  const modified = new Date(stats.mtime);
-  return Math.floor((now - modified) / (1000 * 60 * 60 * 24));
-}
-
-/**
  * Extract priority from session file frontmatter
  * @param {string} sessionContent - Raw session file content
  * @returns {string} 'low' | 'medium' | 'high' (defaults to 'medium')
@@ -83,26 +71,6 @@ function getSessionPriority(sessionContent) {
     return value;
   }
   return 'medium';
-}
-
-/**
- * Check if session should be pruned based on priority and age
- * @param {string} sessionContent - Session file content
- * @param {number} ageDays - Age of session in days
- * @returns {boolean}
- */
-function shouldPruneSession(sessionContent, ageDays) {
-  const config = getConfig();
-  const priority = getSessionPriority(sessionContent);
-  const retentionDays = {
-    high: config.priority?.highRetention ?? -1,
-    medium: config.priority?.mediumRetention ?? 90,
-    low: config.priority?.lowRetention ?? 30
-  };
-
-  const retention = retentionDays[priority] ?? 90;
-  if (retention === -1) return false;
-  return ageDays > retention;
 }
 
 export { updateDailySummary, updateWeekSummary, updateDaySummary } from './summaryUpdater.js';

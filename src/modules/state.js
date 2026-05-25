@@ -11,6 +11,7 @@
 import fs from 'fs/promises';
 import path from 'path';
 import { atomicWrite } from '../utils/fileUtils.js';
+import { withKeyedQueue, clearKeyedQueues } from '../utils/serialQueue.js';
 import { createDebugLogger } from '../utils/debug.js';
 import { isExpectedFsError } from '../utils/errorUtils.js';
 
@@ -18,22 +19,7 @@ const logger = createDebugLogger('context-plugin');
 const STATE_FILE = '.opencode/context-session/.state.json';
 const STATE_VERSION = 2; // Bumped for optimistic locking
 const MAX_LOCK_RETRIES = 3;
-const fileLocks = new Map();
 
-async function withFileLock(directory, fn) {
-  if (!fileLocks.has(directory)) {
-    fileLocks.set(directory, Promise.resolve());
-  }
-  const prev = fileLocks.get(directory);
-  let nextResolve;
-  fileLocks.set(directory, new Promise(r => { nextResolve = r; }));
-  await prev;
-  try {
-    return await fn();
-  } finally {
-    nextResolve();
-  }
-}
 
 /**
  * Create default state object
@@ -126,7 +112,7 @@ export async function getLastSummarized(baseDir, key) {
  * @param {SummarizedInfo} info - { timestamp, type, tokens, sessionsCount }
  */
 export async function setLastSummarized(baseDir, key, info) {
-  return withFileLock(baseDir, async () => {
+  return withKeyedQueue(baseDir, async () => {
     const state = await loadState(baseDir);
     state.lastSummarized[key] = {
       ...info,
@@ -156,7 +142,7 @@ export async function getPendingQueue(baseDir) {
  * @param {PendingItem} item - { type, key, path, addedAt }
  */
 export async function addToPendingQueue(baseDir, item) {
-  return withFileLock(baseDir, async () => {
+  return withKeyedQueue(baseDir, async () => {
     const state = await loadState(baseDir);
     const exists = state.pending.some(p => p.type === item.type && p.key === item.key);
     if (!exists) {
@@ -179,7 +165,7 @@ export async function addToPendingQueue(baseDir, item) {
  * @param {string} type - Optional: clear only items of this type
  */
 export async function clearPendingQueue(baseDir, type = null) {
-  return withFileLock(baseDir, async () => {
+  return withKeyedQueue(baseDir, async () => {
     const state = await loadState(baseDir);
     if (type) {
       state.pending = state.pending.filter(p => p.type !== type);
@@ -201,7 +187,7 @@ export async function clearPendingQueue(baseDir, type = null) {
  * @param {SummarizedInfo} info - Summary info
  */
 export async function markSummaryComplete(baseDir, key, info) {
-  return withFileLock(baseDir, async () => {
+  return withKeyedQueue(baseDir, async () => {
     const state = await loadState(baseDir);
     
     // Remove from pending

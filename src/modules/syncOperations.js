@@ -6,6 +6,7 @@ import { getGlobalIntelligencePath } from '../utils/globalIntelligence.js';
 import { loadSyncState, saveSyncState, getDefaultSyncState } from './syncState.js';
 import { RemoteSyncProvider, S3SyncProvider, GCSyncProvider, CustomSyncProvider } from './syncProviders.js';
 import { getHomeDir } from '../utils/homeDir.js';
+import { withSerialQueue } from '../utils/serialQueue.js';
 import { isExpectedFsError } from '../utils/errorUtils.js';
 
 const logger = createDebugLogger('remote-sync');
@@ -25,19 +26,6 @@ export function getConfigPath() {
 let syncState = { ...getDefaultSyncState() };
 let currentProvider = null;
 let currentConfig = null;
-let syncLock = Promise.resolve();
-
-async function withSyncLock(fn) {
-  const prev = syncLock;
-  let nextResolve;
-  syncLock = new Promise(r => { nextResolve = r; });
-  await prev;
-  try {
-    return await fn();
-  } finally {
-    nextResolve();
-  }
-}
 
 /**
  * Configure remote sync with provider and credentials
@@ -46,8 +34,8 @@ async function withSyncLock(fn) {
  * @param {Object} config - Configuration object
  * @returns {Promise<Object>} Configuration result
  */
-export async function configureRemoteSync(provider, config) {
-  return withSyncLock(async () => {
+export async function configureRemoteSync(provider, config, deps = {}) {
+  return withSerialQueue(async () => {
     logger(`[RemoteSync] Configuring provider: ${provider}`);
 
     if (!provider || !['s3', 'gcs', 'custom'].includes(provider)) {
@@ -69,13 +57,13 @@ export async function configureRemoteSync(provider, config) {
     let providerInstance;
     switch (provider) {
       case 's3':
-        providerInstance = new S3SyncProvider(config);
+        providerInstance = new S3SyncProvider(config, deps);
         break;
       case 'gcs':
-        providerInstance = new GCSyncProvider(config);
+        providerInstance = new GCSyncProvider(config, deps);
         break;
       case 'custom':
-        providerInstance = new CustomSyncProvider(config);
+        providerInstance = new CustomSyncProvider(config, deps);
         break;
     }
 
@@ -151,7 +139,7 @@ export async function getSyncStatus() {
  * @returns {Promise<Object>} Sync result
  */
 export async function syncToRemote(directory) {
-  return withSyncLock(async () => {
+  return withSerialQueue(async () => {
     if (!currentProvider) {
       const loaded = await loadSyncState();
       if (!loaded.configured) {
@@ -242,7 +230,7 @@ export async function syncGlobalIntelligence() {
  * Mark pending changes (call after local updates)
  */
 export async function markPendingChanges() {
-  return withSyncLock(async () => {
+  return withSerialQueue(async () => {
     syncState.pendingChanges = true;
     await saveSyncState(syncState);
     logger(`[RemoteSync] Pending changes marked`);

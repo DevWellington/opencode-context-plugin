@@ -33,9 +33,6 @@ import { handleCommandExecuteBefore } from './src/handlers/commandHandlers.js';
 
 const logger = createDebugLogger('context-plugin');
 
-// Keep constants for migration backward compatibility
-const OLD_CONTEXTOS_DIR = '.opencode/contextos';
-
 // Legacy debugLog for backward compatibility
 function debugLogLegacy(message) {
   logger(message);
@@ -103,65 +100,6 @@ async function loadPreviousContexts(directory, limit = 5) {
   } catch (error) {
     logger(`[context-plugin] Error loading contexts: ${error.message}`);
     return [];
-  }
-}
-
-async function migrateContextFiles(directory) {
-  const oldDir = path.join(directory, OLD_CONTEXTOS_DIR);
-  const newDir = path.join(directory, CONTEXT_SESSION_DIR);
-  
-  try {
-    // Check if old directory exists
-    try {
-      await fs.access(oldDir);
-    } catch {
-      // Old directory doesn't exist, no migration needed
-      return;
-    }
-    
-    // Check if new directory already exists (migration already done)
-    try {
-      await fs.access(newDir);
-      logger(`[context-plugin] New directory already exists, skipping migration`);
-      return;
-    } catch {
-      // New directory doesn't exist, proceed with migration
-    }
-    
-    logger(`[context-plugin] Starting migration from ${oldDir} to ${newDir}`);
-    
-    // Create new directory
-    await fs.mkdir(newDir, { recursive: true });
-    
-    // Read old directory contents
-    const oldFiles = await fs.readdir(oldDir);
-    const mdFiles = oldFiles.filter(f => f.endsWith('.md'));
-    
-    let migratedCount = 0;
-    for (const file of mdFiles) {
-      const oldPath = path.join(oldDir, file);
-      // Rename saida- to exit-
-      const newFileName = file.replace(/^saida-/, 'exit-');
-      const newPath = path.join(newDir, newFileName);
-      
-      try {
-        await fs.rename(oldPath, newPath);
-        migratedCount++;
-        logger(`[context-plugin] Migrated: ${file} → ${newFileName}`);
-      } catch (error) {
-        logger(`[context-plugin] Failed to migrate ${file}: ${error.message}`);
-      }
-    }
-    
-    // Rename old directory to .deprecated
-    const deprecatedDir = path.join(directory, '.opencode/.deprecated');
-    await fs.rename(oldDir, deprecatedDir);
-    
-    logger(`[context-plugin] Migration complete: ${migratedCount}/${mdFiles.length} files migrated`);
-    console.log(`[context-plugin] Migrated ${migratedCount} context files to new structure`);
-  } catch (error) {
-    logger(`[context-plugin] Migration error: ${error.message}`);
-    // Don't block plugin initialization on migration failure
   }
 }
 

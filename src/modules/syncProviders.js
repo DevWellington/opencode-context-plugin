@@ -38,7 +38,7 @@ export class RemoteSyncProvider {
  * S3 Sync Provider - sync to S3-compatible storage
  */
 export class S3SyncProvider extends RemoteSyncProvider {
-  constructor(config) {
+  constructor(config, deps = {}) {
     super();
     this.type = 's3';
     this.bucket = config.bucket;
@@ -46,6 +46,7 @@ export class S3SyncProvider extends RemoteSyncProvider {
     this.endpoint = config.endpoint;
     this.region = config.region || 'us-east-1';
     this.credentials = config.credentials;
+    this._getS3 = deps.getS3 || (() => import('@aws-sdk/client-s3').then(m => ({ S3Client: m.S3Client, PutObjectCommand: m.PutObjectCommand, GetObjectCommand: m.GetObjectCommand, HeadBucketCommand: m.HeadBucketCommand })));
   }
 
   getProviderConfig(credentials) {
@@ -67,12 +68,16 @@ export class S3SyncProvider extends RemoteSyncProvider {
     const key = `${this.prefix}global-intelligence.md`.replace(/^\//, '');
     logger(`[S3Sync] Uploading to ${this.bucket}/${key}`);
 
-    // Simulated S3 upload - in real implementation, use AWS SDK
-    // const s3Client = new S3Client({ region: this.region, credentials: this.credentials });
-    // await s3Client.send(new PutObjectCommand({ Bucket: this.bucket, Key: key, Body: intelligenceContent }));
-
-    logger(`[S3Sync] Push completed (simulated): ${key}`);
-    return { success: true, key, provider: 's3' };
+    try {
+      const { S3Client, PutObjectCommand } = await this._getS3();
+      const s3Client = new S3Client({ region: this.region, credentials: this.credentials });
+      await s3Client.send(new PutObjectCommand({ Bucket: this.bucket, Key: key, Body: intelligenceContent }));
+      logger(`[S3Sync] Push completed: ${key}`);
+      return { success: true, key, provider: 's3' };
+    } catch (error) {
+      logger(`[S3Sync] Push failed: ${error.message}`);
+      return { success: false, error: error.message, key, provider: 's3' };
+    }
   }
 
   async pull() {
@@ -83,13 +88,17 @@ export class S3SyncProvider extends RemoteSyncProvider {
     const key = `${this.prefix}global-intelligence.md`.replace(/^\//, '');
     logger(`[S3Sync] Downloading from ${this.bucket}/${key}`);
 
-    // Simulated S3 download - in real implementation, use AWS SDK
-    // const s3Client = new S3Client({ region: this.region, credentials: this.credentials });
-    // const response = await s3Client.send(new GetObjectCommand({ Bucket: this.bucket, Key: key }));
-    // const content = await response.Body.transformToString();
-
-    logger(`[S3Sync] Pull completed (simulated): ${key}`);
-    return { success: true, content: null, provider: 's3' };
+    try {
+      const { S3Client, GetObjectCommand } = await this._getS3();
+      const s3Client = new S3Client({ region: this.region, credentials: this.credentials });
+      const response = await s3Client.send(new GetObjectCommand({ Bucket: this.bucket, Key: key }));
+      const content = await response.Body.transformToString();
+      logger(`[S3Sync] Pull completed: ${key}`);
+      return { success: true, content, provider: 's3' };
+    } catch (error) {
+      logger(`[S3Sync] Pull failed: ${error.message}`);
+      return { success: false, error: error.message, provider: 's3' };
+    }
   }
 
   async sync() {
@@ -97,7 +106,7 @@ export class S3SyncProvider extends RemoteSyncProvider {
     const pullResult = await this.pull();
     const pushResult = await this.push('# Global Intelligence\nSynced from S3');
     return {
-      success: true,
+      success: pullResult.success && pushResult.success,
       pulled: pullResult.success,
       pushed: pushResult.success,
       provider: 's3'
@@ -111,16 +120,16 @@ export class S3SyncProvider extends RemoteSyncProvider {
 
     logger(`[S3Sync] Testing connection to ${this.endpoint || 'default S3'}/${this.bucket}`);
 
-    // Simulated connection test - in real implementation, use AWS SDK
-    // try {
-    //   const s3Client = new S3Client({ region: this.region, credentials: this.credentials });
-    //   await s3Client.send(new HeadBucketCommand({ Bucket: this.bucket }));
-    //   return { success: true, provider: 's3', bucket: this.bucket };
-    // } catch (error) {
-    //   return { success: false, error: error.message };
-    // }
-
-    return { success: true, provider: 's3', bucket: this.bucket };
+    try {
+      const { S3Client, HeadBucketCommand } = await this._getS3();
+      const s3Client = new S3Client({ region: this.region, credentials: this.credentials });
+      await s3Client.send(new HeadBucketCommand({ Bucket: this.bucket }));
+      logger(`[S3Sync] Connection successful: ${this.bucket}`);
+      return { success: true, provider: 's3', bucket: this.bucket };
+    } catch (error) {
+      logger(`[S3Sync] Connection failed: ${error.message}`);
+      return { success: false, error: error.message, provider: 's3', bucket: this.bucket };
+    }
   }
 }
 
@@ -128,13 +137,14 @@ export class S3SyncProvider extends RemoteSyncProvider {
  * GC Sync Provider - sync to Google Cloud Storage
  */
 export class GCSyncProvider extends RemoteSyncProvider {
-  constructor(config) {
+  constructor(config, deps = {}) {
     super();
     this.type = 'gcs';
     this.bucket = config.bucket;
     this.prefix = config.prefix || '';
     this.projectId = config.projectId;
     this.credentials = config.credentials;
+    this._getStorage = deps.getStorage || (() => import('@google-cloud/storage').then(m => ({ Storage: m.Storage })));
   }
 
   getProviderConfig(credentials) {
@@ -154,13 +164,16 @@ export class GCSyncProvider extends RemoteSyncProvider {
     const key = `${this.prefix}global-intelligence.md`.replace(/^\//, '');
     logger(`[GCSync] Uploading to ${this.bucket}/${key}`);
 
-    // Simulated GCS upload - in real implementation, use @google-cloud/storage
-    // const storage = new Storage({ projectId: this.projectId, credentials: this.credentials });
-    // const bucket = storage.bucket(this.bucket);
-    // await bucket.file(key).save(intelligenceContent);
-
-    logger(`[GCSync] Push completed (simulated): ${key}`);
-    return { success: true, key, provider: 'gcs' };
+    try {
+      const { Storage } = await this._getStorage();
+      const storage = new Storage({ projectId: this.projectId, credentials: this.credentials });
+      await storage.bucket(this.bucket).file(key).save(intelligenceContent);
+      logger(`[GCSync] Push completed: ${key}`);
+      return { success: true, key, provider: 'gcs' };
+    } catch (error) {
+      logger(`[GCSync] Push failed: ${error.message}`);
+      return { success: false, error: error.message, key, provider: 'gcs' };
+    }
   }
 
   async pull() {
@@ -171,13 +184,17 @@ export class GCSyncProvider extends RemoteSyncProvider {
     const key = `${this.prefix}global-intelligence.md`.replace(/^\//, '');
     logger(`[GCSync] Downloading from ${this.bucket}/${key}`);
 
-    // Simulated GCS download - in real implementation, use @google-cloud/storage
-    // const storage = new Storage({ projectId: this.projectId, credentials: this.credentials });
-    // const bucket = storage.bucket(this.bucket);
-    // const [content] = await bucket.file(key).download();
-
-    logger(`[GCSync] Pull completed (simulated): ${key}`);
-    return { success: true, content: null, provider: 'gcs' };
+    try {
+      const { Storage } = await this._getStorage();
+      const storage = new Storage({ projectId: this.projectId, credentials: this.credentials });
+      const [content] = await storage.bucket(this.bucket).file(key).download();
+      const text = content.toString('utf-8');
+      logger(`[GCSync] Pull completed: ${key}`);
+      return { success: true, content: text, provider: 'gcs' };
+    } catch (error) {
+      logger(`[GCSync] Pull failed: ${error.message}`);
+      return { success: false, error: error.message, provider: 'gcs' };
+    }
   }
 
   async sync() {
@@ -185,7 +202,7 @@ export class GCSyncProvider extends RemoteSyncProvider {
     const pullResult = await this.pull();
     const pushResult = await this.push('# Global Intelligence\nSynced from GCS');
     return {
-      success: true,
+      success: pullResult.success && pushResult.success,
       pulled: pullResult.success,
       pushed: pushResult.success,
       provider: 'gcs'
@@ -199,16 +216,19 @@ export class GCSyncProvider extends RemoteSyncProvider {
 
     logger(`[GCSync] Testing connection to ${this.bucket}`);
 
-    // Simulated connection test - in real implementation, use @google-cloud/storage
-    // try {
-    //   const storage = new Storage({ projectId: this.projectId, credentials: this.credentials });
-    //   await storage.bucket(this.bucket).exists();
-    //   return { success: true, provider: 'gcs', bucket: this.bucket };
-    // } catch (error) {
-    //   return { success: false, error: error.message };
-    // }
-
-    return { success: true, provider: 'gcs', bucket: this.bucket };
+    try {
+      const { Storage } = await this._getStorage();
+      const storage = new Storage({ projectId: this.projectId, credentials: this.credentials });
+      const [exists] = await storage.bucket(this.bucket).exists();
+      if (!exists) {
+        return { success: false, error: 'Bucket does not exist', provider: 'gcs', bucket: this.bucket };
+      }
+      logger(`[GCSync] Connection successful: ${this.bucket}`);
+      return { success: true, provider: 'gcs', bucket: this.bucket };
+    } catch (error) {
+      logger(`[GCSync] Connection failed: ${error.message}`);
+      return { success: false, error: error.message, provider: 'gcs', bucket: this.bucket };
+    }
   }
 }
 

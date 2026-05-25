@@ -1,5 +1,12 @@
-import { getWeek } from 'date-fns';
 import { findPatterns } from '../modules/contentExtractor.js';
+
+function getWeek(date) {
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() + 3 - (d.getDay() + 6) % 7);
+  const week1 = new Date(d.getFullYear(), 0, 4);
+  return 1 + Math.round(((d - week1) / 86400000 - 3 + (week1.getDay() + 6) % 7) / 7);
+}
 import { cleanOldLinks, stripFieldHeader } from './intelligence/sanitizer.js';
 
 export const REFERENCE_SCHEMA = {
@@ -233,7 +240,7 @@ lastUpdated: ${new Date().toISOString()}
   const now = new Date();
   const currentYear = now.getFullYear();
   const currentMonth = String(now.getMonth() + 1).padStart(2, '0');
-  const currentWeek = `W${String(getWeek(now, { weekStartsOn: 1, firstWeekContainsDate: 4 })).padStart(2, '0')}`;
+  const currentWeek = `W${String(getWeek(now)).padStart(2, '0')}`;
   content += `  - [[${currentYear}/${currentMonth}/${currentWeek}/week-summary.md]]\n`;
 
   return content;

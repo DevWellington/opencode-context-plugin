@@ -120,7 +120,7 @@ export async function updateGlobalIntelligence(projectName, sessionInfo) {
     return;
   }
   
-  globalWriteQueue = globalWriteQueue.then(async () => {
+  globalWriteQueue = globalWriteQueue.catch(() => {}).then(async () => {
     try {
       const filePath = getGlobalIntelligencePath();
       

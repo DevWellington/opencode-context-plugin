@@ -10,6 +10,44 @@ import path from 'path';
 describe('Remote Sync Module', () => {
   let tempDir;
 
+  function mockS3SDK() {
+    class MockS3Client {
+      async send(command) {
+        if (command.constructor.name === 'GetObjectCommand') {
+          return { Body: { transformToString: async () => '# Mock S3 content' } };
+        }
+        return {};
+      }
+    }
+    return {
+      getS3: async () => ({
+        S3Client: MockS3Client,
+        PutObjectCommand: class PutObjectCommand { constructor(c) { Object.assign(this, c); } },
+        GetObjectCommand: class GetObjectCommand { constructor(c) { Object.assign(this, c); } },
+        HeadBucketCommand: class HeadBucketCommand { constructor(c) { Object.assign(this, c); } }
+      })
+    };
+  }
+
+  function mockGcsSDK() {
+    return {
+      getStorage: async () => ({
+        Storage: class MockStorage {
+          constructor() {}
+          bucket() {
+            return {
+              file: () => ({
+                save: async () => {},
+                download: async () => [Buffer.from('# Mock GCS content')]
+              }),
+              exists: async () => [true]
+            };
+          }
+        }
+      })
+    };
+  }
+
   beforeEach(async () => {
     jest.clearAllMocks();
     jest.useFakeTimers();
@@ -95,7 +133,7 @@ describe('Remote Sync Module', () => {
     it('should push content successfully', async () => {
       const { S3SyncProvider } = await import('../src/modules/remoteSync.js');
       
-      const provider = new S3SyncProvider({ bucket: 'test-bucket' });
+      const provider = new S3SyncProvider({ bucket: 'test-bucket' }, mockS3SDK());
       
       const result = await provider.push('# Test content');
       
@@ -107,18 +145,19 @@ describe('Remote Sync Module', () => {
     it('should pull content successfully', async () => {
       const { S3SyncProvider } = await import('../src/modules/remoteSync.js');
       
-      const provider = new S3SyncProvider({ bucket: 'test-bucket' });
+      const provider = new S3SyncProvider({ bucket: 'test-bucket' }, mockS3SDK());
       
       const result = await provider.pull();
       
       expect(result.success).toBe(true);
       expect(result.provider).toBe('s3');
+      expect(result.content).toBe('# Mock S3 content');
     });
 
     it('should sync successfully', async () => {
       const { S3SyncProvider } = await import('../src/modules/remoteSync.js');
       
-      const provider = new S3SyncProvider({ bucket: 'test-bucket' });
+      const provider = new S3SyncProvider({ bucket: 'test-bucket' }, mockS3SDK());
       
       const result = await provider.sync();
       
@@ -130,7 +169,7 @@ describe('Remote Sync Module', () => {
     it('should test connection successfully', async () => {
       const { S3SyncProvider } = await import('../src/modules/remoteSync.js');
       
-      const provider = new S3SyncProvider({ bucket: 'test-bucket' });
+      const provider = new S3SyncProvider({ bucket: 'test-bucket' }, mockS3SDK());
       
       const result = await provider.testConnection();
       
@@ -177,7 +216,7 @@ describe('Remote Sync Module', () => {
     it('should push content successfully', async () => {
       const { GCSyncProvider } = await import('../src/modules/remoteSync.js');
       
-      const provider = new GCSyncProvider({ bucket: 'test-bucket' });
+      const provider = new GCSyncProvider({ bucket: 'test-bucket' }, mockGcsSDK());
       
       const result = await provider.push('# Test content');
       
@@ -188,18 +227,19 @@ describe('Remote Sync Module', () => {
     it('should pull content successfully', async () => {
       const { GCSyncProvider } = await import('../src/modules/remoteSync.js');
       
-      const provider = new GCSyncProvider({ bucket: 'test-bucket' });
+      const provider = new GCSyncProvider({ bucket: 'test-bucket' }, mockGcsSDK());
       
       const result = await provider.pull();
       
       expect(result.success).toBe(true);
       expect(result.provider).toBe('gcs');
+      expect(result.content).toBe('# Mock GCS content');
     });
 
     it('should test connection successfully', async () => {
       const { GCSyncProvider } = await import('../src/modules/remoteSync.js');
       
-      const provider = new GCSyncProvider({ bucket: 'test-bucket' });
+      const provider = new GCSyncProvider({ bucket: 'test-bucket' }, mockGcsSDK());
       
       const result = await provider.testConnection();
       
@@ -288,7 +328,7 @@ describe('Remote Sync Module', () => {
       const result = await configureRemoteSync('s3', {
         bucket: 'test-bucket',
         region: 'us-east-1'
-      });
+      }, mockS3SDK());
       
       expect(result.success).toBe(true);
       expect(result.provider).toBe('s3');
@@ -300,7 +340,7 @@ describe('Remote Sync Module', () => {
       const result = await configureRemoteSync('gcs', {
         bucket: 'test-bucket',
         projectId: 'my-project'
-      });
+      }, mockGcsSDK());
       
       expect(result.success).toBe(true);
       expect(result.provider).toBe('gcs');
@@ -492,7 +532,7 @@ describe('Remote Sync Module', () => {
     it('syncToRemote loads provider from saved config', async () => {
       const { configureRemoteSync, syncToRemote } = await import('../src/modules/syncOperations.js');
       
-      await configureRemoteSync('gcs', { bucket: 'saved-config-bucket' });
+      await configureRemoteSync('gcs', { bucket: 'saved-config-bucket' }, mockGcsSDK());
       
       const result = await syncToRemote(tempDir);
       
@@ -502,7 +542,7 @@ describe('Remote Sync Module', () => {
     it('syncToRemote handles missing global intelligence file', async () => {
       const { configureRemoteSync, syncToRemote } = await import('../src/modules/syncOperations.js');
       
-      await configureRemoteSync('s3', { bucket: 'test-bucket' });
+      await configureRemoteSync('s3', { bucket: 'test-bucket' }, mockS3SDK());
       
       const result = await syncToRemote(tempDir);
       
@@ -513,7 +553,16 @@ describe('Remote Sync Module', () => {
     it('syncToRemote handles errors during sync', async () => {
       const { configureRemoteSync, syncToRemote } = await import('../src/modules/syncOperations.js');
       
-      await configureRemoteSync('s3', { bucket: 'error-test-bucket' });
+      const mock = mockS3SDK();
+      const origGetS3 = mock.getS3;
+      mock.getS3 = async () => {
+        const sdks = await origGetS3();
+        sdks.S3Client = class FailingS3Client {
+          async send() { throw new Error('Transfer failed'); }
+        };
+        return sdks;
+      };
+      await configureRemoteSync('s3', { bucket: 'error-test-bucket' }, mock);
       
       const result = await syncToRemote(tempDir);
       
@@ -534,7 +583,7 @@ describe('Remote Sync Module', () => {
     it('getSyncStatus returns error history', async () => {
       const { getSyncStatus, configureRemoteSync, syncToRemote } = await import('../src/modules/syncOperations.js');
       
-      await configureRemoteSync('custom', { endpoint: 'https://example.com/webhook' });
+      await configureRemoteSync('custom', { endpoint: 'https://example.com/webhook' }, {});
       
       await syncToRemote(tempDir);
       

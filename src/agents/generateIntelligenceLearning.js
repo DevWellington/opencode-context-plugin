@@ -14,8 +14,15 @@
 
 import path from 'path';
 import fs from 'fs/promises';
-import { getWeek } from 'date-fns';
 import { REPORT_PATHS, CONTEXT_SESSION_DIR } from './utils/linkBuilder.js';
+
+function getWeek(date) {
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() + 3 - (d.getDay() + 6) % 7);
+  const week1 = new Date(d.getFullYear(), 0, 4);
+  return 1 + Math.round(((d - week1) / 86400000 - 3 + (week1.getDay() + 6) % 7) / 7);
+}
 import { createDebugLogger } from '../utils/debug.js';
 import { extractSessionContent, extractBugs, findPatterns, inferMissingFields } from '../modules/contentExtractor.js';
 import { preservePersistentPatterns } from '../modules/intelligence.js';
@@ -38,7 +45,7 @@ export async function updateIntelligenceLearning(directory, opencodeClient = nul
 
   const year = new Date().getFullYear();
   const month = String(new Date().getMonth() + 1).padStart(2, '0');
-  const weekStr = `W${String(getWeek(new Date(), { weekStartsOn: 1, firstWeekContainsDate: 4 })).padStart(2, '0')}`;
+  const weekStr = `W${String(getWeek(new Date())).padStart(2, '0')}`;
 
   let allReportsContent = '';
 

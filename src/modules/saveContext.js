@@ -1,6 +1,5 @@
 import fs from "fs/promises";
 import path from "path";
-import { getWeek } from "date-fns";
 import { getConfig, CONTEXT_SESSION_DIR } from '../config.js';
 import { createDebugLogger } from '../utils/debug.js';
 import { updateDaySummary } from './summaries.js';
@@ -13,6 +12,14 @@ import { atomicWrite, getTimestamp, recoverOrphanedTempFiles, withTimeout } from
 import { setLastSummarized, addToPendingQueue } from './state.js';
 import { countTokens } from './tokenLimit.js';
 import { validateAfterSave } from './contextValidator.js';
+
+function getWeek(date) {
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() + 3 - (d.getDay() + 6) % 7);
+  const week1 = new Date(d.getFullYear(), 0, 4);
+  return 1 + Math.round(((d - week1) / 86400000 - 3 + (week1.getDay() + 6) % 7) / 7);
+}
 
 const logger = createDebugLogger('context-plugin');
 
@@ -132,7 +139,7 @@ export async function ensureHierarchicalDir(baseDir) {
   const now = new Date();
   const year = now.getFullYear();
   const month = String(now.getMonth() + 1).padStart(2, '0');
-  const weekNum = getWeek(now, { weekStartsOn: 1, firstWeekContainsDate: 4 });
+  const weekNum = getWeek(now);
   const week = `W${String(weekNum).padStart(2, '0')}`;
   const day = String(now.getDate()).padStart(2, '0');
   
@@ -230,7 +237,13 @@ priority: "${priority}"
 
     summary.messages.forEach((msg) => {
       const MAX_MSG_SIZE = 5000;
-      const preview = msg.content.length > MAX_MSG_SIZE ? msg.content.slice(0, MAX_MSG_SIZE) + `\n\n[...truncated ${msg.content.length - MAX_MSG_SIZE} chars...]` : msg.content;
+      const preview = msg.content.length > MAX_MSG_SIZE 
+        ? (() => {
+            let i = MAX_MSG_SIZE;
+            while (i > 0 && (msg.content.charCodeAt(i) & 0xFC00) === 0xDC00) i--;
+            return msg.content.slice(0, i) + `\n\n[...truncated ${msg.content.length - MAX_MSG_SIZE} chars...]`;
+          })()
+        : msg.content;
       content += `### Message ${msg.index} [${msg.role}]\n\n`;
       content += `${preview}\n\n`;
     });

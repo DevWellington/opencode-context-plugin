@@ -12,7 +12,13 @@ import fs from 'fs/promises';
 import path from 'path';
 import os from 'os';
 import { fileURLToPath } from 'url';
-import { getWeek } from 'date-fns';
+function getWeek(date) {
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() + 3 - (d.getDay() + 6) % 7);
+  const week1 = new Date(d.getFullYear(), 0, 4);
+  return 1 + Math.round(((d - week1) / 86400000 - 3 + (week1.getDay() + 6) % 7) / 7);
+}
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -315,7 +321,7 @@ async function validate() {
   const now = new Date();
   const year = String(now.getFullYear());
   const month = String(now.getMonth() + 1).padStart(2, '0');
-  const week = `W${String(getWeek(now, { weekStartsOn: 1, firstWeekContainsDate: 4 })).padStart(2, '0')}`;
+  const week = `W${String(getWeek(now)).padStart(2, '0')}`;
   const day = String(now.getDate()).padStart(2, '0');
   
   console.log(`Validating project: ${projectDir}`);

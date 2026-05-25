@@ -3,8 +3,15 @@ import { createDebugLogger } from '../utils/debug.js';
 import path from 'path';
 import fs from 'fs/promises';
 import { REPORT_PATHS, CONTEXT_SESSION_DIR } from './utils/linkBuilder.js';
-import { getWeek } from 'date-fns';
 import { TRUNCATE } from '../constants.js';
+
+function getWeek(date) {
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() + 3 - (d.getDay() + 6) % 7);
+  const week1 = new Date(d.getFullYear(), 0, 4);
+  return 1 + Math.round(((d - week1) / 86400000 - 3 + (week1.getDay() + 6) % 7) / 7);
+}
 export { isLowQualityPattern } from './intelligencePatterns.js';
 
 const logger = createDebugLogger('report-extractor');
@@ -16,7 +23,7 @@ const logger = createDebugLogger('report-extractor');
 export async function extractIntelligenceFromReports(directory) {
   const year = new Date().getFullYear();
   const month = String(new Date().getMonth() + 1).padStart(2, '0');
-  const weekStr = `W${String(getWeek(new Date(), { weekStartsOn: 1, firstWeekContainsDate: 4 })).padStart(2, '0')}`;
+  const weekStr = `W${String(getWeek(new Date())).padStart(2, '0')}`;
 
   const weekDir = path.join(directory, CONTEXT_SESSION_DIR, String(year), month, weekStr);
   const monthDir = path.join(directory, CONTEXT_SESSION_DIR, String(year), month);

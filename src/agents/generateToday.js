@@ -10,8 +10,15 @@
 
 import path from 'path';
 import fs from 'fs/promises';
-import { getWeek } from 'date-fns';
 import { formatFileHeader, addRelatedLinks, buildKeywords, extractKeywordsFromContent, REPORT_PATHS, addKeywordNavigation, CONTEXT_SESSION_DIR } from './utils/linkBuilder.js';
+
+function getWeek(date) {
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() + 3 - (d.getDay() + 6) % 7);
+  const week1 = new Date(d.getFullYear(), 0, 4);
+  return 1 + Math.round(((d - week1) / 86400000 - 3 + (week1.getDay() + 6) % 7) / 7);
+}
 import { getConfig } from '../config.js';
 import { truncateToBudget } from '../modules/tokenLimit.js';
 import { shouldRegenerate } from '../modules/summaries.js';
@@ -24,7 +31,7 @@ export async function generateTodaySummary(directory) {
   const today = new Date();
   const year = today.getFullYear();
   const month = String(today.getMonth() + 1).padStart(2, '0');
-  const week = `W${getWeek(today, { weekStartsOn: 1, firstWeekContainsDate: 4 })}`;
+  const week = `W${getWeek(today)}`;
   const day = String(today.getDate()).padStart(2, '0');
 
   const sessionDir = path.join(directory, '.opencode', 'context-session', String(year), month, week, day);

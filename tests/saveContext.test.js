@@ -174,8 +174,14 @@ describe('SaveContext Module', () => {
       const now = new Date();
       const currentDay = String(now.getDate()).padStart(2, '0');
       const currentMonth = String(now.getMonth() + 1).padStart(2, '0');
-      const { getWeek } = await import('date-fns');
-      const weekNum = getWeek(now, { weekStartsOn: 1, firstWeekContainsDate: 4 });
+      function getWeek(date) {
+        const d = new Date(date);
+        d.setHours(0, 0, 0, 0);
+        d.setDate(d.getDate() + 3 - (d.getDay() + 6) % 7);
+        const week1 = new Date(d.getFullYear(), 0, 4);
+        return 1 + Math.round(((d - week1) / 86400000 - 3 + (week1.getDay() + 6) % 7) / 7);
+      }
+      const weekNum = getWeek(now);
       const currentWeek = `W${String(weekNum).padStart(2, '0')}`;
       const ctxDir = path.join(tempDir, '.opencode', 'context-session');
       expect(await fs.access(path.join(ctxDir, String(now.getFullYear()), currentMonth, currentWeek, currentDay)).then(() => true).catch(() => false)).toBe(true);
