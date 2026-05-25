@@ -33,9 +33,13 @@ old/
 # Plugin generated files (project-specific)
 .opencode/
 
-# Planning and documentation (root level only)
-*.md
-.planning/
+# Planning subdirectories (root level .planning/ and GUIA files are kept)
+.planning/codebase/
+.planning/debug/
+.planning/milestones/
+.planning/phases/
+.planning/research/
+.planning/roadmap/
 
 # User config (installed globally)
 ~/.config/
