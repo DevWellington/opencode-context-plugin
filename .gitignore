@@ -32,6 +32,9 @@ old/
 
 # Plugin generated files (project-specific)
 .opencode/
+
+# Planning and documentation (root level only)
+*.md
 .planning/
 
 # User config (installed globally)
