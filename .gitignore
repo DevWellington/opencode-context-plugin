@@ -35,7 +35,6 @@ old/
 
 # Planning and documentation
 .planning/
-*.md
 
 # User config (installed globally)
 ~/.config/
