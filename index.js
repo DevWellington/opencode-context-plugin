@@ -2,7 +2,7 @@ import fs from "fs/promises";
 import path from "path";
 
 import { loadConfig, getConfig, LOG_FILE, CONTEXT_SESSION_DIR } from './src/config.js';
-import { createDebugLogger, debugLog } from './src/utils/debug.js';
+import { createDebugLogger } from './src/utils/debug.js';
 import { saveContext } from './src/modules/saveContext.js';
 import { initializeIntelligenceLearning } from './src/modules/intelligence.js';
 import { getSessionGuidance } from './src/modules/sessionGuidance.js';
@@ -32,11 +32,6 @@ import {
 import { handleCommandExecuteBefore } from './src/handlers/commandHandlers.js';
 
 const logger = createDebugLogger('context-plugin');
-
-// Legacy debugLog for backward compatibility
-function debugLogLegacy(message) {
-  logger(message);
-}
 
 async function loadPreviousContexts(directory, limit = 5) {
   try {

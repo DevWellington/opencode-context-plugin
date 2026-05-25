@@ -236,13 +236,14 @@ export class GCSyncProvider extends RemoteSyncProvider {
  * Custom Sync Provider - webhook-based sync
  */
 export class CustomSyncProvider extends RemoteSyncProvider {
-  constructor(config) {
+  constructor(config, deps = {}) {
     super();
     this.type = 'custom';
     this.endpoint = config.endpoint;
     this.method = config.method || 'POST';
     this.headers = config.headers || {};
     this.credentials = config.credentials;
+    this._fetch = deps.fetch || globalThis.fetch;
   }
 
   getProviderConfig(credentials) {
@@ -259,21 +260,33 @@ export class CustomSyncProvider extends RemoteSyncProvider {
       throw new Error('Custom sync endpoint not configured');
     }
 
-    logger(`[CustomSync] POST to ${this.endpoint}`);
+    logger(`[CustomSync] ${this.method} to ${this.endpoint}`);
 
-    // Simulated webhook call - in real implementation, use fetch
-    // const response = await fetch(this.endpoint, {
-    //   method: this.method,
-    //   headers: {
-    //     'Content-Type': 'application/json',
-    //     ...this.headers,
-    //     ...(this.credentials?.authToken ? { 'Authorization': `Bearer ${this.credentials.authToken}` } : {})
-    //   },
-    //   body: JSON.stringify({ content: intelligenceContent, timestamp: new Date().toISOString() })
-    // });
+    try {
+      const headers = {
+        'Content-Type': 'application/json',
+        ...this.headers,
+        ...(this.credentials?.authToken ? { 'Authorization': `Bearer ${this.credentials.authToken}` } : {})
+      };
 
-    logger(`[CustomSync] Push completed (simulated): ${this.endpoint}`);
-    return { success: true, endpoint: this.endpoint, provider: 'custom' };
+      const body = JSON.stringify({ content: intelligenceContent, timestamp: new Date().toISOString() });
+
+      const response = await this._fetch(this.endpoint, {
+        method: this.method,
+        headers,
+        body
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      logger(`[CustomSync] Push completed: ${this.endpoint}`);
+      return { success: true, key: this.endpoint, provider: 'custom' };
+    } catch (error) {
+      logger(`[CustomSync] Push failed: ${error.message}`);
+      return { success: false, error: error.message, key: this.endpoint, provider: 'custom' };
+    }
   }
 
   async pull() {
@@ -283,18 +296,28 @@ export class CustomSyncProvider extends RemoteSyncProvider {
 
     logger(`[CustomSync] GET from ${this.endpoint}`);
 
-    // Simulated webhook GET - in real implementation, use fetch
-    // const response = await fetch(this.endpoint, {
-    //   method: 'GET',
-    //   headers: {
-    //     ...this.headers,
-    //     ...(this.credentials?.authToken ? { 'Authorization': `Bearer ${this.credentials.authToken}` } : {})
-    //   }
-    // });
-    // const data = await response.json();
+    try {
+      const headers = {
+        ...this.headers,
+        ...(this.credentials?.authToken ? { 'Authorization': `Bearer ${this.credentials.authToken}` } : {})
+      };
 
-    logger(`[CustomSync] Pull completed (simulated): ${this.endpoint}`);
-    return { success: true, content: null, provider: 'custom' };
+      const response = await this._fetch(this.endpoint, {
+        method: 'GET',
+        headers
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const content = await response.text();
+      logger(`[CustomSync] Pull completed: ${this.endpoint}`);
+      return { success: true, content, provider: 'custom' };
+    } catch (error) {
+      logger(`[CustomSync] Pull failed: ${error.message}`);
+      return { success: false, error: error.message, provider: 'custom' };
+    }
   }
 
   async sync() {
@@ -302,7 +325,7 @@ export class CustomSyncProvider extends RemoteSyncProvider {
     const pullResult = await this.pull();
     const pushResult = await this.push('# Global Intelligence\nSynced from custom endpoint');
     return {
-      success: true,
+      success: pullResult.success && pushResult.success,
       pulled: pullResult.success,
       pushed: pushResult.success,
       provider: 'custom'
@@ -316,17 +339,22 @@ export class CustomSyncProvider extends RemoteSyncProvider {
 
     logger(`[CustomSync] Testing connection to ${this.endpoint}`);
 
-    // Simulated connection test - in real implementation, use fetch
-    // try {
-    //   const response = await fetch(this.endpoint, {
-    //     method: 'HEAD',
-    //     headers: { ...this.headers }
-    //   });
-    //   return { success: response.ok, status: response.status, provider: 'custom' };
-    // } catch (error) {
-    //   return { success: false, error: error.message };
-    // }
+    try {
+      const headers = {
+        ...this.headers,
+        ...(this.credentials?.authToken ? { 'Authorization': `Bearer ${this.credentials.authToken}` } : {})
+      };
 
-    return { success: true, provider: 'custom', endpoint: this.endpoint };
+      const response = await this._fetch(this.endpoint, {
+        method: 'HEAD',
+        headers
+      });
+
+      logger(`[CustomSync] Connection successful: ${this.endpoint}`);
+      return { success: response.ok, provider: 'custom', endpoint: this.endpoint };
+    } catch (error) {
+      logger(`[CustomSync] Connection failed: ${error.message}`);
+      return { success: false, error: error.message, provider: 'custom', endpoint: this.endpoint };
+    }
   }
 }

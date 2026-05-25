@@ -42,12 +42,6 @@ describe('Global Intelligence Module', () => {
       const result = getGlobalIntelligencePath();
       expect(result).toContain('.opencode');
     });
-    
-    it.skip('should use home directory', async () => {
-      const { getGlobalIntelligencePath } = await import('../src/utils/globalIntelligence.js');
-      const result = getGlobalIntelligencePath();
-      expect(result).toContain(os.homedir());
-    });
   });
 
   describe('initializeGlobalIntelligence()', () => {

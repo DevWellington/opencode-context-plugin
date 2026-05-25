@@ -48,6 +48,20 @@ describe('Remote Sync Module', () => {
     };
   }
 
+  function mockFetch(responseOverrides = {}) {
+    const defaultResponse = {
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      text: async () => '# Mock custom content',
+      json: async () => ({})
+    };
+    const mockResponse = { ...defaultResponse, ...responseOverrides };
+    return {
+      fetch: async (url, options) => mockResponse
+    };
+  }
+
   beforeEach(async () => {
     jest.clearAllMocks();
     jest.useFakeTimers();
@@ -286,7 +300,7 @@ describe('Remote Sync Module', () => {
       
       const provider = new CustomSyncProvider({
         endpoint: 'https://example.com/webhook'
-      });
+      }, mockFetch());
       
       const result = await provider.push('# Test content');
       
@@ -299,7 +313,7 @@ describe('Remote Sync Module', () => {
       
       const provider = new CustomSyncProvider({
         endpoint: 'https://example.com/webhook'
-      });
+      }, mockFetch());
       
       const result = await provider.pull();
       
@@ -312,7 +326,7 @@ describe('Remote Sync Module', () => {
       
       const provider = new CustomSyncProvider({
         endpoint: 'https://example.com/webhook'
-      });
+      }, mockFetch());
       
       const result = await provider.testConnection();
       
@@ -351,7 +365,7 @@ describe('Remote Sync Module', () => {
       
       const result = await configureRemoteSync('custom', {
         endpoint: 'https://example.com/webhook'
-      });
+      }, mockFetch());
       
       expect(result.success).toBe(true);
       expect(result.provider).toBe('custom');
@@ -402,7 +416,7 @@ describe('Remote Sync Module', () => {
       const result = await syncToRemote(tempDir);
       
       // Either success or error depending on config state
-      expect(result).toHaveProperty('success');
+      expect(result.success).toBe(true);
       expect(result).toHaveProperty('uploaded');
       expect(result).toHaveProperty('failed');
     });
@@ -414,7 +428,7 @@ describe('Remote Sync Module', () => {
       
       const result = await syncGlobalIntelligence();
       
-      expect(result).toHaveProperty('success');
+      expect(result.success).toBe(true);
       expect(result).toHaveProperty('uploaded');
       expect(result).toHaveProperty('failed');
     });
@@ -445,6 +459,7 @@ describe('Remote Sync Module', () => {
 
       results.forEach(result => {
         expect(result).toHaveProperty('success');
+        expect(result.success).toBe(false);
         expect(result).toHaveProperty('uploaded');
         expect(result).toHaveProperty('failed');
       });
@@ -453,7 +468,7 @@ describe('Remote Sync Module', () => {
     it('withSyncLock serializes sync operations', async () => {
       const { syncToRemote, configureRemoteSync } = await import('../src/modules/remoteSync.js');
       
-      await configureRemoteSync('custom', { endpoint: 'https://example.com/webhook' });
+      await configureRemoteSync('custom', { endpoint: 'https://example.com/webhook' }, mockFetch());
       
       const callOrder = [];
       const originalPromise = Promise.prototype.then;
@@ -525,6 +540,7 @@ describe('Remote Sync Module', () => {
       const result = await syncToRemote(tempDir);
       
       expect(result).toHaveProperty('success');
+      expect(result.success).toBe(false);
       expect(result).toHaveProperty('uploaded');
       expect(result).toHaveProperty('failed');
     });
@@ -536,7 +552,7 @@ describe('Remote Sync Module', () => {
       
       const result = await syncToRemote(tempDir);
       
-      expect(result).toHaveProperty('success');
+      expect(result.success).toBe(true);
     });
 
     it('syncToRemote handles missing global intelligence file', async () => {
@@ -546,7 +562,7 @@ describe('Remote Sync Module', () => {
       
       const result = await syncToRemote(tempDir);
       
-      expect(result).toHaveProperty('success');
+      expect(result.success).toBe(true);
       expect(result).toHaveProperty('uploaded');
     });
 
@@ -567,6 +583,7 @@ describe('Remote Sync Module', () => {
       const result = await syncToRemote(tempDir);
       
       expect(result).toHaveProperty('success');
+      expect(result.success).toBe(false);
       expect(result).toHaveProperty('errors');
     });
 
@@ -576,6 +593,7 @@ describe('Remote Sync Module', () => {
       const result = await syncGlobalIntelligence();
       
       expect(result).toHaveProperty('success');
+      expect(result.success).toBe(false);
       expect(result).toHaveProperty('uploaded');
       expect(result).toHaveProperty('failed');
     });
@@ -583,7 +601,7 @@ describe('Remote Sync Module', () => {
     it('getSyncStatus returns error history', async () => {
       const { getSyncStatus, configureRemoteSync, syncToRemote } = await import('../src/modules/syncOperations.js');
       
-      await configureRemoteSync('custom', { endpoint: 'https://example.com/webhook' }, {});
+      await configureRemoteSync('custom', { endpoint: 'https://example.com/webhook' }, mockFetch());
       
       await syncToRemote(tempDir);
       

@@ -101,16 +101,15 @@ async function postSaveActions(directory, filepath, content, type, year, month, 
     { label: 'intelligence learning', fn: () => import('../agents/generateIntelligenceLearning.js').then(m => m.updateIntelligenceLearning(directory, opencodeClient)), timeout: 60000 }
   ];
 
-  for (let i = 0; i < steps.length; i++) {
-    const step = steps[i];
-    logger(`[saveContext] [${i + 1}/${steps.length}] Generating ${step.label}...`);
-    try {
-      await withTimeout(Promise.resolve(step.fn()), step.timeout, step.label);
-      logger(`[saveContext] [${i + 1}/${steps.length}] ${step.label} ✓`);
-    } catch (error) {
-      logger(`[saveContext] [${i + 1}/${steps.length}] ${step.label} FAILED: ${error.message}`);
-    }
-  }
+  logger(`[saveContext] Starting parallel report regeneration (${steps.length} steps)...`);
+  const results = await Promise.allSettled(steps.map(step =>
+    withTimeout(Promise.resolve(step.fn()), step.timeout, step.label).then(
+      () => logger(`[saveContext] ${step.label} ✓`),
+      err => logger(`[saveContext] ${step.label} FAILED: ${err.message}`)
+    )
+  ));
+  const failed = results.filter(r => r.status === 'rejected').length;
+  logger(`[saveContext] Report regeneration: ${steps.length - failed} ok, ${failed} failed`);
 
   logger(`[context-plugin] Reports updated`);
   logger(`[Daily Summary] Updated with ${filename}`);
