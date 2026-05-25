@@ -133,7 +133,7 @@ export function truncateToBudget(content, maxChars) {
  * @param {number} contextCount - Number of contexts to distribute
  * @returns {object} - { perContext: number[], currentSession: number }
  */
-export function calculateTokenBudget(totalBudget, contextCount) {
+function calculateTokenBudget(totalBudget, contextCount) {
   const config = getConfig();
   const maxPerContext = config.injection?.maxContexts 
     ? Math.floor(totalBudget / Math.min(contextCount + 1, config.injection.maxContexts))

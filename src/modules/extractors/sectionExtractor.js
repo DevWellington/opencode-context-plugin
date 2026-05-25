@@ -2,6 +2,7 @@ import path from 'path';
 import { createDebugLogger } from '../../utils/debug.js';
 import { findRelatedSessions, formatCrossProjectLink } from '../../utils/crossProjectLinks.js';
 import { withTimeout } from '../../utils/fileUtils.js';
+import { TIMEOUT } from '../../constants.js';
 
 const logger = createDebugLogger('content-extractor');
 
@@ -237,9 +238,21 @@ export function extractSessionContent(sessionContent) {
  * 
  * @param {Object} extractedContent - Result from extractSessionContent
  * @param {string} sessionContent - Original session content
+ * @param {Object} options - Enrichment options
+ * @param {AbortSignal} options.signal - Abort signal for cancellation
  * @returns {Promise<Object>} Same object with relatedSessions populated
  */
-export async function enrichWithRelatedSessions(extractedContent, sessionContent) {
+export async function enrichWithRelatedSessions(extractedContent, sessionContent, options = {}) {
+  const { signal } = options;
+  
+  // Early return if already aborted
+  if (signal?.aborted) {
+    if (!extractedContent.relatedSessions) {
+      extractedContent.relatedSessions = [];
+    }
+    return extractedContent;
+  }
+  
   if (!extractedContent || extractedContent.relatedSessions) {
     return extractedContent;
   }
@@ -252,18 +265,17 @@ export async function enrichWithRelatedSessions(extractedContent, sessionContent
   };
 
   try {
-    // Find related sessions with 500ms timeout
-    const timeoutPromise = new Promise((_, reject) => {
-      setTimeout(() => reject(new Error('Cross-project search timeout')), 500);
-    });
-
-    const relatedPromise = findRelatedSessions(session, {
-      keyword: extractedContent.goal || '',
-      goal: extractedContent.goal || '',
-      maxResults: 3
-    });
-
-    const related = await Promise.race([relatedPromise, timeoutPromise]);
+    // Use new function signature with signal propagation
+    const related = await withTimeout(
+      ({ signal }) => findRelatedSessions(session, {
+        keyword: extractedContent.goal || '',
+        goal: extractedContent.goal || '',
+        maxResults: 3,
+        signal
+      }),
+      TIMEOUT.CROSS_PROJECT,
+      { signal, label: 'Cross-project search' }
+    );
     
     // Format cross-project links for the related sessions
     extractedContent.relatedSessions = related.map(r => ({
@@ -274,7 +286,10 @@ export async function enrichWithRelatedSessions(extractedContent, sessionContent
       link: formatCrossProjectLink(r.project, path.basename(r.session, '.md'))
     }));
   } catch (error) {
-    logger(`[enrich] Cross-project search failed: ${error.message}`);
+    // Don't log AbortError - it's intentional cancellation
+    if (error.name !== 'AbortError') {
+      logger(`[enrich] Cross-project search failed: ${error.message}`);
+    }
     // Don't fail the whole extraction - just leave relatedSessions empty
     extractedContent.relatedSessions = [];
   }

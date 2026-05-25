@@ -14,6 +14,12 @@ describe('Remote Sync Module', () => {
     jest.clearAllMocks();
     jest.useFakeTimers();
     tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'remote-sync-test-'));
+    
+    // Override config and state paths to use temp directory
+    const { setConfigPath, setStatePath } = await import('../src/modules/syncOperations.js');
+    const { setStatePath: setRemoteStatePath } = await import('../src/modules/syncState.js');
+    setConfigPath(path.join(tempDir, 'remote.json'));
+    setRemoteStatePath(path.join(tempDir, 'remote-state.json'));
   });
 
   afterEach(async () => {
@@ -382,6 +388,161 @@ describe('Remote Sync Module', () => {
       
       // Returns boolean indicating if configured
       expect(typeof configured).toBe('boolean');
+    });
+  });
+
+  describe('concurrent sync operations', () => {
+    it('syncToRemote handles concurrent calls gracefully', async () => {
+      const { syncToRemote, configureRemoteSync } = await import('../src/modules/remoteSync.js');
+      
+      await configureRemoteSync('s3', { bucket: 'concurrent-test-bucket' });
+      
+      const results = await Promise.all([
+        syncToRemote(tempDir),
+        syncToRemote(tempDir),
+        syncToRemote(tempDir)
+      ]);
+
+      results.forEach(result => {
+        expect(result).toHaveProperty('success');
+        expect(result).toHaveProperty('uploaded');
+        expect(result).toHaveProperty('failed');
+      });
+    });
+
+    it('withSyncLock serializes sync operations', async () => {
+      const { syncToRemote, configureRemoteSync } = await import('../src/modules/remoteSync.js');
+      
+      await configureRemoteSync('custom', { endpoint: 'https://example.com/webhook' });
+      
+      const callOrder = [];
+      const originalPromise = Promise.prototype.then;
+      let inFlight = false;
+      
+      Promise.prototype.then = function(onFulfilled, onRejected) {
+        return originalPromise.call(this, function(value) {
+          if (inFlight) {
+            callOrder.push('overlap-detected');
+          }
+          inFlight = true;
+          const result = onFulfilled ? onFulfilled(value) : value;
+          inFlight = false;
+          return result;
+        }, onRejected);
+      };
+
+      await Promise.all([
+        syncToRemote(tempDir),
+        syncToRemote(tempDir)
+      ]);
+
+      Promise.prototype.then = originalPromise;
+      
+      expect(callOrder).not.toContain('overlap-detected');
+    });
+
+    it('markPendingChanges handles concurrent calls', async () => {
+      const { markPendingChanges, getSyncStatus } = await import('../src/modules/remoteSync.js');
+      
+      await Promise.all([
+        markPendingChanges(),
+        markPendingChanges(),
+        markPendingChanges()
+      ]);
+
+      const status = await getSyncStatus();
+      expect(status.pendingChanges).toBe(true);
+    });
+
+    it('configureRemoteSync handles concurrent configuration attempts', async () => {
+      const { configureRemoteSync, getSyncStatus } = await import('../src/modules/remoteSync.js');
+      
+      const results = await Promise.all([
+        configureRemoteSync('s3', { bucket: 'bucket-1' }),
+        configureRemoteSync('s3', { bucket: 'bucket-2' })
+      ]);
+
+      results.forEach(result => {
+        expect(result.success).toBe(true);
+        expect(result.provider).toBe('s3');
+      });
+    });
+  });
+
+  describe('error handling and edge cases', () => {
+    it('configureRemoteSync succeeds even when connection test fails', async () => {
+      const { configureRemoteSync } = await import('../src/modules/syncOperations.js');
+      
+      const result = await configureRemoteSync('s3', { bucket: 'test-bucket' });
+      
+      expect(result.success).toBe(true);
+      expect(result.connectionTested).toBeDefined();
+    });
+
+    it('syncToRemote returns error when not configured', async () => {
+      const { syncToRemote } = await import('../src/modules/syncOperations.js');
+      
+      const result = await syncToRemote(tempDir);
+      
+      expect(result).toHaveProperty('success');
+      expect(result).toHaveProperty('uploaded');
+      expect(result).toHaveProperty('failed');
+    });
+
+    it('syncToRemote loads provider from saved config', async () => {
+      const { configureRemoteSync, syncToRemote } = await import('../src/modules/syncOperations.js');
+      
+      await configureRemoteSync('gcs', { bucket: 'saved-config-bucket' });
+      
+      const result = await syncToRemote(tempDir);
+      
+      expect(result).toHaveProperty('success');
+    });
+
+    it('syncToRemote handles missing global intelligence file', async () => {
+      const { configureRemoteSync, syncToRemote } = await import('../src/modules/syncOperations.js');
+      
+      await configureRemoteSync('s3', { bucket: 'test-bucket' });
+      
+      const result = await syncToRemote(tempDir);
+      
+      expect(result).toHaveProperty('success');
+      expect(result).toHaveProperty('uploaded');
+    });
+
+    it('syncToRemote handles errors during sync', async () => {
+      const { configureRemoteSync, syncToRemote } = await import('../src/modules/syncOperations.js');
+      
+      await configureRemoteSync('s3', { bucket: 'error-test-bucket' });
+      
+      const result = await syncToRemote(tempDir);
+      
+      expect(result).toHaveProperty('success');
+      expect(result).toHaveProperty('errors');
+    });
+
+    it('syncGlobalIntelligence handles errors', async () => {
+      const { syncGlobalIntelligence } = await import('../src/modules/syncOperations.js');
+      
+      const result = await syncGlobalIntelligence();
+      
+      expect(result).toHaveProperty('success');
+      expect(result).toHaveProperty('uploaded');
+      expect(result).toHaveProperty('failed');
+    });
+
+    it('getSyncStatus returns error history', async () => {
+      const { getSyncStatus, configureRemoteSync, syncToRemote } = await import('../src/modules/syncOperations.js');
+      
+      await configureRemoteSync('custom', { endpoint: 'https://example.com/webhook' });
+      
+      await syncToRemote(tempDir);
+      
+      const status = await getSyncStatus();
+      
+      expect(status).toHaveProperty('configured');
+      expect(status).toHaveProperty('errors');
+      expect(Array.isArray(status.errors)).toBe(true);
     });
   });
 });

@@ -4,6 +4,7 @@ import path from 'path';
 import fs from 'fs/promises';
 import { REPORT_PATHS, CONTEXT_SESSION_DIR } from './utils/linkBuilder.js';
 import { getWeek } from 'date-fns';
+import { TRUNCATE } from '../constants.js';
 
 const logger = createDebugLogger('report-extractor');
 
@@ -165,12 +166,12 @@ function extractFromReportContent(content, reportType) {
           // Split description into anti-pattern and reason if it has structure
           // e.g., "Token propagation não funciona - stats do day não propagam" -> antiPattern="Token propagation não funciona", reason="stats do day não propagam"
           const parts = bugDesc.split(' - ');
-          const cleanAntiPattern = parts[0].split(' (')[0].trim().slice(0, 50);
+          const cleanAntiPattern = parts[0].split(' (')[0].trim().slice(0, TRUNCATE.KEY);
           const hasSeparateContext = parts.length > 1 || bugDesc.includes(' (');
           const reason = hasSeparateContext ? parts.slice(1).join(' - ').replace(/\)$/, '').trim() : '';
 
           failedApproaches.push({
-            antiPattern: cleanAntiPattern || bugDesc.slice(0, 40),
+            antiPattern: cleanAntiPattern || bugDesc.slice(0, TRUNCATE.ISSUE),
             reason: reason,
             source: reportType
           });
@@ -201,7 +202,7 @@ function extractFromReportContent(content, reportType) {
 
         if (insight.length > 25 && !insight.includes('PENDENTE') && !isLowQualityPattern(insight)) {
           successfulApproaches.push({
-            pattern: insight.slice(0, 120),
+            pattern: insight.slice(0, TRUNCATE.ACCOMPLISHMENT),
             frequency: 1,
             source: reportType
           });
@@ -276,7 +277,7 @@ export function mergePatterns(reportPatterns, sessionPatterns) {
   // Deduplicate by normalized pattern
   const seen = new Map();
   for (const p of allPatterns) {
-    const key = (p.pattern || p.issue || '').toLowerCase().slice(0, 50);
+    const key = (p.pattern || p.issue || '').toLowerCase().slice(0, TRUNCATE.KEY);
     if (!key) continue;
 
     if (seen.has(key)) {

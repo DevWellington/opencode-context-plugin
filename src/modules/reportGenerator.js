@@ -140,6 +140,7 @@ async function parseSessionFile(filePath, opencodeClient = null) {
 
 /**
  * Scan for session files in date range - returns enriched session objects
+ * @public
  * @param {string} directory - Base directory to scan
  * @param {string} startDate - Start date (YYYY-MM-DD)
  * @param {string} endDate - End date (YYYY-MM-DD)
@@ -556,7 +557,7 @@ function aggregateBugsFromWeeks(weekSummaries) {
  * Generate annual content-focused report with quarterly themes
  * Reads from monthly-YYYY-MM.md files (hierarchical flow)
  * Content hierarchy: day > week > month > annual (largest to smallest)
- * 
+ * @public
  * @param {string} directory - Base directory
  * @param {number} year - Year
  * @param {Object} opencodeClient - OpenCode client for AI inference (optional)
@@ -876,7 +877,7 @@ export async function saveReport(directory, report, filename) {
 /**
  * Check if report needs regeneration
  */
-export async function needsReportGeneration(directory, reportType) {
+async function needsReportGeneration(directory, reportType) {
   const reportsDir = path.join(directory, REPORTS_DIR);
   const now = new Date();
 

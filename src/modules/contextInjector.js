@@ -14,10 +14,27 @@ function getContextDir(baseDir) {
 
 /**
  * Get all context files from context-session directory
+ *
+ * INJECTION CONTRACT: Only `exit-*` files are included for injection.
+ *
+ * **Exclusion of `compact-*` files is intentional by design:**
+ *
+ * - `exit-*` files: Complete session snapshots saved at session end. These contain
+ *   full conversation context with natural conclusions, making them ideal for
+ *   relevance scoring and injection into new sessions.
+ *
+ * - `compact-*` files: Mid-session snapshots saved during `/compact` operations.
+ *   These represent incomplete, in-progress work and may lack proper context
+ *   boundaries. Including them could inject misleading or fragmented context.
+ *
+ * This contract ensures only complete, well-formed sessions are used for
+ * context injection, improving relevance quality and reducing noise.
+ *
+ * @see GAP-04 in v1.3-QUALITY-ROADMAP
  */
 async function getAllContextFiles(baseDir) {
   const contexts = [];
-  
+
   async function scanDir(dir) {
     try {
       const entries = await fs.readdir(dir, { withFileTypes: true });
@@ -29,13 +46,15 @@ async function getAllContextFiles(baseDir) {
           contexts.push(fullPath);
         }
       }
-    } catch {
-      // Directory doesn't exist yet
+    } catch (error) {
+      if (error.code !== 'ENOENT') {
+        logger(`[injector] Failed to scan ${dir}: ${error.message}`);
+      }
     }
   }
-  
+
   await scanDir(getContextDir(baseDir));
-  return contexts.sort().reverse(); // Most recent first
+  return contexts.sort().reverse();
 }
 
 /**
@@ -142,6 +161,7 @@ export async function selectContextsInteractively(contexts) {
 /**
  * Inject contexts into current session prompt
  * Called when user triggers manual injection
+ * @public
  */
 export async function injectContextPrompt(currentSession, baseDir = process.cwd()) {
   const scoredContexts = await getRelevantContexts(currentSession, { baseDir });

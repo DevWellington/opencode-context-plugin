@@ -18,6 +18,7 @@ import { truncateToBudget } from '../modules/tokenLimit.js';
 import { shouldRegenerate } from '../modules/summaries.js';
 import { createDebugLogger } from '../utils/debug.js';
 import { extractSection } from '../utils/summaryUtils.js';
+import { TRUNCATE } from '../constants.js';
 
 const logger = createDebugLogger('context-plugin');
 
@@ -93,7 +94,7 @@ function formatMonthlyContent(year, monthStr, weekSummaries) {
     const seenGoals = new Set();
     for (const goal of allGoals) {
       const cleanGoal = goal.replace(/^[✅💡🐛🔧📝🔍📦🚪]\s*/u, '').replace(/^#+\s*/, '').trim();
-      const key = cleanGoal.slice(0, 50).toLowerCase().trim();
+      const key = cleanGoal.slice(0, TRUNCATE.KEY).toLowerCase().trim();
       if (!seenGoals.has(key) && key.length > 5) {
         seenGoals.add(key);
         content += `- ${cleanGoal}\n`;
@@ -109,7 +110,7 @@ function formatMonthlyContent(year, monthStr, weekSummaries) {
     const seenAccomplishments = new Set();
     for (const acc of allAccomplishments) {
       const cleanAcc = acc.replace(/^[✅💡🐛🔧📝🔍📦🚪]\s*/u, '').replace(/^#+\s*/, '').trim();
-      const key = cleanAcc.slice(0, 50).toLowerCase().trim();
+      const key = cleanAcc.slice(0, TRUNCATE.KEY).toLowerCase().trim();
       if (!seenAccomplishments.has(key) && key.length > 5) {
         seenAccomplishments.add(key);
         content += `- ${cleanAcc}\n`;
@@ -125,7 +126,7 @@ function formatMonthlyContent(year, monthStr, weekSummaries) {
     const seenDiscoveries = new Set();
     for (const disc of allDiscoveries) {
       const cleanDisc = disc.replace(/^[✅💡🐛🔧📝🔍📦🚪]\s*/u, '').replace(/^#+\s*/, '').trim();
-      const key = cleanDisc.slice(0, 50).toLowerCase().trim();
+      const key = cleanDisc.slice(0, TRUNCATE.KEY).toLowerCase().trim();
       if (!seenDiscoveries.has(key) && key.length > 5) {
         seenDiscoveries.add(key);
         content += `- ${cleanDisc}\n`;

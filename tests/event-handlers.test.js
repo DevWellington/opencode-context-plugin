@@ -23,6 +23,7 @@ describe('Event Handler Integration Tests', () => {
   let mockClient;
   let ContextPlugin;
   let saveContext;
+  let initLifecycle;
 
   beforeEach(async () => {
     jest.resetModules();
@@ -30,12 +31,14 @@ describe('Event Handler Integration Tests', () => {
     tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'event-handlers-test-'));
     mockClient = createMockClient();
 
-    // Get the mocked saveContext - reimport to get fresh mock
+    const lifecycle = await import('../src/handlers/lifecycle.js');
+    initLifecycle = lifecycle.init;
+    await initLifecycle();
+
     const saveContextModule = await import('../src/modules/saveContext.js');
     saveContext = saveContextModule.saveContext;
     saveContext.mockClear();
 
-    // Import ContextPlugin - it's the result of calling server()
     const module = await import('../index.js');
     const createPlugin = module.default.server;
     ContextPlugin = createPlugin;
@@ -45,6 +48,7 @@ describe('Event Handler Integration Tests', () => {
     try {
       await fs.rm(tempDir, { recursive: true });
     } catch {}
+    await initLifecycle();
   });
 
   describe('ContextPlugin instantiation', () => {
@@ -111,7 +115,16 @@ describe('Event Handler Integration Tests', () => {
       });
 
       // Event should process without throwing
-      expect(true).toBe(true);
+      await expect(plugin.event({
+        type: 'message.created',
+        properties: {
+          info: {
+            id: 'msg-1',
+            role: 'user',
+            content: 'Hello'
+          }
+        }
+      })).resolves.not.toThrow();
     });
 
     it('should not throw on duplicate messages', async () => {
@@ -144,11 +157,18 @@ describe('Event Handler Integration Tests', () => {
         }
       });
 
-      expect(true).toBe(true);
+      // Duplicate message handled gracefully - no error thrown
+      await expect(plugin.event({
+        type: 'message.created',
+        properties: {
+          info: {
+            id: 'msg-1',
+            role: 'user',
+            content: 'Updated'
+          }
+        }
+      })).resolves.not.toThrow();
     });
-  });
-
-  describe('message.updated event', () => {
     it('should update existing message', async () => {
       const plugin = ContextPlugin({
         directory: tempDir,
@@ -196,17 +216,16 @@ describe('Event Handler Integration Tests', () => {
 
       await plugin.event({ type: 'session.created', sessionId: 'test' });
 
-      await plugin.event({
+      // Multiple delta events processed without throwing
+      await expect(plugin.event({
         type: 'message.part.delta',
         properties: { messageID: 'msg-1', delta: 'Part1' }
-      });
+      })).resolves.not.toThrow();
 
-      await plugin.event({
+      await expect(plugin.event({
         type: 'message.part.delta',
         properties: { messageID: 'msg-1', delta: 'Part2' }
-      });
-
-      expect(true).toBe(true);
+      })).resolves.not.toThrow();
     });
   });
 
@@ -307,12 +326,11 @@ describe('Event Handler Integration Tests', () => {
         client: mockClient
       });
 
-      await plugin.event({
+      // Nested event parsed without throwing
+      await expect(plugin.event({
         event: { type: 'session.created' },
         sessionId: 'nested-test'
-      });
-
-      expect(true).toBe(true);
+      })).resolves.not.toThrow();
     });
 
     it('should handle event with flat type property', async () => {
@@ -321,12 +339,11 @@ describe('Event Handler Integration Tests', () => {
         client: mockClient
       });
 
-      await plugin.event({
+      // Flat event parsed without throwing
+      await expect(plugin.event({
         type: 'session.created',
         sessionId: 'flat-test'
-      });
-
-      expect(true).toBe(true);
+      })).resolves.not.toThrow();
     });
   });
 
@@ -352,6 +369,85 @@ describe('Event Handler Integration Tests', () => {
       expect(result).toEqual(messages);
     });
   });
+
+  describe('destroy()', () => {
+    it('should set isDestroyed flag to true', async () => {
+      const plugin = ContextPlugin({
+        directory: tempDir,
+        client: mockClient
+      });
+
+      expect(plugin.isDestroyed()).toBe(false);
+
+      await plugin.destroy();
+
+      expect(plugin.isDestroyed()).toBe(true);
+    });
+
+    it('should be idempotent - safe to call multiple times', async () => {
+      const plugin = ContextPlugin({
+        directory: tempDir,
+        client: mockClient
+      });
+
+      await plugin.destroy();
+      await plugin.destroy();
+      await plugin.destroy();
+
+      expect(plugin.isDestroyed()).toBe(true);
+    });
+
+    it('should prevent event processing after destroy', async () => {
+      const plugin = ContextPlugin({
+        directory: tempDir,
+        client: mockClient
+      });
+
+      await plugin.event({ type: 'session.created', sessionId: 'pre-destroy' });
+
+      await plugin.destroy();
+
+      const lastSessionId = plugin.getCurrentSessionId ? plugin.getCurrentSessionId() : null;
+      await plugin.event({ type: 'session.created', sessionId: 'post-destroy' });
+
+      expect(plugin.isDestroyed()).toBe(true);
+      const sessionIdAfter = plugin.getCurrentSessionId ? plugin.getCurrentSessionId() : null;
+      expect(sessionIdAfter).toBe(lastSessionId);
+    });
+
+    it('should return early from messages.transform after destroy', async () => {
+      const plugin = ContextPlugin({
+        directory: tempDir,
+        client: mockClient
+      });
+
+      await plugin.destroy();
+
+      const messages = [{ role: 'user', content: 'Hello' }];
+      const result = await plugin['experimental.chat.messages.transform'](messages);
+
+      expect(result).toEqual(messages);
+    });
+
+    it('should clear initialization flags', async () => {
+      const plugin = ContextPlugin({
+        directory: tempDir,
+        client: mockClient
+      });
+
+      await plugin._ensureInitialized();
+
+      expect(plugin._intelligenceInitialized).toBe(true);
+
+      await plugin.destroy();
+
+      expect(plugin._intelligenceInitialized).toBe(false);
+      expect(plugin._globalIntelligenceInitialized).toBe(false);
+      expect(plugin._remoteSyncInitialized).toBe(false);
+      expect(plugin._initPromise).toBeNull();
+      expect(plugin._config).toBeNull();
+    });
+  });
 });
 
 // Separate describe block for handleMessagePartDelta cap tests
@@ -362,6 +458,8 @@ describe('handleMessagePartDelta cap', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
     tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'delta-cap-test-'));
+    const { init } = await import('../src/handlers/lifecycle.js');
+    await init();
   });
 
   afterEach(async () => {
@@ -375,7 +473,7 @@ describe('handleMessagePartDelta cap', () => {
     const { handleMessagePartDelta } = await import('../src/handlers/messageHandlers.js');
 
     setLastSession({ messages: [{ id: 'msg-1', content: '' }] });
-    handleMessagePartDelta({
+    await handleMessagePartDelta({
       properties: { messageID: 'msg-1', delta: 'Hello world' }
     });
 
@@ -392,7 +490,7 @@ describe('handleMessagePartDelta cap', () => {
     // Accumulate past 100KB with many deltas
     const bigDelta = 'x'.repeat(5000);
     for (let i = 0; i < 25; i++) {
-      handleMessagePartDelta({
+      await handleMessagePartDelta({
         properties: { messageID: 'msg-2', delta: bigDelta }
       });
     }
@@ -409,7 +507,7 @@ describe('handleMessagePartDelta cap', () => {
     // Start with 50000 chars
     setLastSession({ messages: [{ id: 'msg-3', content: 'a'.repeat(50000) }] });
 
-    handleMessagePartDelta({
+    await handleMessagePartDelta({
       properties: { messageID: 'msg-3', delta: 'b'.repeat(1000) }
     });
 

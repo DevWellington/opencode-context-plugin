@@ -30,7 +30,10 @@ export async function getCachedContexts(baseDir) {
     const content = await fs.readFile(indexPath, 'utf-8');
     const index = JSON.parse(content);
     return index.contexts || [];
-  } catch {
+  } catch (error) {
+    if (error.code !== 'ENOENT') {
+      logger(`[context-cache] Failed to read cache index: ${error.message}`);
+    }
     return [];
   }
 }
@@ -82,8 +85,10 @@ export async function invalidateCache(baseDir) {
   try {
     await fs.unlink(indexPath);
     logger('[context-cache] Cache invalidated');
-  } catch {
-    // Index doesn't exist, nothing to invalidate
+  } catch (error) {
+    if (error.code !== 'ENOENT') {
+      logger(`[context-cache] Failed to invalidate cache: ${error.message}`);
+    }
   }
 }
 

@@ -63,7 +63,7 @@ export function hasNewSessions(existingSummary, newSessions) {
  * @param {string} sessionPath - Path to session file
  * @returns {Promise<number>} Days since last modified
  */
-export async function getSessionAge(sessionPath) {
+async function getSessionAge(sessionPath) {
   const stats = await fs.stat(sessionPath);
   const now = new Date();
   const modified = new Date(stats.mtime);
@@ -75,7 +75,7 @@ export async function getSessionAge(sessionPath) {
  * @param {string} sessionContent - Raw session file content
  * @returns {string} 'low' | 'medium' | 'high' (defaults to 'medium')
  */
-export function getSessionPriority(sessionContent) {
+function getSessionPriority(sessionContent) {
   const match = sessionContent.match(/priority:\s*["']?([a-z]+)["']?/i);
   if (!match) return 'medium';
   const value = match[1].toLowerCase();
@@ -91,7 +91,7 @@ export function getSessionPriority(sessionContent) {
  * @param {number} ageDays - Age of session in days
  * @returns {boolean}
  */
-export function shouldPruneSession(sessionContent, ageDays) {
+function shouldPruneSession(sessionContent, ageDays) {
   const config = getConfig();
   const priority = getSessionPriority(sessionContent);
   const retentionDays = {

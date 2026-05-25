@@ -414,4 +414,191 @@ Added JWT authentication using jose library
       expect(antiMatches.length).toBe(10);
     });
   });
+
+  describe('parseExistingEntries()', () => {
+    it('should parse date blocks from compact format', async () => {
+      const { parseExistingEntries } = await import('../src/agents/intelligenceDeduplicator.js');
+      const content = [
+        '### 2026-05-01 - 2 sessions',
+        '#### Session Title 1',
+        '- **Request:** First user message 1',
+        '- **Accomplished:** Did something',
+        '',
+        '#### Session Title 2',
+        '- **Request:** First user message 2',
+        '- **Accomplished:** Did something else',
+        '',
+        '## Related',
+      ].join('\n');
+      const result = parseExistingEntries(content);
+      expect(result).toHaveLength(1);
+      expect(result[0].sessions).toHaveLength(2);
+      expect(result[0].sessions[0].title).toBe('Session Title 1');
+      expect(result[0].sessions[0].firstUserMessage).toBe('First user message 1');
+    });
+
+    it('should deduplicate by title + firstUserMessage', async () => {
+      const { parseExistingEntries } = await import('../src/agents/intelligenceDeduplicator.js');
+      const content = `### 2026-05-01 - 1 sessions
+#### Duplicate Session
+- **Request:** same message
+- **Accomplished:** Did thing 1
+
+### 2026-05-02 - 1 sessions
+#### Duplicate Session
+- **Request:** same message
+- **Accomplished:** Did thing 2
+`;
+      const result = parseExistingEntries(content);
+      expect(result).toHaveLength(1);
+    });
+
+    it('should handle old format (Session N - TYPE) gracefully', async () => {
+      const { parseExistingEntries } = await import('../src/agents/intelligenceDeduplicator.js');
+      const content = [
+        '### Session 1 - EXIT',
+        '**Date:** 2026-05-01T12:00:00',
+        '**Messages:** 5',
+        '**Keywords:** test | auth',
+      ].join('\n');
+      const result = parseExistingEntries(content);
+      expect(Array.isArray(result)).toBe(true);
+      expect(result.length).toBe(1);
+      expect(result[0].id).toBe('Session 1');
+      expect(result[0].type).toBe('EXIT');
+      expect(result[0].date).toBe('2026-05-01T12:00:00');
+      expect(result[0].messages).toBe(5);
+      expect(result[0].keywords).toEqual(['test', 'auth']);
+    });
+
+    it('should parse old format with bugs field', async () => {
+      const { parseExistingEntries } = await import('../src/agents/intelligenceDeduplicator.js');
+      const content = [
+        '### Session 2 - COMPACT',
+        '**Date:** 2026-04-15T10-30-00',
+        '**Messages:** 3',
+        '**Bugs Fixed:** null pointer, memory leak',
+        '**Keywords:** bug | memory',
+      ].join('\n');
+      const result = parseExistingEntries(content);
+      expect(result).toHaveLength(1);
+      expect(result[0].bugs).toEqual(['null pointer', 'memory leak']);
+      expect(result[0].keywords).toEqual(['bug', 'memory']);
+    });
+
+    it('should handle old format with incomplete fields', async () => {
+      const { parseExistingEntries } = await import('../src/agents/intelligenceDeduplicator.js');
+      const content = [
+        '### Session 3 - EXIT',
+        '**Date:** 2026-03-20T08-00-00',
+        '**Messages:** 1',
+      ].join('\n');
+      const result = parseExistingEntries(content);
+      expect(result).toHaveLength(1);
+      expect(result[0].id).toBe('Session 3');
+      expect(result[0].type).toBe('EXIT');
+      expect(result[0].date).toBe('2026-03-20T08-00-00');
+      expect(result[0].messages).toBe(1);
+      expect(result[0].keywords).toEqual([]);
+      expect(result[0].bugs).toEqual([]);
+    });
+
+    it('should handle multiple old format blocks in sequence', async () => {
+      const { parseExistingEntries } = await import('../src/agents/intelligenceDeduplicator.js');
+      const content = [
+        '### Session 1 - EXIT',
+        '**Date:** 2026-01-10T09-00-00',
+        '**Messages:** 2',
+        '**Keywords:** alpha',
+        '',
+        '### Session 2 - COMPACT',
+        '**Date:** 2026-02-15T14-30-00',
+        '**Messages:** 4',
+        '**Keywords:** beta | gamma',
+      ].join('\n');
+      const result = parseExistingEntries(content);
+      expect(result).toHaveLength(2);
+      expect(result[0].id).toBe('Session 1');
+      expect(result[0].keywords).toEqual(['alpha']);
+      expect(result[1].id).toBe('Session 2');
+      expect(result[1].keywords).toEqual(['beta', 'gamma']);
+    });
+
+    it('should return empty array for empty content', async () => {
+      const { parseExistingEntries } = await import('../src/agents/intelligenceDeduplicator.js');
+      const result = parseExistingEntries('');
+      expect(result).toEqual([]);
+    });
+
+    it('should return empty array for content without session blocks', async () => {
+      const { parseExistingEntries } = await import('../src/agents/intelligenceDeduplicator.js');
+      const result = parseExistingEntries('Just some regular text without any session blocks');
+      expect(result).toEqual([]);
+    });
+
+    it('should parse multiple date blocks when terminated by a {{Related}} section', async () => {
+      const { parseExistingEntries } = await import('../src/agents/intelligenceDeduplicator.js');
+      const content = [
+        '### 2026-05-01 - 2 sessions',
+        '#### Session A',
+        '- **Request:** msg 1',
+        '- **Accomplished:** done',
+        '',
+        '#### Session B',
+        '- **Request:** msg 2',
+        '- **Accomplished:** done too',
+        '',
+        '### 2026-05-02 - 1 sessions',
+        '#### Session C',
+        '- **Request:** msg 3',
+        '- **Accomplished:** done three',
+        '',
+        '## Related',
+      ].join('\n');
+      const result = parseExistingEntries(content);
+      expect(result).toHaveLength(2);
+      expect(result[0].sessions).toHaveLength(2);
+      expect(result[1].sessions).toHaveLength(1);
+    });
+  });
+
+  describe('cleanOldLinks()', () => {
+    it('should remove [[reports/...]] links', async () => {
+      const { cleanOldLinks } = await import('../src/agents/intelligenceDeduplicator.js');
+      const result = cleanOldLinks('Some text [[reports/2026/05/week-summary.md]] more text');
+      expect(result).not.toContain('[[reports/');
+      expect(result).toContain('Some text');
+      expect(result).toContain('more text');
+    });
+
+    it('should remove .opencode/context-session/reports/ links', async () => {
+      const { cleanOldLinks } = await import('../src/agents/intelligenceDeduplicator.js');
+      const result = cleanOldLinks('Link [[.opencode/context-session/reports/summary.md]] here');
+      expect(result).not.toContain('[[.opencode');
+    });
+
+    it('should remove *(truncated)* markers', async () => {
+      const { cleanOldLinks } = await import('../src/agents/intelligenceDeduplicator.js');
+      const result = cleanOldLinks('Some text *(truncated)* more text');
+      expect(result).not.toContain('(truncated)');
+    });
+
+    it('should remove [truncated] markers', async () => {
+      const { cleanOldLinks } = await import('../src/agents/intelligenceDeduplicator.js');
+      const result = cleanOldLinks('Some text [truncated] more text');
+      expect(result).not.toContain('[truncated]');
+    });
+
+    it('should return empty string for null/undefined content', async () => {
+      const { cleanOldLinks } = await import('../src/agents/intelligenceDeduplicator.js');
+      expect(cleanOldLinks(null)).toBe('');
+      expect(cleanOldLinks(undefined)).toBe('');
+    });
+
+    it('should return trimmed content when no links are present', async () => {
+      const { cleanOldLinks } = await import('../src/agents/intelligenceDeduplicator.js');
+      const result = cleanOldLinks('  Just clean text  ');
+      expect(result).toBe('Just clean text');
+    });
+  });
 });

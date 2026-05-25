@@ -1,4 +1,7 @@
 import { getConfig } from '../config.js';
+import { createDebugLogger } from './debug.js';
+
+const logger = createDebugLogger('pattern-matcher');
 
 /**
  * Check if a string matches any protected pattern
@@ -37,6 +40,7 @@ export function matchesPattern(content, pattern) {
       const regex = new RegExp(pattern);
       return regex.test(content);
     } catch {
+      // Invalid regex pattern - fallback to string match (non-critical)
       return content.includes(pattern);
     }
   }
@@ -81,7 +85,7 @@ function globMatch(str, glob) {
     const regex = new RegExp('^' + regexStr + '$');
     return regex.test(str);
   } catch {
-    // Fallback to simple string match
+    // Invalid glob-to-regex conversion - fallback to string match (non-critical)
     return str.includes(glob);
   }
 }

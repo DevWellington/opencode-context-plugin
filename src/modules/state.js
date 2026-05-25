@@ -12,11 +12,28 @@ import fs from 'fs/promises';
 import path from 'path';
 import { atomicWrite } from '../utils/fileUtils.js';
 import { createDebugLogger } from '../utils/debug.js';
+import { isExpectedFsError } from '../utils/errorUtils.js';
 
 const logger = createDebugLogger('context-plugin');
 const STATE_FILE = '.opencode/context-session/.state.json';
 const STATE_VERSION = 2; // Bumped for optimistic locking
 const MAX_LOCK_RETRIES = 3;
+const fileLocks = new Map();
+
+async function withFileLock(directory, fn) {
+  if (!fileLocks.has(directory)) {
+    fileLocks.set(directory, Promise.resolve());
+  }
+  const prev = fileLocks.get(directory);
+  let nextResolve;
+  fileLocks.set(directory, new Promise(r => { nextResolve = r; }));
+  await prev;
+  try {
+    return await fn();
+  } finally {
+    nextResolve();
+  }
+}
 
 /**
  * Create default state object
@@ -44,8 +61,10 @@ export async function loadState(baseDir) {
     const state = JSON.parse(content);
     logger(`[state] Loaded state from ${statePath} (version ${state.version})`);
     return state;
-  } catch {
-    logger(`[state] No existing state, returning default`);
+  } catch (err) {
+    if (!isExpectedFsError(err)) {
+      logger(`[state] Error reading state file: ${err.message}`);
+    }
     return createDefaultState();
   }
 }
@@ -107,16 +126,18 @@ export async function getLastSummarized(baseDir, key) {
  * @param {SummarizedInfo} info - { timestamp, type, tokens, sessionsCount }
  */
 export async function setLastSummarized(baseDir, key, info) {
-  const state = await loadState(baseDir);
-  state.lastSummarized[key] = {
-    ...info,
-    timestamp: Date.now()
-  };
-  try {
-    await saveState(baseDir, state, state.version);
-  } catch (error) {
-    logger(`[state] Failed to save lastSummarized for "${key}": ${error.message}`);
-  }
+  return withFileLock(baseDir, async () => {
+    const state = await loadState(baseDir);
+    state.lastSummarized[key] = {
+      ...info,
+      timestamp: Date.now()
+    };
+    try {
+      await saveState(baseDir, state, state.version);
+    } catch (error) {
+      logger(`[state] Failed to save lastSummarized for "${key}": ${error.message}`);
+    }
+  });
 }
 
 /**
@@ -135,19 +156,21 @@ export async function getPendingQueue(baseDir) {
  * @param {PendingItem} item - { type, key, path, addedAt }
  */
 export async function addToPendingQueue(baseDir, item) {
-  const state = await loadState(baseDir);
-  const exists = state.pending.some(p => p.type === item.type && p.key === item.key);
-  if (!exists) {
-    state.pending.push({
-      ...item,
-      addedAt: Date.now()
-    });
-    try {
-      await saveState(baseDir, state, state.version);
-    } catch (error) {
-      logger(`[state] Failed to save pending queue for "${item.key}": ${error.message}`);
+  return withFileLock(baseDir, async () => {
+    const state = await loadState(baseDir);
+    const exists = state.pending.some(p => p.type === item.type && p.key === item.key);
+    if (!exists) {
+      state.pending.push({
+        ...item,
+        addedAt: Date.now()
+      });
+      try {
+        await saveState(baseDir, state, state.version);
+      } catch (error) {
+        logger(`[state] Failed to save pending queue for "${item.key}": ${error.message}`);
+      }
     }
-  }
+  });
 }
 
 /**
@@ -156,17 +179,19 @@ export async function addToPendingQueue(baseDir, item) {
  * @param {string} type - Optional: clear only items of this type
  */
 export async function clearPendingQueue(baseDir, type = null) {
-  const state = await loadState(baseDir);
-  if (type) {
-    state.pending = state.pending.filter(p => p.type !== type);
-  } else {
-    state.pending = [];
-  }
-  try {
-    await saveState(baseDir, state, state.version);
-  } catch (error) {
-    logger(`[state] Failed to clear pending queue: ${error.message}`);
-  }
+  return withFileLock(baseDir, async () => {
+    const state = await loadState(baseDir);
+    if (type) {
+      state.pending = state.pending.filter(p => p.type !== type);
+    } else {
+      state.pending = [];
+    }
+    try {
+      await saveState(baseDir, state, state.version);
+    } catch (error) {
+      logger(`[state] Failed to clear pending queue: ${error.message}`);
+    }
+  });
 }
 
 /**
@@ -176,22 +201,24 @@ export async function clearPendingQueue(baseDir, type = null) {
  * @param {SummarizedInfo} info - Summary info
  */
 export async function markSummaryComplete(baseDir, key, info) {
-  const state = await loadState(baseDir);
-  
-  // Remove from pending
-  state.pending = state.pending.filter(p => p.key !== key);
-  
-  // Update lastSummarized
-  state.lastSummarized[key] = {
-    ...info,
-    timestamp: Date.now()
-  };
-  
-  try {
-    await saveState(baseDir, state, state.version);
-  } catch (error) {
-    logger(`[state] Failed to mark summary "${key}" complete: ${error.message}`);
-  }
+  return withFileLock(baseDir, async () => {
+    const state = await loadState(baseDir);
+    
+    // Remove from pending
+    state.pending = state.pending.filter(p => p.key !== key);
+    
+    // Update lastSummarized
+    state.lastSummarized[key] = {
+      ...info,
+      timestamp: Date.now()
+    };
+    
+    try {
+      await saveState(baseDir, state, state.version);
+    } catch (error) {
+      logger(`[state] Failed to mark summary "${key}" complete: ${error.message}`);
+    }
+  });
 }
 
 /**
@@ -201,7 +228,7 @@ export async function markSummaryComplete(baseDir, key, info) {
  * @param {number} sessionTimestamp - Timestamp of new session to add
  * @returns {Promise<boolean>} - true if needs regeneration
  */
-export async function needsRegeneration(baseDir, key, sessionTimestamp) {
+async function needsRegeneration(baseDir, key, sessionTimestamp) {
   const last = await getLastSummarized(baseDir, key);
   
   // No previous summary - needs regeneration
@@ -213,7 +240,4 @@ export async function needsRegeneration(baseDir, key, sessionTimestamp) {
   return false;
 }
 
-/**
- * Export state version for compatibility checks
- */
-export { STATE_VERSION };
+// STATE_VERSION kept as internal constant for optimistic locking

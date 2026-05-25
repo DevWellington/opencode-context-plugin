@@ -3,6 +3,7 @@
 import fs from "fs/promises";
 import path from "path";
 import { fileURLToPath } from "url";
+import { getHomeDir } from '../utils/homeDir.js';
 import { 
   generateProjectTemplate, 
   initializeFromTemplate, 
@@ -96,7 +97,7 @@ async function generateCommand(args) {
     
     // If no output path specified, use home templates dir
     if (!outputPath) {
-      outputPath = path.join(process.env.HOME || '', '.opencode', 'templates', `${templateName}.json`);
+      outputPath = path.join(getHomeDir(), '.opencode', 'templates', `${templateName}.json`);
     }
     
     // Ensure directory exists

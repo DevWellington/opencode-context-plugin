@@ -15,8 +15,9 @@ import { findRelatedSessions, resolveCrossProjectLink, parseCrossProjectLink, fo
 import { extractSessionContent } from '../modules/contentExtractor.js';
 import fs from 'fs/promises';
 import path from 'path';
+import { getHomeDir } from '../utils/homeDir.js';
 
-const GLOBAL_INTEL_PATH = path.join(process.env.HOME || '/root', '.opencode', 'global-intelligence.md');
+const GLOBAL_INTEL_PATH = path.join(getHomeDir(), '.opencode', 'global-intelligence.md');
 
 /**
  * Parse global intelligence to find project paths

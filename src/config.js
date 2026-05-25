@@ -1,7 +1,8 @@
 import fs from "fs/promises";
 import path from "path";
+import { getHomeDir } from './utils/homeDir.js';
 
-const LOG_FILE = path.join(process.env.HOME || '', '.opencode-context-plugin.log');
+const LOG_FILE = path.join(getHomeDir(), '.opencode-context-plugin.log');
 const CONTEXT_SESSION_DIR = '.opencode/context-session';
 
 // Default configuration
@@ -72,6 +73,19 @@ export const defaultConfig = {
 
 // Internal config storage
 let currentConfig = { ...defaultConfig };
+let configLock = Promise.resolve();
+
+async function withConfigLock(fn) {
+  const prev = configLock;
+  let nextResolve;
+  configLock = new Promise(r => { nextResolve = r; });
+  await prev;
+  try {
+    return await fn();
+  } finally {
+    nextResolve();
+  }
+}
 
 function isPlainObject(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -97,49 +111,61 @@ function deepMerge(base, override) {
  * Load configuration from context-plugin.json in the project directory
  * NOT from opencode.json (which is reserved for OpenCode's own config)
  * Merges with defaults and handles missing file gracefully
+ * @public
  */
 export async function loadConfig(directory) {
-  const configPath = path.join(directory, 'context-plugin.json');
+  return withConfigLock(async () => {
+    const configPath = path.join(directory, 'context-plugin.json');
 
-  try {
-    const content = await fs.readFile(configPath, 'utf-8');
-    const userConfig = JSON.parse(content);
+    try {
+      const content = await fs.readFile(configPath, 'utf-8');
+      const userConfig = JSON.parse(content);
 
-    // Support both formats:
-    // 1. Flat: { "maxContexts": 5, ... }
-    // 2. Nested: { "contextPlugin": { "maxContexts": 5, ... } }
-    let pluginConfig = userConfig;
-    if (userConfig.contextPlugin && typeof userConfig.contextPlugin === 'object') {
-      pluginConfig = userConfig.contextPlugin;
+      // Support both formats:
+      // 1. Flat: { "maxContexts": 5, ... }
+      // 2. Nested: { "contextPlugin": { "maxContexts": 5, ... } }
+      let pluginConfig = userConfig;
+      if (userConfig.contextPlugin && typeof userConfig.contextPlugin === 'object') {
+        pluginConfig = userConfig.contextPlugin;
+      }
+
+      // Merge with defaults
+      currentConfig = deepMerge(defaultConfig, pluginConfig);
+      
+      // Debug log configuration loading
+      try {
+        const timestamp = new Date().toISOString();
+        await fs.appendFile(LOG_FILE, `[${timestamp}] [config] Configuration loaded from ${configPath}\n`).catch(() => {
+          // Fire-and-forget: debug log write failed (non-critical)
+        });
+      } catch {
+        // Fire-and-forget: debug log write failed (non-critical)
+      }
+
+      return currentConfig;
+    } catch (error) {
+      // File doesn't exist - use defaults
+      try {
+        const timestamp = new Date().toISOString();
+        await fs.appendFile(LOG_FILE, `[${timestamp}] [config] Using default configuration (no context-plugin.json found)\n`).catch(() => {
+          // Fire-and-forget: debug log write failed (non-critical)
+        });
+      } catch {
+        // Fire-and-forget: debug log write failed (non-critical)
+      }
+      
+      currentConfig = { ...defaultConfig };
+      return currentConfig;
     }
-
-    // Merge with defaults
-    currentConfig = deepMerge(defaultConfig, pluginConfig);
-    
-    // Debug log configuration loading
-    try {
-      const timestamp = new Date().toISOString();
-      await fs.appendFile(LOG_FILE, `[${timestamp}] [config] Configuration loaded from ${configPath}\n`).catch(() => {});
-    } catch {}
-
-    return currentConfig;
-  } catch (error) {
-    // File doesn't exist - use defaults
-    try {
-      const timestamp = new Date().toISOString();
-      await fs.appendFile(LOG_FILE, `[${timestamp}] [config] Using default configuration (no context-plugin.json found)\n`).catch(() => {});
-    } catch {}
-    
-    currentConfig = { ...defaultConfig };
-    return currentConfig;
-  }
+  });
 }
 
 /**
  * Get the current configuration
+ * @public
  */
 export function getConfig() {
-  return { ...currentConfig };
+  return JSON.parse(JSON.stringify(currentConfig));
 }
 
 /**

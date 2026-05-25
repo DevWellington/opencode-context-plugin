@@ -8,7 +8,12 @@ import fs from 'fs/promises';
 import path from 'path';
 import matter from 'gray-matter';
 import { CONTEXT_SESSION_DIR } from '../config.js';
+import { createDebugLogger } from '../utils/debug.js';
+import { isExpectedFsError } from '../utils/errorUtils.js';
+
 const INDEX_DIR = '.opencode/context-session/.index';
+
+const logger = createDebugLogger('search-indexer');
 
 /**
  * Extract text content from context file
@@ -84,7 +89,7 @@ export async function buildSearchIndex(directory = process.cwd()) {
           snippet: text.slice(0, 500) // First 500 chars for preview
         });
       } catch (err) {
-        // Skip problematic files
+        logger(`[searchIndexer] Failed to process session file: ${err.message}`);
       }
     }
 
@@ -121,8 +126,10 @@ async function scanDirectory(dir) {
         }
       }
     }
-  } catch {
-    // Directory doesn't exist
+  } catch (error) {
+    if (!isExpectedFsError(error)) {
+      logger(`[searchIndexer] Failed to scan directory ${dir}: ${error.message}`);
+    }
   }
 
   return results;
@@ -137,7 +144,10 @@ export async function loadSearchIndex(directory = process.cwd()) {
   try {
     const content = await fs.readFile(indexFile, 'utf-8');
     return JSON.parse(content);
-  } catch {
+  } catch (error) {
+    if (!isExpectedFsError(error)) {
+      logger(`[searchIndexer] Failed to load search index: ${error.message}`);
+    }
     return null;
   }
 }
@@ -155,7 +165,8 @@ export async function searchSessions(directory, query, options = {}) {
     // Try to build index
     try {
       index = await buildSearchIndex(directory);
-    } catch {
+    } catch (error) {
+      logger(`[searchIndexer] Failed to build search index: ${error.message}`);
       return [];
     }
   }
@@ -252,6 +263,7 @@ export async function getIndexStats(directory = process.cwd()) {
 /**
  * Update search index with a new or modified session file
  * This is called by saveContext.js when a new session is saved
+ * @public
  */
 export async function updateSearchIndex(directory, sessionFilePath) {
   const indexFile = path.join(directory, INDEX_DIR, 'search-index.json');
@@ -273,8 +285,10 @@ export async function updateSearchIndex(directory, sessionFilePath) {
     // Check if file exists
     try {
       await fs.access(absPath);
-    } catch {
-      // File doesn't exist, skip update
+    } catch (err) {
+      if (!isExpectedFsError(err)) {
+        logger(`[searchIndexer] Session file not accessible: ${err.message}`);
+      }
       return index;
     }
 
@@ -321,7 +335,7 @@ export async function updateSearchIndex(directory, sessionFilePath) {
 
     return index;
   } catch (error) {
-    // If update fails, return null (caller should handle gracefully)
+    logger(`[searchIndexer] Failed to update search index: ${error.message}`);
     return null;
   }
 }

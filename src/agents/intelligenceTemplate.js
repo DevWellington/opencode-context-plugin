@@ -1,6 +1,6 @@
 import { getWeek } from 'date-fns';
 import { findPatterns } from '../modules/contentExtractor.js';
-import { cleanOldLinks, stripFieldHeader } from './intelligenceDeduplicator.js';
+import { cleanOldLinks, stripFieldHeader } from './intelligence/sanitizer.js';
 
 export const REFERENCE_SCHEMA = {
   projectState: {
@@ -31,13 +31,11 @@ export function generateReferenceContent(patternData) {
   if (patternData.knownIssues && patternData.knownIssues.length > 0) {
     for (const issue of patternData.knownIssues.slice(0, 10)) {
       let loc = issue.location || '';
-      // Sanitize location - filter out architectural session titles
       const locLower = loc.toLowerCase();
       if (/\b(arquitetura de summaries invertida|arquitetura de|inverted architecture)\b/.test(locLower)) {
         loc = '';
       }
       const locStr = loc ? ` (${loc.replace(/\n/g, ' ')})` : '';
-      // Escape newlines to prevent broken bullets
       const title = (issue.title || issue.description || '').replace(/\n/g, ' ');
       lines.push(`- ${title}${locStr}`);
     }
@@ -50,7 +48,6 @@ export function generateReferenceContent(patternData) {
     for (const approach of patternData.successfulApproaches.slice(0, 10)) {
       const freq = approach.frequency ? ` (seen ${approach.frequency} times)` : '';
       const loc = approach.location ? ` (${approach.location.replace(/\n/g, ' ')})` : '';
-      // Escape newlines in pattern to prevent broken bullets
       const pattern = (approach.pattern || '').replace(/\n/g, ' ');
       lines.push(`- ${pattern}${freq}${loc}`);
     }
@@ -62,7 +59,6 @@ export function generateReferenceContent(patternData) {
   if (patternData.failedApproaches && patternData.failedApproaches.length > 0) {
     for (const approach of patternData.failedApproaches.slice(0, 10)) {
       const loc = approach.location ? ` (${approach.location.replace(/\n/g, ' ')})` : '';
-      // Escape newlines to prevent broken bullets
       const antiPattern = (approach.antiPattern || '').replace(/\n/g, ' ');
       const reason = (approach.reason || '').replace(/\n/g, ' ');
       const hasBecauseInAnti = antiPattern.includes(' because');
@@ -78,10 +74,8 @@ export function generateReferenceContent(patternData) {
   lines.push('');
   lines.push('## Recent Patterns');
   if (patternData.recentPatterns && patternData.recentPatterns.length > 0) {
-    // Group patterns by concrete context (file/module) not just generic theme
     const patternGroups = new Map();
     for (const pattern of patternData.recentPatterns) {
-      // Extract concrete context from pattern name - look for file-like or module-like parts
       const words = pattern.name.split(/[\s\-_:]+/);
       const concreteParts = words.filter(w =>
         w.length > 3 &&
@@ -104,10 +98,8 @@ export function generateReferenceContent(patternData) {
       group.totalFrequency += pattern.frequency;
     }
 
-    // Output grouped patterns with concrete context
     for (const [ctx, group] of patternGroups) {
       const uniqueNames = [...new Set(group.names)].slice(0, 3);
-      // Escape newlines in pattern names to prevent broken bullets
       const nameStr = uniqueNames.length > 1
         ? uniqueNames.map(n => n.replace(/\n/g, ' ').slice(0, 25)).join(', ')
         : (uniqueNames[0] || ctx).replace(/\n/g, ' ');

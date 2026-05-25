@@ -221,7 +221,7 @@ Fix memory leak
 
       // Since it's debounced, nothing happens until timer fires
       // But the function call itself should not throw
-      expect(true).toBe(true);
+      expect(() => summaries.updateWeekSummary(tempDir, '2026', '04', 'W17')).not.toThrow();
     });
   });
 

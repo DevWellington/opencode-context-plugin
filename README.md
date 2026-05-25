@@ -69,6 +69,38 @@ Ao executar `npm install`, você verá:
 
 Após isso, a pasta `.opencode` aparecerá no explorador de arquivos do Obsidian! Isso é necessário apenas **uma vez** - depois funciona em todas as vaults.
 
+## Injection Contract
+
+The context injector uses a specific contract for selecting sessions to inject:
+
+**Only `exit-*` files are injected. `compact-*` files are excluded by design.**
+
+| File Type | Purpose | Injected? | Reason |
+|-----------|---------|-----------|--------|
+| `exit-*` | Complete session snapshots (saved at session end) | Yes | Full conversation context with natural conclusions |
+| `compact-*` | Mid-session snapshots (saved during `/compact`) | No | Incomplete, in-progress work lacking proper context boundaries |
+
+This ensures only complete, well-formed sessions are used for context injection, improving relevance quality and reducing noise.
+
+## Lifecycle Contract
+
+### Initialization
+- `init()` loads configuration and registers event handlers
+- State is initialized to baseline (no active session)
+
+### Runtime
+- Event handlers process `session.created`, `message.*`, `session.end`, `session.idle`
+- All operations respect `isDestroyed` flag
+
+### Shutdown
+- `destroy()` must be called for cleanup
+- Guarantees:
+  - State reset to baseline
+  - Timers/intervals cleared
+  - Late events ignored
+  - Idempotent (safe to call multiple times)
+- Background operations: Complete within 5 seconds after destroy or abort
+
 ## Estrutura de Arquivos
 
 ```
@@ -230,6 +262,102 @@ opencode-context-plugin/
     ├── modules/          # Módulos do plugin
     └── cli/              # Comandos CLI
 ```
+
+## Public API
+
+The following exports are marked `@public` and designed for external use:
+
+### Core Operations
+
+```javascript
+import { saveContext, getRelevantContexts, injectContextPrompt } from '@devwellington/opencode-context-plugin';
+
+// Save session context to file
+saveContext(directory, session, type = 'compact', opencodeClient = null);
+
+// Get relevant contexts for injection
+getRelevantContexts(currentSession, options = {});
+
+// Inject context into prompt
+injectContextPrompt(currentSession, baseDir = process.cwd());
+```
+
+### Configuration
+
+```javascript
+import { loadConfig, getConfig } from '@devwellington/opencode-context-plugin';
+
+// Load plugin configuration from directory
+loadConfig(directory);
+
+// Get current configuration object
+getConfig();
+```
+
+### Search Operations
+
+```javascript
+import { buildSearchIndex, searchSessions, updateSearchIndex } from '@devwellington/opencode-context-plugin';
+
+// Build full-text search index
+buildSearchIndex(directory = process.cwd());
+
+// Search sessions by query
+searchSessions(directory, query, options = {});
+
+// Update search index with new session
+updateSearchIndex(directory, sessionFilePath);
+```
+
+### Report Generation
+
+```javascript
+import { generateWeeklyReport, generateMonthlyReport, generateAnnualReport } from '@devwellington/opencode-context-plugin';
+
+// Generate weekly summary report
+generateWeeklyReport(directory, weekStart, opencodeClient = null);
+
+// Generate monthly summary report
+generateMonthlyReport(directory, monthYear, opencodeClient = null);
+
+// Generate annual summary report
+generateAnnualReport(directory, year, opencodeClient = null);
+
+// Scan sessions in date range
+scanSessionsInRange(directory, startDate, endDate, opencodeClient = null);
+```
+
+### Remote Sync
+
+```javascript
+import { syncToRemote, getSyncStatus, initializeRemoteSync } from '@devwellington/opencode-context-plugin';
+
+// Sync data to remote storage
+syncToRemote(directory);
+
+// Get sync status
+getSyncStatus();
+
+// Initialize remote sync
+initializeRemoteSync();
+```
+
+### Agent System
+
+```javascript
+import { showHelp, generateTodaySummary, readTodaySummary } from '@devwellington/opencode-context-plugin';
+
+// Show agent help
+showHelp(agentName = null);
+
+// Generate today's summary
+generateTodaySummary(directory);
+
+// Read today's summary
+readTodaySummary(directory, options = { summary: true });
+```
+
+All public exports are documented with `@public` annotation in source code.
 
 ## Changelog
 

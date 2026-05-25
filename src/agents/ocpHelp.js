@@ -116,6 +116,7 @@ const PLUGIN_FUNCTIONALITIES = [
   }
 ];
 
+/** @public */
 export function showHelp(agentName = null) {
   if (agentName) {
     const help = AGENT_HELP[agentName] ||

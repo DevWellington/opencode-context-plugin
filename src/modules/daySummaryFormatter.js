@@ -157,6 +157,252 @@ export function extractKeyDecisions(sessionsData) {
 }
 
 /**
+ * Generates frontmatter and session overview stats
+ * @param {string} dateStr - Date string (YYYY-MM-DD)
+ * @param {number} totalSessions - Total session count
+ * @param {number} compactCount - Number of compact sessions
+ * @param {number} exitCount - Number of exit sessions
+ * @returns {string} Formatted frontmatter content
+ */
+function formatFrontmatter(dateStr, totalSessions, compactCount, exitCount) {
+  let content = `---
+title: Day Summary - ${dateStr}
+date: ${dateStr}
+---
+
+`;
+  content += `# Day Summary\n\n`;
+  content += `**Date:** ${dateStr}\n\n`;
+  content += `**Sessions:** ${totalSessions} (Compacts: ${compactCount}, Exits: ${exitCount})\n\n`;
+  return content;
+}
+
+/**
+ * Generates token statistics section from session data
+ * @param {Array} sessionsData - Array of session data
+ * @returns {string} Formatted token statistics content
+ */
+function formatSessionStats(sessionsData) {
+  if (sessionsData.length === 0) return '';
+
+  let totalTokens = 0;
+  let userTokens = 0;
+  let assistantTokens = 0;
+  let systemTokens = 0;
+
+  for (const session of sessionsData) {
+    const messages = parseSessionToMessages(session.content);
+    const sessionTokens = countSessionTokens(messages);
+    totalTokens += sessionTokens.total;
+    userTokens += sessionTokens.byRole.user;
+    assistantTokens += sessionTokens.byRole.assistant;
+    systemTokens += sessionTokens.byRole.system;
+  }
+
+  let content = `### Session Statistics\n\n`;
+  content += `- **Total tokens:** ${totalTokens}\n`;
+  content += `- **User tokens:** ${userTokens} | **Assistant tokens:** ${assistantTokens} | **System tokens:** ${systemTokens}\n\n`;
+  return content;
+}
+
+/**
+ * Generates Goals section content from unique goals list
+ * @param {Array} uniqueGoals - Deduplicated goals array
+ * @returns {string} Formatted goals section
+ */
+function formatGoalsSection(uniqueGoals) {
+  if (uniqueGoals.length === 0) return '';
+
+  let content = `## Goals\n\n`;
+  for (const goal of uniqueGoals) {
+    content += `- ${goal.text}\n`;
+  }
+  content += '\n';
+  return content;
+}
+
+/**
+ * Generates Accomplishments section content from unique accomplishments
+ * @param {Array} uniqueAccomplishments - Deduplicated accomplishments array
+ * @returns {string} Formatted accomplishments section
+ */
+function formatAccomplishmentsSection(uniqueAccomplishments) {
+  if (uniqueAccomplishments.length === 0) return '';
+
+  let content = `## Accomplishments\n\n`;
+  for (const acc of uniqueAccomplishments) {
+    const lines = acc.text.split('\n').filter(l => l.trim());
+    for (const line of lines) {
+      let cleanLine = line.replace(/^[-*]\s*/, '').trim();
+      cleanLine = cleanLine.replace(/^[✅💡🐛🔧📝🔍📦🚪]\s*/u, '');
+      if (cleanLine.length > 0) {
+        content += `- ${cleanLine}\n`;
+      }
+    }
+  }
+  content += '\n';
+  return content;
+}
+
+/**
+ * Generates Discoveries section content grouped by type
+ * @param {Array} uniqueDiscoveries - Deduplicated discoveries array
+ * @returns {string} Formatted discoveries section
+ */
+function formatDiscoveriesSection(uniqueDiscoveries) {
+  if (uniqueDiscoveries.length === 0) return '';
+
+  const groupedDiscoveries = groupDiscoveriesByType(uniqueDiscoveries);
+  let content = `## Discoveries\n\n`;
+  for (const [type, items] of Object.entries(groupedDiscoveries)) {
+    if (items.length > 0) {
+      content += `### ${type}\n`;
+      for (const disc of items) {
+        let cleanText = disc.text.replace(/^[-*]\s*/, '').trim();
+        cleanText = cleanText.replace(/^[✅💡🐛🔧📝🔍📦🚪]\s*/u, '');
+        if (cleanText.length > 0) {
+          content += `- ${cleanText}\n`;
+        }
+      }
+      content += '\n';
+    }
+  }
+  return content;
+}
+
+/**
+ * Generates Bugs Fixed section content
+ * @param {Array} bugs - Array of bug objects with symptom, solution, cause
+ * @returns {string} Formatted bugs section
+ */
+function formatBugsSection(bugs) {
+  if (bugs.length === 0) return '';
+
+  let content = `## Bugs Fixed\n\n`;
+  for (const bug of bugs) {
+    content += `- **${bug.symptom}:** ${bug.solution}\n`;
+    if (bug.cause) {
+      content += `  - Cause: ${bug.cause}\n`;
+    }
+  }
+  content += '\n';
+  return content;
+}
+
+/**
+ * Generates Relevant Files section content grouped by project
+ * @param {Set} relevantFiles - Set of file paths
+ * @returns {string} Formatted files section
+ */
+function formatFilesSection(relevantFiles) {
+  if (relevantFiles.size === 0) return '';
+
+  const groupedFiles = groupFilesByProject(relevantFiles);
+  let content = `## Relevant Files\n\n`;
+  for (const [project, files] of Object.entries(groupedFiles)) {
+    content += `### ${project}\n`;
+    for (const file of files) {
+      content += `- ${file}\n`;
+    }
+    content += '\n';
+  }
+  return content;
+}
+
+/**
+ * Generates Key Decisions section from session data
+ * @param {Array} sessionsData - Array of session data
+ * @returns {string} Formatted key decisions section
+ */
+function formatKeyDecisionsSection(sessionsData) {
+  const keyDecisions = extractKeyDecisions(sessionsData);
+  if (keyDecisions.length === 0) return '';
+
+  let content = `## Key Decisions\n\n`;
+  for (const decision of keyDecisions) {
+    content += `- ${decision}\n`;
+  }
+  content += '\n';
+  return content;
+}
+
+/**
+ * Generates Trend Note section when session volume warrants it
+ * @param {Array} sessionsData - Array of session data
+ * @param {Array} uniqueGoals - Deduplicated goals array
+ * @param {Array} uniqueAccomplishments - Deduplicated accomplishments array
+ * @returns {string} Formatted trend note section
+ */
+function formatTrendNote(sessionsData, uniqueGoals, uniqueAccomplishments) {
+  if (sessionsData.length < 3) return '';
+
+  const hasIncreasingGoals = uniqueGoals.length >= sessionsData.length * 0.5;
+  const hasGoodQuality = uniqueAccomplishments.length >= sessionsData.length * 0.5;
+  if (!hasIncreasingGoals && !hasGoodQuality) return '';
+
+  let content = `## Trend Note\n\n`;
+  if (hasIncreasingGoals) {
+    content += `- **Goal-setting trend:** This session shows active goal-setting behavior\n`;
+  }
+  if (hasGoodQuality) {
+    content += `- **Productivity trend:** Good balance of accomplishments recorded\n`;
+  }
+  content += '\n';
+  return content;
+}
+
+/**
+ * Generates Keywords (Obsidian) section with wiki-links
+ * @param {string} allContent - Concatenated session content for keyword extraction
+ * @param {number} year - Year
+ * @param {string} month - Month (zero-padded)
+ * @param {string} week - Week folder (e.g. 'W12')
+ * @returns {string} Formatted keywords section
+ */
+function formatKeywordsSection(allContent, year, month, week) {
+  if (!allContent || !year || !month || !week) return '';
+
+  const contentKeywords = extractKeywordsFromContent(allContent, 15).filter(k =>
+    !['summary', 'summaries', 'sessions', 'total', 'date', 'week', 'month', 'year',
+      'context', 'report', 'reports', 'daily', 'weekly', 'monthly', 'annual', 'intelligence',
+      'compact', 'exit', 'file', 'files', 'day', 'days', 'related', 'navigation',
+      'keywords', 'obsidian', 'created', 'title', 'generated', 'section',
+      'messages', 'user', 'assistant', 'content', 'session', 'sessions'].includes(k.toLowerCase())
+  );
+
+  let content = '';
+  if (contentKeywords.length > 0) {
+    const config = getConfig();
+    const keywords = buildKeywords({
+      projectName: config.projectName || 'opencode-context-plugin',
+      module: 'daySummary',
+      keywords: contentKeywords
+    });
+    content += `## Keywords (Obsidian)\n\n`;
+    content += `${keywords}\n\n`;
+  }
+  return content;
+}
+
+/**
+ * Generates navigation-related sections (Related links and Navigation)
+ * @param {number} year - Year
+ * @param {string} month - Month (zero-padded)
+ * @param {string} week - Week folder (e.g. 'W12')
+ * @returns {string} Formatted navigation sections
+ */
+function formatNavigationSection(year, month, week) {
+  let content = '';
+  content += addRelatedLinks([
+    `${CONTEXT_SESSION_DIR}/intelligence-learning.md`,
+    `${CONTEXT_SESSION_DIR}/${year}/${month}/${week}/week-summary.md`,
+    `${CONTEXT_SESSION_DIR}/${year}/${month}/monthly-${year}-${month}.md`
+  ]);
+  content += addKeywordNavigation({ type: 'daily', year, month, week });
+  return content;
+}
+
+/**
  * Format day content with structured sections
  * @param {string} dateStr - Date string (YYYY-MM-DD)
  * @param {Array} sessionsData - Array from readDaySessions
@@ -166,8 +412,7 @@ export function extractKeyDecisions(sessionsData) {
  * @param {string} allContent - Optional concatenated content for keyword extraction
  * @returns {string} Formatted day summary content
  */
-export function formatDayContent(dateStr, sessionsData, year, month, week, allContent = '') {
-  // Collect goals, accomplishments, discoveries, bugs, files
+function collectSessionData(sessionsData) {
   const goals = [];
   const accomplishments = [];
   const discoveries = [];
@@ -175,7 +420,6 @@ export function formatDayContent(dateStr, sessionsData, year, month, week, allCo
   const relevantFiles = new Set();
 
   for (const session of sessionsData) {
-    // Filter protected content (mode: 'content')
     if (session.extracted.goal && session.extracted.goal.length > 5) {
       if (!isProtectedContent(session.extracted.goal)) {
         goals.push({ text: session.extracted.goal, source: session.filename });
@@ -191,10 +435,8 @@ export function formatDayContent(dateStr, sessionsData, year, month, week, allCo
         discoveries.push({ text: session.extracted.discoveries, source: session.filename });
       }
     }
-    // Bugs are checked for solution before adding, but also filter protected
     for (const bug of session.bugs) {
       if (bug.solution) {
-        // Check if bug symptom or solution is protected
         const isBugProtected = isProtectedContent(bug.symptom) ||
                                (bug.solution && isProtectedContent(bug.solution));
         if (!isBugProtected) {
@@ -202,7 +444,6 @@ export function formatDayContent(dateStr, sessionsData, year, month, week, allCo
         }
       }
     }
-    // Relevant files - check each file path
     for (const file of session.extracted.relevantFiles || []) {
       if (file && !isProtectedContent(file)) {
         relevantFiles.add(file);
@@ -210,196 +451,41 @@ export function formatDayContent(dateStr, sessionsData, year, month, week, allCo
     }
   }
 
-  // Deduplicate by first 50 chars
-  const seenGoals = new Set();
-  const uniqueGoals = goals.filter(g => {
-    const key = g.text.slice(0, 50).toLowerCase().trim();
-    if (seenGoals.has(key) || key.length < 5) return false;
-    seenGoals.add(key);
+  return { goals, accomplishments, discoveries, bugs, relevantFiles };
+}
+
+function dedupeByPrefix(items, minKeyLength = 5, keyLength = 50) {
+  const seen = new Set();
+  return items.filter(item => {
+    const key = item.text.slice(0, keyLength).toLowerCase().trim();
+    if (seen.has(key) || key.length < minKeyLength) return false;
+    seen.add(key);
     return true;
   });
+}
 
-  const seenAccomplishments = new Set();
-  const uniqueAccomplishments = accomplishments.filter(a => {
-    const key = a.text.slice(0, 50).toLowerCase().trim();
-    if (seenAccomplishments.has(key) || key.length < 5) return false;
-    seenAccomplishments.add(key);
-    return true;
-  });
+export function formatDayContent(dateStr, sessionsData, year, month, week, allContent = '') {
+  const { goals, accomplishments, discoveries, bugs, relevantFiles } = collectSessionData(sessionsData);
 
-  const seenDiscoveries = new Set();
-  const uniqueDiscoveries = discoveries.filter(d => {
-    const key = d.text.slice(0, 50).toLowerCase().trim();
-    if (seenDiscoveries.has(key) || key.length < 5) return false;
-    seenDiscoveries.add(key);
-    return true;
-  });
+  const uniqueGoals = dedupeByPrefix(goals);
+  const uniqueAccomplishments = dedupeByPrefix(accomplishments);
+  const uniqueDiscoveries = dedupeByPrefix(discoveries);
 
-  // Build content with frontmatter
-  let content = `---
-title: Day Summary - ${dateStr}
-date: ${dateStr}
----
-
-`;
-  content += `# Day Summary\n\n`;
-  content += `**Date:** ${dateStr}\n\n`;
-
-  // Sessions overview
   const compactCount = sessionsData.filter(s => s.filename.startsWith('compact-')).length;
   const exitCount = sessionsData.filter(s => s.filename.startsWith('exit-')).length;
-  content += `**Sessions:** ${sessionsData.length} (Compacts: ${compactCount}, Exits: ${exitCount})\n\n`;
 
-  // Calculate token statistics for all sessions
-  let totalTokens = 0;
-  let userTokens = 0;
-  let assistantTokens = 0;
-  let systemTokens = 0;
-
-  for (const session of sessionsData) {
-    const messages = parseSessionToMessages(session.content);
-    const sessionTokens = countSessionTokens(messages);
-    totalTokens += sessionTokens.total;
-    userTokens += sessionTokens.byRole.user;
-    assistantTokens += sessionTokens.byRole.assistant;
-    systemTokens += sessionTokens.byRole.system;
-  }
-
-  // Token Statistics section
-  if (sessionsData.length > 0) {
-    content += `### Session Statistics\n\n`;
-    content += `- **Total tokens:** ${totalTokens}\n`;
-    content += `- **User tokens:** ${userTokens} | **Assistant tokens:** ${assistantTokens} | **System tokens:** ${systemTokens}\n\n`;
-  }
-
-  // Goals section
-  if (uniqueGoals.length > 0) {
-    content += `## Goals\n\n`;
-    for (const goal of uniqueGoals) {
-      content += `- ${goal.text}\n`;
-    }
-    content += '\n';
-  }
-
-  // Accomplishments section
-  if (uniqueAccomplishments.length > 0) {
-    content += `## Accomplishments\n\n`;
-    for (const acc of uniqueAccomplishments) {
-      // Handle multiline content
-      const lines = acc.text.split('\n').filter(l => l.trim());
-      for (const line of lines) {
-        // Strip existing bullet marker and any emoji
-        let cleanLine = line.replace(/^[-*]\s*/, '').trim();
-        cleanLine = cleanLine.replace(/^[✅💡🐛🔧📝🔍📦🚪]\s*/u, '');
-        if (cleanLine.length > 0) {
-          content += `- ${cleanLine}\n`;
-        }
-      }
-    }
-    content += '\n';
-  }
-
-  // Discoveries section
-  if (uniqueDiscoveries.length > 0) {
-    const groupedDiscoveries = groupDiscoveriesByType(uniqueDiscoveries);
-    content += `## Discoveries\n\n`;
-    for (const [type, items] of Object.entries(groupedDiscoveries)) {
-      if (items.length > 0) {
-        content += `### ${type}\n`;
-        for (const disc of items) {
-          let cleanText = disc.text.replace(/^[-*]\s*/, '').trim();
-          cleanText = cleanText.replace(/^[✅💡🐛🔧📝🔍📦🚪]\s*/u, '');
-          if (cleanText.length > 0) {
-            content += `- ${cleanText}\n`;
-          }
-        }
-        content += '\n';
-      }
-    }
-  }
-
-  // Bugs Fixed section
-  if (bugs.length > 0) {
-    content += `## Bugs Fixed\n\n`;
-    for (const bug of bugs) {
-      content += `- **${bug.symptom}:** ${bug.solution}\n`;
-      if (bug.cause) {
-        content += `  - Cause: ${bug.cause}\n`;
-      }
-    }
-    content += '\n';
-  }
-
-  // Relevant Files section
-  if (relevantFiles.size > 0) {
-    const groupedFiles = groupFilesByProject(relevantFiles);
-    content += `## Relevant Files\n\n`;
-    for (const [project, files] of Object.entries(groupedFiles)) {
-      content += `### ${project}\n`;
-      for (const file of files) {
-        content += `- ${file}\n`;
-      }
-      content += '\n';
-    }
-  }
-
-  // Key Decisions section
-  const keyDecisions = extractKeyDecisions(sessionsData);
-  if (keyDecisions.length > 0) {
-    content += `## Key Decisions\n\n`;
-    for (const decision of keyDecisions) {
-      content += `- ${decision}\n`;
-    }
-    content += '\n';
-  }
-
-  // Trend Note
-  if (sessionsData.length >= 3) {
-    const hasIncreasingGoals = uniqueGoals.length >= sessionsData.length * 0.5;
-    const hasGoodQuality = uniqueAccomplishments.length >= sessionsData.length * 0.5;
-    if (hasIncreasingGoals || hasGoodQuality) {
-      content += `## Trend Note\n\n`;
-      if (hasIncreasingGoals) {
-        content += `- **Goal-setting trend:** This session shows active goal-setting behavior\n`;
-      }
-      if (hasGoodQuality) {
-        content += `- **Productivity trend:** Good balance of accomplishments recorded\n`;
-      }
-      content += '\n';
-    }
-  }
-
-  // Add Keywords (Obsidian) section with wiki-links
+  let content = formatFrontmatter(dateStr, sessionsData.length, compactCount, exitCount);
+  content += formatSessionStats(sessionsData);
+  content += formatGoalsSection(uniqueGoals);
+  content += formatAccomplishmentsSection(uniqueAccomplishments);
+  content += formatDiscoveriesSection(uniqueDiscoveries);
+  content += formatBugsSection(bugs);
+  content += formatFilesSection(relevantFiles);
+  content += formatKeyDecisionsSection(sessionsData);
+  content += formatTrendNote(sessionsData, uniqueGoals, uniqueAccomplishments);
   if (allContent && year && month && week) {
-    const contentKeywords = extractKeywordsFromContent(allContent, 15).filter(k =>
-      !['summary', 'summaries', 'sessions', 'total', 'date', 'week', 'month', 'year',
-        'context', 'report', 'reports', 'daily', 'weekly', 'monthly', 'annual', 'intelligence',
-        'compact', 'exit', 'file', 'files', 'day', 'days', 'related', 'navigation',
-        'keywords', 'obsidian', 'created', 'title', 'generated', 'section',
-        'messages', 'user', 'assistant', 'content', 'session', 'sessions'].includes(k.toLowerCase())
-    );
-
-    if (contentKeywords.length > 0) {
-      const config = getConfig();
-      const keywords = buildKeywords({
-        projectName: config.projectName || 'opencode-context-plugin',
-        module: 'daySummary',
-        keywords: contentKeywords
-      });
-      content += `## Keywords (Obsidian)\n\n`;
-      content += `${keywords}\n\n`;
-    }
-
-    // Add Related section
-    // Links are now relative to Vault Root for Obsidian compatibility
-    content += addRelatedLinks([
-      `${CONTEXT_SESSION_DIR}/intelligence-learning.md`,
-      `${CONTEXT_SESSION_DIR}/${year}/${month}/${week}/week-summary.md`,
-      `${CONTEXT_SESSION_DIR}/${year}/${month}/monthly-${year}-${month}.md`
-    ]);
-
-    // Add Navigation section
-    content += addKeywordNavigation({ type: 'daily', year, month, week });
+    content += formatKeywordsSection(allContent, year, month, week);
+    content += formatNavigationSection(year, month, week);
   }
 
   return content;

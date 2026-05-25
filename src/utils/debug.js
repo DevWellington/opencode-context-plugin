@@ -6,7 +6,9 @@ import { getConfig } from '../config.js';
 export const DEBUG_KEY = 'debug';
 
 // Log directory and file names
-const LOG_DIR = path.join(process.env.HOME || '', '.opencode-context-plugin', 'logs');
+import { getHomeDir } from './homeDir.js';
+
+const LOG_DIR = path.join(getHomeDir(), '.opencode-context-plugin', 'logs');
 const LOG_FILE_BASE = 'debug.log';
 const LOG_FILE = path.join(LOG_DIR, LOG_FILE_BASE);
 
@@ -16,7 +18,9 @@ const LOG_FILE = path.join(LOG_DIR, LOG_FILE_BASE);
 async function ensureLogDir() {
   try {
     await fs.mkdir(LOG_DIR, { recursive: true });
-  } catch {}
+  } catch {
+    // ENOENT: parent directory doesn't exist (best-effort logging)
+  }
 }
 
 /**
@@ -39,6 +43,7 @@ async function getArchiveFiles() {
       .filter(f => f.startsWith('debug-') && f.endsWith('.log'))
       .sort();
   } catch {
+    // ENOENT: log directory doesn't exist yet (best-effort logging)
     return [];
   }
 }
@@ -47,7 +52,7 @@ async function getArchiveFiles() {
  * Rotate log file if it exceeds the configured max size
  * Best-effort: errors are silently ignored
  */
-export async function rotateLogIfNeeded() {
+async function rotateLogIfNeeded() {
   const config = getConfig();
   const rotationConfig = config.logRotation || { enabled: true, maxSizeBytes: 10 * 1024 * 1024, maxFiles: 5 };
 
@@ -82,7 +87,9 @@ export async function rotateLogIfNeeded() {
       const oldest = archives.shift();
       try {
         await fs.unlink(path.join(LOG_DIR, oldest));
-      } catch {}
+      } catch {
+        // ENOENT: archive already deleted (best-effort cleanup)
+      }
     }
 
     // Rename current log to timestamped archive
@@ -97,13 +104,15 @@ export async function rotateLogIfNeeded() {
       try {
         await fs.copyFile(LOG_FILE, archivePath);
         await fs.unlink(LOG_FILE);
-      } catch {}
+      } catch {
+        // Best-effort: file in use or permission denied (non-critical logging)
+      }
     }
 
     // Create fresh log file
     await fs.writeFile(LOG_FILE, '');
   } catch {
-    // Best-effort: silently ignore any errors during rotation
+    // Best-effort: log rotation failed (non-critical, logging continues next time)
   }
 }
 
@@ -129,7 +138,9 @@ export function createDebugLogger(namespace) {
       const formattedMessage = `[${timestamp}] [${namespace}] ${message}`;
 
       await fs.appendFile(LOG_FILE, formattedMessage + '\n');
-    } catch {}
+    } catch {
+      // Best-effort: log write failed (non-critical, don't block operations)
+    }
   };
 }
 

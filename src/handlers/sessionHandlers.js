@@ -3,53 +3,50 @@ import { getSessionGuidance } from '../modules/sessionGuidance.js';
 import { saveContext } from '../modules/saveContext.js';
 import { syncToRemote } from '../modules/remoteSync.js';
 import { getConfig } from '../config.js';
+import { sessionState } from './sessionState.js';
+import { isDestroyed } from './lifecycle.js';
 
 const logger = createDebugLogger('context-plugin');
 
-let _currentSessionId = null;
-let _hasInjectedContext = false;
-let _lastSession = null;
+export function getCurrentSessionId() { return sessionState.getCurrentSessionId(); }
+export function getHasInjectedContext() { return sessionState.getHasInjectedContext(); }
+export async function setCurrentSessionId(v) { await sessionState.setCurrentSessionId(v); }
+export async function setHasInjectedContext(v) { await sessionState.setHasInjectedContext(v); }
+export function getLastSession() { return sessionState.getLastSession(); }
+export async function setLastSession(v) { await sessionState.setLastSession(v); }
 
-export function getCurrentSessionId() { return _currentSessionId; }
-export function setCurrentSessionId(v) { _currentSessionId = v; }
-export function getHasInjectedContext() { return _hasInjectedContext; }
-export function setHasInjectedContext(v) { _hasInjectedContext = v; }
-export function getLastSession() { return _lastSession; }
-export function setLastSession(v) { _lastSession = v; }
-
-export function resetSessionState() {
-  _currentSessionId = null;
-  _hasInjectedContext = false;
-  _lastSession = null;
+export async function resetSessionState() {
+  await sessionState.reset();
 }
 
-export function handleSessionCreated(event, directory) {
-  _currentSessionId = event?.sessionId || event?.sessionID || event?.session?.id;
-  _hasInjectedContext = false;
-  _lastSession = null;
-  logger(`[context-plugin] Session created: ${_currentSessionId}`);
+export async function handleSessionCreated(event, directory) {
+  if (isDestroyed()) return;
+  await sessionState.createSession(event);
+  const currentSessionId = sessionState.getCurrentSessionId();
+  logger(`[context-plugin] Session created: ${currentSessionId}`);
 
-  return getSessionGuidance(directory, event?.session || { id: _currentSessionId, ...event });
+  return getSessionGuidance(directory, event?.session || { id: currentSessionId, ...event });
 }
 
-export function handleSessionUpdated(event) {
+export async function handleSessionUpdated(event) {
+  if (isDestroyed()) return;
   const info = event?.properties?.info;
   if (info) {
-    if (!_lastSession) _lastSession = {};
-    Object.assign(_lastSession, info);
+    await sessionState.updateSession(info);
     logger(`[context-plugin] Session metadata updated`);
   }
 }
 
 export async function handleSessionEnd(directory, client, config) {
-  logger(`[context-plugin] Session ending event - lastSession has ${_lastSession?.messages?.length || 0} messages, id: ${_lastSession?.id || _lastSession?.sessionID || 'none'}`);
-  if (_lastSession) {
+  if (isDestroyed()) return;
+  const clonedSession = await sessionState.getClonedSession();
+  logger(`[context-plugin] Session ending event - lastSession has ${clonedSession?.messages?.length || 0} messages, id: ${clonedSession?.id || clonedSession?.sessionID || 'none'}`);
+  if (clonedSession) {
     try {
-      await saveContext(directory, _lastSession, 'exit', client);
+      await saveContext(directory, clonedSession, 'exit', client);
       logger(`[context-plugin] Exit context save completed successfully`);
     } catch (err) {
       logger(`[context-plugin] saveContext failed: ${err.message}`);
-      console.error(`[context-plugin] saveContext failed: ${err.message}`);
     }
   } else {
     logger(`[context-plugin] No lastSession available for exit save`);
@@ -63,6 +60,7 @@ export async function handleSessionEnd(directory, client, config) {
 }
 
 export async function handleSessionIdle(directory, client, sessionId) {
+  if (isDestroyed()) return;
   await triggerPreExitCompression(directory, client, sessionId);
 }
 
@@ -83,8 +81,6 @@ async function triggerPreExitCompression(directory, client, sessionId) {
       logger(`[Pre-Exit] Session fetched successfully`);
     } catch (error) {
       logger(`[Pre-Exit] Failed to fetch session ${sessionId}: ${error.message}`);
-      logger(`[Pre-Exit] Error stack: ${error.stack}`);
-      console.error(`[context-plugin] Pre-exit compression failed: ${error.message}`);
       return null;
     }
 
@@ -99,19 +95,18 @@ async function triggerPreExitCompression(directory, client, sessionId) {
 
     if (result) {
       logger(`[Pre-Exit] Compression completed: ${result}`);
-      console.log(`[context-plugin] Pre-exit compression completed: ${result}`);
     }
 
     return result;
   } catch (error) {
     logger(`[Pre-Exit] Error during compression: ${error.message}`);
-    console.error(`[context-plugin] Pre-exit compression error: ${error.message}`);
     return null;
   }
 }
 
 export async function handleSessionCompacted(directory, client) {
-  const session = getLastSession();
+  if (isDestroyed()) return;
+  const session = await sessionState.getClonedSession();
   if (session) {
     await saveContext(directory, session, 'compact', client);
   } else {

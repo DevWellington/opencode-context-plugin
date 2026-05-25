@@ -1,25 +1,29 @@
 import fs from "fs/promises";
-import os from "os";
 import path from "path";
 import { atomicWrite } from './fileUtils.js';
 import { createDebugLogger } from './debug.js';
+import { getHomeDir } from './homeDir.js';
 
 const logger = createDebugLogger('global-intelligence');
 
-/**
- * Get the global intelligence file path
- * @returns {string} Path to ~/.opencode/global-intelligence.md
- */
+// Global intelligence file path - can be overridden for testing
+let GLOBAL_INTELLIGENCE_PATH = null;
+
 export function getGlobalIntelligencePath() {
-  const homeDir = os.homedir();
-  return path.join(homeDir, '.opencode', 'global-intelligence.md');
+  if (GLOBAL_INTELLIGENCE_PATH) return GLOBAL_INTELLIGENCE_PATH;
+  return path.join(getHomeDir(), '.opencode', 'global-intelligence.md');
+}
+
+export function setGlobalIntelligencePath(newPath) {
+  GLOBAL_INTELLIGENCE_PATH = newPath;
 }
 
 /**
  * Ensure the .opencode directory exists
  */
 async function ensureOpencodeDir() {
-  const opencodeDir = path.join(os.homedir(), '.opencode');
+  const effectivePath = getGlobalIntelligencePath();
+  const opencodeDir = path.dirname(effectivePath);
   await fs.mkdir(opencodeDir, { recursive: true });
   return opencodeDir;
 }
@@ -90,8 +94,7 @@ export async function initializeGlobalIntelligence() {
   try {
     await ensureOpencodeDir();
     await atomicWrite(filePath, content);
-    logger(`[GlobalIntelligence] Initialized global intelligence file: ${filePath}`);
-    console.log(`[context-plugin] Global intelligence file initialized at ${filePath}`);
+    logger(`[context-plugin] Global intelligence file initialized at ${filePath}`);
   } catch (error) {
     logger(`[GlobalIntelligence] Error initializing global intelligence: ${error.message}`);
     // Don't throw - fail gracefully
@@ -170,10 +173,21 @@ export async function updateGlobalIntelligence(projectName, sessionInfo) {
         
         // Update projects count
         if (inLastUpdatedSection && line.includes('**Projects:**')) {
-          // Count existing project entries first
-          const projectEntries = content.match(/### [A-Za-z]/g);
-          projectsCount = projectEntries ? projectEntries.length : 0;
-          updatedLines.push(`- **Projects:** ${projectsCount + 1}`);
+          // Count only actual project entries within ### Active Projects section
+          // Project entries are ### <name> where name starts with lowercase (e.g. ### my-project)
+          // Section headers have uppercase after ### (e.g. ### Active Projects)
+          const projectDirStart = content.indexOf('### Active Projects');
+          if (projectDirStart !== -1) {
+            const projectDirEnd = content.indexOf('\n## ', projectDirStart + 1);
+            const projectSection = projectDirEnd !== -1 
+              ? content.slice(projectDirStart, projectDirEnd) 
+              : content.slice(projectDirStart);
+            const projectMatches = projectSection.matchAll(/^### ([a-z])/gm);
+            let count = 0;
+            for (const _ of projectMatches) count++;
+            projectsCount = count;
+          }
+          updatedLines.push(`- **Projects:** ${projectsCount}`);
           continue;
         }
         

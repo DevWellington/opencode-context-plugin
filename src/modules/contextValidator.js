@@ -3,6 +3,7 @@ import path from 'path';
 import { createDebugLogger } from '../utils/debug.js';
 import { extractSessionContent } from './contentExtractor.js';
 import { CONTEXT_SESSION_DIR } from '../config.js';
+import { isExpectedFsError } from '../utils/errorUtils.js';
 
 const logger = createDebugLogger('context-validator');
 
@@ -90,7 +91,10 @@ export async function logFailedValidation(baseDir, result, sessionPath) {
 
     try {
       existingContent = await fs.readFile(intelPath, 'utf-8');
-    } catch {
+    } catch (err) {
+      if (!isExpectedFsError(err)) {
+        logger(`[context-validator] Could not read intelligence file: ${err.message}`);
+      }
       existingContent = '';
     }
 

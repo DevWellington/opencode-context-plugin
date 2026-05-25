@@ -16,13 +16,13 @@ import path from 'path';
 import fs from 'fs/promises';
 import { getWeek } from 'date-fns';
 import { REPORT_PATHS, CONTEXT_SESSION_DIR } from './utils/linkBuilder.js';
-import { getConfig } from '../config.js';
 import { createDebugLogger } from '../utils/debug.js';
 import { extractSessionContent, extractBugs, findPatterns, inferMissingFields } from '../modules/contentExtractor.js';
 import { preservePersistentPatterns } from '../modules/intelligence.js';
 import { isGreeting, isGreetingTitle, isGreetingContent, hasStructuredWorkContent } from '../utils/greetingFilter.js';
 import { extractIntelligenceFromReports, mergePatterns } from './reportExtractor.js';
-import { parseExistingEntries, transformToReferenceSchema, stripFieldHeader, cleanOldLinks } from './intelligenceDeduplicator.js';
+import { parseExistingEntries, transformToReferenceSchema, cleanOldLinks } from './intelligence/index.js';
+import { stripFieldHeader } from './intelligence/sanitizer.js';
 import { ISSUE_PATTERNS, FAILED_APPROACH_PATTERNS, LOW_QUALITY_ACCOMPLISHMENT_PATTERNS, containsIssuePattern, isLowQualityAccomplishment } from './intelligencePatterns.js';
 import { REFERENCE_SCHEMA, generateReferenceContent, generateIntelligenceContent } from './intelligenceTemplate.js';
 
@@ -34,7 +34,6 @@ const INTELLIGENCE_FILE = 'intelligence-learning.md';
 const MAX_ENTRIES = 20;
 
 export async function updateIntelligenceLearning(directory, opencodeClient = null) {
-  const config = getConfig();
   const intelligencePath = path.join(directory, REPORT_PATHS.intelligence);
 
   const year = new Date().getFullYear();
@@ -78,26 +77,10 @@ export async function updateIntelligenceLearning(directory, opencodeClient = nul
   // Gather new session information from recent files
   const newSessionInfo = await gatherRecentSessionInfo(directory);
 
-  // Deduplicate by file path (stable ID), not by content which changes on edit
-  const existingKeys = new Set();
-  for (const entry of existingEntries) {
-    for (const session of (entry.sessions || [])) {
-      const key = session.filepath || `${session.title || ''}|${session.firstUserMessage || ''}`;
-      existingKeys.add(key);
-    }
-  }
+  // Filter out greeting-only sessions, then deduplicate by filepath
+  const filteredSessions = filterGreetingSessions(newSessionInfo.sessions || []);
+  const newSessions = deduplicateSessions(filteredSessions, existingEntries);
 
-  // Filter out sessions that already exist (by path, which is stable across edits)
-  const newSessions = (newSessionInfo.sessions || []).filter(session => {
-    const key = session.filepath || `${session.title || ''}|${session.firstUserMessage || ''}`;
-    if (existingKeys.has(key)) {
-      return false;
-    }
-    existingKeys.add(key);
-    return true;
-  });
-
-  // Only add entry if it has new sessions (not just greetings that were filtered)
   if (newSessions.length === 0) {
     return { skipped: true, reason: 'No new meaningful sessions (all greetings or duplicates)' };
   }
@@ -164,7 +147,7 @@ export async function updateIntelligenceLearning(directory, opencodeClient = nul
   const reportIntelligence = await extractIntelligenceFromReports(directory);
 
   // Transform to reference schema format
-  const patternData = transformToReferenceSchema(allEntries, deduplicatedEntry, reportIntelligence, config);
+  const patternData = transformToReferenceSchema(allEntries, reportIntelligence);
 
   // Generate updated content using new compact format
   const pinnedSection = pinnedContent ? `# Pinned Patterns\n\n${pinnedContent}\n\n` : '';
@@ -254,35 +237,68 @@ function inferFromMessages(messages, title) {
   return result;
 }
 
+/**
+ * Filters out greeting-only sessions that don't represent meaningful work
+ * @param {Array} sessions - Array of session objects with firstUserMessage, title, hasStructure
+ * @returns {Array} Filtered sessions with meaningful content
+ */
+function filterGreetingSessions(sessions) {
+  return sessions.filter(s => {
+    if (isGreeting(s.firstUserMessage) && !s.hasStructure) return false;
+    if (isGreetingTitle(s.title, s.hasStructure)) return false;
+    return true;
+  });
+}
+
+/**
+ * Deduplicates sessions by filepath against existing entries
+ * @param {Array} sessions - Array of new session objects
+ * @param {Array} existingEntries - Array of existing parsed entries
+ * @returns {Array} Deduplicated sessions
+ */
+function deduplicateSessions(sessions, existingEntries) {
+  const existingKeys = new Set();
+  for (const entry of existingEntries) {
+    for (const session of (entry.sessions || [])) {
+      const key = session.filepath || `${session.title || ''}|${session.firstUserMessage || ''}`;
+      existingKeys.add(key);
+    }
+  }
+  return (sessions || []).filter(session => {
+    const key = session.filepath || `${session.title || ''}|${session.firstUserMessage || ''}`;
+    if (existingKeys.has(key)) return false;
+    existingKeys.add(key);
+    return true;
+  });
+}
+
 async function gatherRecentSessionInfo(directory) {
   const today = new Date();
   const year = today.getFullYear();
 
-  // Scan ALL months in the year, not just current month
   const allSessionFiles = [];
-  
+
   const yearDir = path.join(directory, CONTEXT_SESSION_DIR, String(year));
-  
+
   try {
     const months = await fs.readdir(yearDir);
     for (const month of months) {
-      if (!/^\d{2}$/.test(month)) continue; // Skip non-month directories
+      if (!/^\d{2}$/.test(month)) continue;
       const monthDir = path.join(yearDir, month);
-      
+
       try {
         const weeks = await fs.readdir(monthDir);
         for (const week of weeks) {
           if (!week.startsWith('W')) continue;
           const weekDir = path.join(monthDir, week);
-          
+
           try {
             const entries = await fs.readdir(weekDir);
             for (const entry of entries) {
               const entryPath = path.join(weekDir, entry);
               const stat = await fs.stat(entryPath);
-              
+
               if (stat.isDirectory()) {
-                // Day directory - scan for session files
                 const dayFiles = await fs.readdir(entryPath);
                 for (const file of dayFiles) {
                   if (file.endsWith('.md') && (file.startsWith('compact-') || file.startsWith('exit-'))) {
@@ -290,69 +306,48 @@ async function gatherRecentSessionInfo(directory) {
                   }
                 }
               } else if (entry.endsWith('.md') && (entry.startsWith('compact-') || entry.startsWith('exit-'))) {
-                // Session file directly in week dir
                 allSessionFiles.push({ file: entry, dir: weekDir });
               }
             }
           } catch {
-            // Skip inaccessible week dirs
           }
         }
       } catch {
-        // Skip inaccessible month dirs
       }
     }
   } catch {
-    // No year directory found
   }
 
-  // Use allSessionFiles that was collected from ALL months
   const sessionFiles = allSessionFiles.map(f => f.file);
-  const sessionDir = directory; // We'll use full path below
 
-  // Extract structured content from each session file
   const sessionSummaries = [];
   for (const { file, dir } of allSessionFiles) {
     const fullPath = path.join(dir, file);
     const content = await fs.readFile(fullPath, 'utf-8');
-    
-    // First try contentExtractor for structured data
+
     const extracted = extractSessionContent(content);
     const bugs = extractBugs(content);
-    
-    // Extract title from CONTENT, not filename
+
     const titleFromContent = extractTitleFromContent(content);
-    // Fall back to filename if no title in content
     const titleFromFilename = file.replace(/^exit-|^compact-/, '').replace(/\.md$/, '');
     const title = titleFromContent || titleFromFilename;
-    
-    // Parse messages from content
+
     const messages = parseMessagesFromContent(content);
-    
-    // If no structured sections found, infer from messages
+
     let inferred = { goal: null, instructions: null, accomplished: null, discoveries: null, relevantFiles: [] };
     if (!extracted.goal && !extracted.accomplished && messages.length > 0) {
       inferred = inferFromMessages(messages, title);
     }
-    
-    // Use Instructions from messages as firstUserMessage
-    const firstUserMessage = inferred.instructions || extracted.firstUserMessage || 
+
+    const firstUserMessage = inferred.instructions || extracted.firstUserMessage ||
       (messages.find(m => m.role === 'user')?.content || '');
-    
-    // Skip sessions that are just greetings - they don't represent meaningful work
-    // But allow sessions with structured content (## Goal, ## Accomplished, etc.)
-    if (isGreeting(firstUserMessage) && !hasStructuredWorkContent(content)) {
-      continue;
-    }
-    if (isGreetingTitle(title, hasStructuredWorkContent(content))) {
-      continue;
-    }
-    
+
     sessionSummaries.push({
       filename: file,
       filepath: fullPath,
       title: title,
       firstUserMessage: firstUserMessage,
+      hasStructure: hasStructuredWorkContent(content),
       goal: extracted.goal || inferred.goal || '',
       instructions: inferred.instructions || extracted.firstUserMessage || '',
       accomplished: extracted.accomplished || inferred.accomplished || '',
@@ -361,8 +356,7 @@ async function gatherRecentSessionInfo(directory) {
       bugs: bugs
     });
   }
-  
-  // If all sessions were filtered out as greetings, return empty entry
+
   if (sessionSummaries.length === 0) {
     return {
       id: `session-${Date.now()}`,
@@ -370,19 +364,16 @@ async function gatherRecentSessionInfo(directory) {
       type: sessionFiles[0]?.startsWith('exit-') ? 'exit' : 'compact',
       sessionCount: 0,
       sessions: [],
-      keywords: [],
-      skippedGreetings: true
+      keywords: []
     };
   }
 
-  // Return structured info
   return {
     id: `session-${Date.now()}`,
     date: today.toISOString(),
     type: sessionFiles[0]?.startsWith('exit-') ? 'exit' : 'compact',
-    sessionCount: sessionSummaries.length, // Use filtered count, not original files
+    sessionCount: sessionSummaries.length,
     sessions: sessionSummaries,
-    // Extract meaningful keywords from actual content
     keywords: sessionSummaries
       .map(s => s.title)
       .filter(Boolean)

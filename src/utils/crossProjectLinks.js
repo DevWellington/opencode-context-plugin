@@ -7,8 +7,10 @@
 
 import fs from 'fs/promises';
 import path from 'path';
-import os from 'os';
 import { createDebugLogger } from './debug.js';
+import { getHomeDir } from './homeDir.js';
+import { TRUNCATE } from '../constants.js';
+import { isExpectedFsError } from './errorUtils.js';
 
 const logger = createDebugLogger('cross-project-links');
 
@@ -17,7 +19,7 @@ const logger = createDebugLogger('cross-project-links');
  * @returns {string} Path to ~/.opencode/global-intelligence.md
  */
 export function getGlobalIntelligencePath() {
-  return path.join(os.homedir(), '.opencode', 'global-intelligence.md');
+  return path.join(getHomeDir(), '.opencode', 'global-intelligence.md');
 }
 
 /**
@@ -25,7 +27,7 @@ export function getGlobalIntelligencePath() {
  * @returns {string} Path to ~/.opencode/
  */
 function getGlobalDirectory() {
-  return path.join(os.homedir(), '.opencode');
+  return path.join(getHomeDir(), '.opencode');
 }
 
 /**
@@ -86,7 +88,9 @@ async function readGlobalIntelligence() {
     const content = await fs.readFile(globalPath, 'utf-8');
     return parseGlobalIntelligenceContent(content);
   } catch (error) {
-    logger(`[resolve] Could not read global intelligence: ${error.message}`);
+    if (!isExpectedFsError(error)) {
+      logger(`[resolve] Could not read global intelligence: ${error.message}`);
+    }
     return { projects: {}, lastUpdate: null };
   }
 }
@@ -176,16 +180,16 @@ function parseGlobalIntelligenceContent(content) {
 async function discoverProjectPath(projectName) {
   // Common locations to look for projects
   const searchPaths = [
-    path.join(os.homedir(), 'projects', projectName),
-    path.join(os.homedir(), 'code', projectName),
-    path.join(os.homedir(), 'repos', projectName),
-    path.join(os.homedir(), 'work', projectName),
+    path.join(getHomeDir(), 'projects', projectName),
+    path.join(getHomeDir(), 'code', projectName),
+    path.join(getHomeDir(), 'repos', projectName),
+    path.join(getHomeDir(), 'work', projectName),
     path.join(process.cwd(), '..', projectName), // sibling to current project
   ];
 
   // Also check workspace roots mentioned in git config
   try {
-    const gitConfigPath = path.join(os.homedir(), '.gitconfig');
+    const gitConfigPath = path.join(getHomeDir(), '.gitconfig');
     const gitConfig = await fs.readFile(gitConfigPath, 'utf-8').catch(() => '');
     
     // Look for project-specific paths in git config
@@ -194,8 +198,10 @@ async function discoverProjectPath(projectName) {
       const dir = match[1].trim();
       searchPaths.push(dir);
     }
-  } catch {
-    // Ignore gitconfig errors
+  } catch (err) {
+    if (!isExpectedFsError(err)) {
+      logger(`[resolve] Could not read gitconfig: ${err.message}`);
+    }
   }
 
   for (const searchPath of searchPaths) {
@@ -207,12 +213,16 @@ async function discoverProjectPath(projectName) {
         try {
           await fs.stat(opencodeDir);
           return searchPath;
-        } catch {
-          // Not an opencode project, continue searching
+        } catch (err) {
+          if (!isExpectedFsError(err)) {
+            logger(`[resolve] Could not check opencode dir: ${err.message}`);
+          }
         }
       }
-    } catch {
-      // Path doesn't exist, continue
+    } catch (err) {
+      if (!isExpectedFsError(err)) {
+        logger(`[resolve] Could not stat search path: ${err.message}`);
+      }
     }
   }
 
@@ -223,9 +233,18 @@ async function discoverProjectPath(projectName) {
  * Search for a session file in a project directory
  * @param {string} projectDir - Project directory path
  * @param {string} sessionPath - Session path to find
+ * @param {Object} options - Search options
+ * @param {AbortSignal} options.signal - Abort signal for cancellation
  * @returns {Promise<string|null>} Full path to session file or null
  */
-async function findSessionFile(projectDir, sessionPath) {
+async function findSessionFile(projectDir, sessionPath, options = {}) {
+  const { signal } = options;
+  
+  // Early return if aborted
+  if (signal?.aborted) {
+    return null;
+  }
+  
   const contextSessionDir = path.join(projectDir, '.opencode', 'context-session');
   
   try {
@@ -233,22 +252,28 @@ async function findSessionFile(projectDir, sessionPath) {
     const directPath = path.join(projectDir, sessionPath);
     try {
       const stat = await fs.stat(directPath);
+      if (signal?.aborted) return null;
       if (stat.isFile()) {
         return directPath;
       }
-    } catch {
-      // Not a direct file
+    } catch (err) {
+      if (!isExpectedFsError(err)) {
+        logger(`[resolve] Could not stat direct path: ${err.message}`);
+      }
     }
 
     // Check in context-session directory
     const fullPath = path.join(contextSessionDir, sessionPath);
     try {
       const stat = await fs.stat(fullPath);
+      if (signal?.aborted) return null;
       if (stat.isFile()) {
         return fullPath;
       }
-    } catch {
-      // Not found at that path either
+    } catch (err) {
+      if (!isExpectedFsError(err)) {
+        logger(`[resolve] Could not stat context path: ${err.message}`);
+      }
     }
 
     // Try to find by partial match (session ID)
@@ -256,12 +281,18 @@ async function findSessionFile(projectDir, sessionPath) {
     const searchTerms = sessionPath.toLowerCase().split(/[\/\-_]/);
     
     async function searchDir(dir, depth = 0) {
+      // Early return if aborted
+      if (signal?.aborted) return null;
+      
       if (depth > 5) return null; // Limit recursion
       
       try {
         const entries = await fs.readdir(dir, { withFileTypes: true });
         
         for (const entry of entries) {
+          // Check abort during iteration
+          if (signal?.aborted) return null;
+          
           const fullEntryPath = path.join(dir, entry.name);
           
           // Check if filename contains search terms
@@ -277,15 +308,20 @@ async function findSessionFile(projectDir, sessionPath) {
             if (found) return found;
           }
         }
-      } catch {
-        // Continue searching
+      } catch (err) {
+        if (!isExpectedFsError(err)) {
+          logger(`[resolve] Could not search directory: ${err.message}`);
+        }
       }
       
       return null;
     }
 
     return await searchDir(contextSessionDir);
-  } catch {
+  } catch (err) {
+    if (!isExpectedFsError(err)) {
+      logger(`[resolve] Could not find session file: ${err.message}`);
+    }
     return null;
   }
 }
@@ -294,9 +330,18 @@ async function findSessionFile(projectDir, sessionPath) {
  * Resolve a cross-project link to actual session content or path
  * @param {string} link - Cross-project link (e.g., "my-plugin:2026/04/session-end")
  * @param {string} currentProjectDir - Current project directory (for relative resolution)
+ * @param {Object} options - Resolution options
+ * @param {AbortSignal} options.signal - Abort signal for cancellation
  * @returns {Promise<Object>} { projectPath, sessionPath, exists, content, preview }
  */
-export async function resolveCrossProjectLink(link, currentProjectDir = null) {
+export async function resolveCrossProjectLink(link, currentProjectDir = null, options = {}) {
+  const { signal } = options;
+  
+  // Early return if aborted
+  if (signal?.aborted) {
+    return { projectPath: null, sessionPath: null, exists: false, content: null, preview: null, aborted: true };
+  }
+  
   const parsed = parseCrossProjectLink(link);
   
   if (!parsed.isValid) {
@@ -307,6 +352,12 @@ export async function resolveCrossProjectLink(link, currentProjectDir = null) {
 
   // First, try to find project in global intelligence
   const globalIntel = await readGlobalIntelligence();
+  
+  // Check abort after async operation
+  if (signal?.aborted) {
+    return { projectPath: null, sessionPath: null, exists: false, content: null, preview: null, aborted: true };
+  }
+  
   let projectDir = null;
 
   // Check if global intelligence knows about this project
@@ -315,6 +366,11 @@ export async function resolveCrossProjectLink(link, currentProjectDir = null) {
   } else {
     // Try to discover project path
     projectDir = await discoverProjectPath(projectName);
+  }
+
+  // Check abort after discovery
+  if (signal?.aborted) {
+    return { projectPath: null, sessionPath: null, exists: false, content: null, preview: null, aborted: true };
   }
 
   if (!projectDir) {
@@ -329,7 +385,12 @@ export async function resolveCrossProjectLink(link, currentProjectDir = null) {
   }
 
   // Find the session file
-  const sessionFilePath = await findSessionFile(projectDir, sessionPath);
+  const sessionFilePath = await findSessionFile(projectDir, sessionPath, { signal });
+  
+  // Check abort after file search
+  if (signal?.aborted) {
+    return { projectPath: null, sessionPath: null, exists: false, content: null, preview: null, aborted: true };
+  }
   
   if (!sessionFilePath) {
     logger(`[resolve] Could not find session: ${sessionPath} in project ${projectName}`);
@@ -345,6 +406,12 @@ export async function resolveCrossProjectLink(link, currentProjectDir = null) {
   // Read session content for preview
   try {
     const content = await fs.readFile(sessionFilePath, 'utf-8');
+    
+    // Check abort after file read
+    if (signal?.aborted) {
+      return { projectPath: null, sessionPath: null, exists: false, content: null, preview: null, aborted: true };
+    }
+    
     const preview = extractSessionPreview(content);
     
     return {
@@ -355,7 +422,10 @@ export async function resolveCrossProjectLink(link, currentProjectDir = null) {
       preview
     };
   } catch (error) {
-    logger(`[resolve] Could not read session file: ${error.message}`);
+    // Don't log if aborted
+    if (error.name !== 'AbortError') {
+      logger(`[resolve] Could not read session file: ${error.message}`);
+    }
     return {
       projectPath: projectDir,
       sessionPath: sessionFilePath,
@@ -377,12 +447,12 @@ function extractSessionPreview(content) {
   // Try to extract goal or first substantial line
   const goalMatch = content.match(/^##\s*Goal:\s*([^\n]+)/m);
   if (goalMatch) {
-    return goalMatch[1].slice(0, 150);
+    return goalMatch[1].slice(0, TRUNCATE.PREVIEW);
   }
 
   // Fall back to first line
   const firstLine = content.split('\n').find(l => l.trim().length > 10);
-  return firstLine?.slice(0, 150) || '';
+  return firstLine?.slice(0, TRUNCATE.PREVIEW) || '';
 }
 
 /**
@@ -393,6 +463,7 @@ function extractSessionPreview(content) {
  * @param {string} options.goal - Goal to match
  * @param {string} options.bug - Bug symptom to search
  * @param {number} options.maxResults - Maximum number of results (default: 3)
+ * @param {AbortSignal} options.signal - Abort signal for cancellation
  * @returns {Promise<Array>} Array of { project, session, relevance, reason }
  */
 export async function findRelatedSessions(currentSession, options = {}) {
@@ -400,8 +471,14 @@ export async function findRelatedSessions(currentSession, options = {}) {
     keyword = '',
     goal = '',
     bug = '',
-    maxResults = 3
+    maxResults = 3,
+    signal
   } = options;
+
+  // Early return if aborted
+  if (signal?.aborted) {
+    return [];
+  }
 
   const searchTerms = [keyword, goal, bug].filter(Boolean);
   if (searchTerms.length === 0) {
@@ -410,20 +487,41 @@ export async function findRelatedSessions(currentSession, options = {}) {
 
   // Read global intelligence to discover all known projects
   const globalIntel = await readGlobalIntelligence();
+  
+  // Check abort after async operation
+  if (signal?.aborted) {
+    return [];
+  }
+  
   const projects = Object.keys(globalIntel.projects);
 
   const relatedSessions = [];
 
   // Search each known project
   for (const projectName of projects) {
+    // Check abort before each iteration
+    if (signal?.aborted) {
+      return relatedSessions;
+    }
+
     try {
       const projectDir = globalIntel.projects[projectName]?.path || 
                          await discoverProjectPath(projectName);
       
+      // Check abort after async operation
+      if (signal?.aborted) {
+        return relatedSessions;
+      }
+      
       if (!projectDir) continue;
 
       // Search for matching sessions
-      const matches = await searchProjectSessions(projectDir, searchTerms);
+      const matches = await searchProjectSessions(projectDir, searchTerms, { signal });
+      
+      // Check abort after search
+      if (signal?.aborted) {
+        return relatedSessions;
+      }
       
       for (const match of matches) {
         // Calculate relevance score
@@ -438,7 +536,10 @@ export async function findRelatedSessions(currentSession, options = {}) {
         });
       }
     } catch (error) {
-      logger(`[findRelated] Error searching project ${projectName}: ${error.message}`);
+      // Don't log AbortError
+      if (error.name !== 'AbortError') {
+        logger(`[findRelated] Error searching project ${projectName}: ${error.message}`);
+      }
     }
   }
 
@@ -452,24 +553,43 @@ export async function findRelatedSessions(currentSession, options = {}) {
  * Search a project directory for matching sessions
  * @param {string} projectDir - Project directory path
  * @param {Array<string>} searchTerms - Terms to search for
+ * @param {Object} options - Search options
+ * @param {AbortSignal} options.signal - Abort signal for cancellation
  * @returns {Promise<Array>} Matching sessions with relevance info
  */
-async function searchProjectSessions(projectDir, searchTerms) {
+async function searchProjectSessions(projectDir, searchTerms, options = {}) {
+  const { signal } = options;
   const matches = [];
   const contextSessionDir = path.join(projectDir, '.opencode', 'context-session');
 
   async function searchDir(dir, depth = 0) {
+    // Early return if aborted
+    if (signal?.aborted) {
+      return;
+    }
+    
     if (depth > 4) return; // Limit recursion
 
     try {
       const entries = await fs.readdir(dir, { withFileTypes: true });
 
       for (const entry of entries) {
+        // Check abort during iteration
+        if (signal?.aborted) {
+          return;
+        }
+        
         if (entry.isFile() && entry.name.endsWith('.md')) {
           const filePath = path.join(dir, entry.name);
           
           try {
             const content = await fs.readFile(filePath, 'utf-8');
+            
+            // Check abort after file read
+            if (signal?.aborted) {
+              return;
+            }
+            
             const matchResult = matchSessionContent(content, searchTerms);
             
             if (matchResult.score > 0) {
@@ -480,15 +600,19 @@ async function searchProjectSessions(projectDir, searchTerms) {
                 preview: extractSessionPreview(content)
               });
             }
-          } catch {
-            // Skip unreadable files
+          } catch (err) {
+            if (!isExpectedFsError(err)) {
+              logger(`[resolve] Could not read file: ${err.message}`);
+            }
           }
         } else if (entry.isDirectory()) {
           await searchDir(path.join(dir, entry.name), depth + 1);
         }
       }
-    } catch {
-      // Continue searching other directories
+    } catch (err) {
+      if (!isExpectedFsError(err)) {
+        logger(`[resolve] Could not search project sessions: ${err.message}`);
+      }
     }
   }
 

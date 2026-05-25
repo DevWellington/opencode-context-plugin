@@ -1,12 +1,21 @@
 import fs from 'fs/promises';
 import path from 'path';
-import os from 'os';
 import { atomicWrite } from '../utils/fileUtils.js';
 import { createDebugLogger } from '../utils/debug.js';
+import { getHomeDir } from '../utils/homeDir.js';
 
 const logger = createDebugLogger('sync-state');
 
-const STATE_PATH = path.join(os.homedir(), '.opencode', '.config', 'remote-state.json');
+// State file path - can be overridden for testing
+let STATE_PATH = path.join(getHomeDir(), '.opencode', '.config', 'remote-state.json');
+
+export function setStatePath(newPath) {
+  STATE_PATH = newPath;
+}
+
+export function getStatePath() {
+  return STATE_PATH;
+}
 
 const defaultSyncState = {
   configured: false,

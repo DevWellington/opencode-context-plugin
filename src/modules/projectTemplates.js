@@ -1,12 +1,13 @@
 import fs from "fs/promises";
 import path from "path";
-import os from "os";
 import { getGlobalIntelligencePath, queryGlobalIntelligence } from '../utils/globalIntelligence.js';
 import { createDebugLogger } from '../utils/debug.js';
+import { getHomeDir } from '../utils/homeDir.js';
+import { isExpectedFsError } from '../utils/errorUtils.js';
 
 const logger = createDebugLogger('project-templates');
 
-const TEMPLATES_DIR = path.join(process.env.HOME || os.homedir(), '.opencode', 'templates');
+const TEMPLATES_DIR = path.join(getHomeDir(), '.opencode', 'templates');
 
 // Built-in templates directory (in project)
 const BUILT_IN_TEMPLATES_DIR = path.join(process.cwd(), 'templates');
@@ -286,8 +287,10 @@ export async function initializeFromTemplate(templatePath, targetDir, options = 
         } else {
           resolvedTemplatePath = builtInPath + '.json';
         }
-      } catch {
-        // Fall back to user templates directory
+      } catch (err) {
+        if (!isExpectedFsError(err)) {
+          logger(`[ProjectTemplates] Could not stat built-in template: ${err.message}`);
+        }
         resolvedTemplatePath = path.join(TEMPLATES_DIR, templatePath);
       }
     }
@@ -297,8 +300,10 @@ export async function initializeFromTemplate(templatePath, targetDir, options = 
     try {
       const content = await fs.readFile(resolvedTemplatePath, 'utf-8');
       templateData = JSON.parse(content);
-    } catch {
-      // Check if it's a directory
+    } catch (err) {
+      if (!isExpectedFsError(err)) {
+        logger(`[ProjectTemplates] Could not read template file: ${err.message}`);
+      }
       try {
         const stats = await fs.stat(resolvedTemplatePath);
         if (stats.isDirectory()) {
@@ -308,7 +313,10 @@ export async function initializeFromTemplate(templatePath, targetDir, options = 
         } else {
           throw new Error('Template not found');
         }
-      } catch {
+      } catch (err2) {
+        if (!isExpectedFsError(err2)) {
+          logger(`[ProjectTemplates] Template resolution failed: ${err2.message}`);
+        }
         return {
           success: false,
           error: `Template not found: ${templatePath}`
@@ -474,8 +482,10 @@ export async function listTemplates() {
             createdAt: templateData.createdAt || 'unknown',
             builtIn: false
           });
-        } catch {
-          // template.json not found, skip
+        } catch (err) {
+          if (!isExpectedFsError(err)) {
+            logger(`[ProjectTemplates] Could not read template.json: ${err.message}`);
+          }
         }
       } else if (entry.name.endsWith('.json')) {
         // Single file template
@@ -489,8 +499,10 @@ export async function listTemplates() {
             createdAt: templateData.createdAt || 'unknown',
             builtIn: false
           });
-        } catch {
-          // Skip invalid templates
+        } catch (err) {
+          if (!isExpectedFsError(err)) {
+            logger(`[ProjectTemplates] Could not read template file: ${err.message}`);
+          }
         }
       }
     }
@@ -507,7 +519,7 @@ export async function listTemplates() {
  * @param {Object} templateData - Template data to save
  * @returns {Promise<Object>} Result with success status
  */
-export async function saveTemplate(name, templateData) {
+async function saveTemplate(name, templateData) {
   try {
     await fs.mkdir(TEMPLATES_DIR, { recursive: true });
     
@@ -539,7 +551,7 @@ export async function saveTemplate(name, templateData) {
  * @param {string} projectType - Project type to get recommendations for
  * @returns {Promise<Array>} Array of template recommendations
  */
-export async function getTemplateRecommendations(projectType) {
+async function getTemplateRecommendations(projectType) {
   const recommendations = [];
   
   // Query global intelligence for patterns related to this project type

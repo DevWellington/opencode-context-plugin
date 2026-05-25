@@ -1,55 +1,54 @@
 import { createDebugLogger } from '../utils/debug.js';
 import { getLastSession, setLastSession } from './sessionHandlers.js';
+import { sessionState } from './sessionState.js';
+import { isDestroyed } from './lifecycle.js';
 
 const logger = createDebugLogger('context-plugin');
 const MAX_CONTENT_SIZE = 100000;
 
-export function handleMessageUpdatedOrCreated(event) {
+export async function handleMessageUpdatedOrCreated(event) {
+  if (isDestroyed()) return;
   const msgInfo = event?.properties?.info;
   const msgId = msgInfo?.id;
 
   if (msgId && msgInfo?.role) {
-    if (!getLastSession()) setLastSession({ messages: [] });
-    const session = getLastSession();
-    if (!session.messages) session.messages = [];
-
-    const existingIdx = session.messages.findIndex(m => m.id === msgId);
-    if (existingIdx === -1) {
-      session.messages.push({ ...msgInfo, content: '' });
-      logger(`[context-plugin] Message added: ${session.messages.length} total`);
-    } else {
-      Object.assign(session.messages[existingIdx], msgInfo);
+    const result = await sessionState.addMessage(msgId, msgInfo.role);
+    if (result.added) {
+      logger(`[context-plugin] Message added: ${result.total} total`);
+    }
+    if (result.added === false) {
+      await sessionState.updateMessage(msgId, msgInfo);
     }
   }
 }
 
-export function handleMessagePartDelta(event) {
+export async function handleMessagePartDelta(event) {
+  if (isDestroyed()) return;
   const msgId = event?.properties?.messageID;
   const delta = event?.properties?.delta;
 
-  const session = getLastSession();
-  if (msgId && delta && session?.messages) {
-    const msg = session.messages.find(m => m.id === msgId);
-    if (msg) {
-      msg.content = (msg.content || '') + delta;
-      if (msg.content.length > MAX_CONTENT_SIZE) {
+  if (msgId && delta) {
+    const updated = await sessionState.appendDelta(msgId, delta);
+    if (updated) {
+      const msg = await sessionState.findMessage(msgId);
+      if (msg && msg.content.length > MAX_CONTENT_SIZE) {
         msg.content = msg.content.slice(0, MAX_CONTENT_SIZE);
-        logger(`[context-plugin] Message ${msg.id} content truncated at ${MAX_CONTENT_SIZE} chars`);
+        logger(`[context-plugin] Message ${msgId} content truncated at ${MAX_CONTENT_SIZE} chars`);
       }
     }
   }
 }
 
-export function handleMessagePartUpdated(event) {
+export async function handleMessagePartUpdated(event) {
+  if (isDestroyed()) return;
   const msgId = event?.properties?.part?.messageID || event?.properties?.messageID;
   const text = event?.properties?.part?.text;
 
-  const session = getLastSession();
-  if (msgId && text && session?.messages) {
-    const msg = session.messages.find(m => m.id === msgId);
-    if (msg && !msg.content) {
-      msg.content = text;
-      logger(`[context-plugin] Message content from part.updated: ${text.length} chars`);
+  if (msgId && text) {
+    const updated = await sessionState.updateMessageContent(msgId, text);
+    if (updated) {
+      const msg = await sessionState.findMessage(msgId);
+      logger(`[context-plugin] Message content from part.updated: ${msg?.content?.length || 0} chars`);
     }
   }
 }

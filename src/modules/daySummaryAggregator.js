@@ -5,6 +5,7 @@ import { createDebugLogger } from '../utils/debug.js';
 import { extractSessionContent, extractBugs, extractPersistentPatterns, normalizePattern } from './contentExtractor.js';
 import { isProtectedSession } from '../utils/patternMatcher.js';
 import { extractSection } from '../utils/summaryUtils.js';
+import { handleCatch, isExpectedFsError } from '../utils/errorUtils.js';
 
 const logger = createDebugLogger('context-plugin');
 
@@ -40,13 +41,17 @@ async function readDaySessions(dirPath) {
           const extracted = extractSessionContent(content);
           const bugs = extractBugs(content);
           sessions.push({ filename: file, path: filePath, content, extracted, bugs });
-        } catch {
-          // Skip unreadable files
+        } catch (err) {
+          if (!isExpectedFsError(err)) {
+            logger(`[summaries] Failed to read session ${file}: ${err.message}`);
+          }
         }
       }
     }
-  } catch {
-    // Directory doesn't exist yet
+  } catch (err) {
+    if (!isExpectedFsError(err)) {
+      logger(`[summaries] Failed to read day directory ${dirPath}: ${err.message}`);
+    }
   }
 
   return sessions;
@@ -87,7 +92,10 @@ async function isDayFullyProtected(dayPath) {
     }
 
     return true; // All sessions are protected
-  } catch {
+  } catch (err) {
+    if (!isExpectedFsError(err)) {
+      logger(`[summaries] Failed to check day protection ${dayPath}: ${err.message}`);
+    }
     return false;
   }
 }
@@ -283,8 +291,11 @@ async function getPinnedPatternsSection(baseDir) {
     }
 
     return section;
-  } catch {
-    return ''; // No intelligence file yet
+  } catch (err) {
+    if (!isExpectedFsError(err)) {
+      logger(`[summaries] Failed to read pinned patterns: ${err.message}`);
+    }
+    return '';
   }
 }
 
