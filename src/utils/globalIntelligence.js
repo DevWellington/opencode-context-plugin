@@ -173,18 +173,21 @@ export async function updateGlobalIntelligence(projectName, sessionInfo) {
         
         // Update projects count
         if (inLastUpdatedSection && line.includes('**Projects:**')) {
-          // Count only actual project entries within ### Active Projects section
-          // Project entries are ### <name> where name starts with lowercase (e.g. ### my-project)
-          // Section headers have uppercase after ### (e.g. ### Active Projects)
+          // Count actual project entries within ### Active Projects section
+          // Project entries are ### <name> lines (any case) excluding section header
           const projectDirStart = content.indexOf('### Active Projects');
           if (projectDirStart !== -1) {
             const projectDirEnd = content.indexOf('\n## ', projectDirStart + 1);
             const projectSection = projectDirEnd !== -1 
               ? content.slice(projectDirStart, projectDirEnd) 
               : content.slice(projectDirStart);
-            const projectMatches = projectSection.matchAll(/^### ([a-z])/gm);
+            const projectLines = projectSection.split('\n');
             let count = 0;
-            for (const _ of projectMatches) count++;
+            for (const pl of projectLines) {
+              if (pl.startsWith('### ') && !pl.startsWith('### Active Projects')) {
+                count++;
+              }
+            }
             projectsCount = count;
           }
           updatedLines.push(`- **Projects:** ${projectsCount}`);

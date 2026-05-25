@@ -280,18 +280,19 @@ describe('Global Intelligence Module', () => {
     });
     
     it('should create .opencode directory if not exists', async () => {
-      const { initializeGlobalIntelligence, getGlobalIntelligencePath } = await import('../src/utils/globalIntelligence.js');
+      const { initializeGlobalIntelligence, getGlobalIntelligencePath, setGlobalIntelligencePath } = await import('../src/utils/globalIntelligence.js');
       
-      // Remove .opencode directory if it exists
+      const testPath = path.join(testBaseDir, '.opencode', 'global-intelligence.md');
+      setGlobalIntelligencePath(testPath);
+      
+      const opencodeDir = path.dirname(testPath);
       try {
-        const opencodeDir = path.join(os.homedir(), '.opencode');
         await fs.rm(opencodeDir, { recursive: true, force: true });
       } catch {}
       
-      // Initialize should recreate it
       await initializeGlobalIntelligence();
       
-      const content = await fs.readFile(getGlobalIntelligencePath(), 'utf-8');
+      const content = await fs.readFile(testPath, 'utf-8');
       expect(content).toBeTruthy();
     });
   });
