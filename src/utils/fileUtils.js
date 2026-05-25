@@ -38,19 +38,99 @@ export function getTimestamp() {
 }
 
 /**
- * Wrap a promise with a timeout
- * @param {Promise} promise - Promise to wrap
+ * Wrap a promise with a timeout and optional abort signal
+ * @param {Promise|Function} taskOrPromise - Promise to wrap OR function receiving { signal }
  * @param {number} ms - Timeout in milliseconds
- * @param {string} label - Label for error message
- * @returns {Promise} Resolves or rejects with timeout error
+ * @param {string|Object} labelOrOptions - Label string OR options object { signal, label }
+ * @returns {Promise} Resolves or rejects with timeout/abort error
  */
-export function withTimeout(promise, ms, label = 'operation') {
-  return Promise.race([
-    promise,
-    new Promise((_, reject) =>
-      setTimeout(() => reject(new Error(`Timeout(${ms}ms): ${label}`)), ms)
-    )
-  ]);
+export function withTimeout(taskOrPromise, ms, labelOrOptions = 'operation') {
+  const options = typeof labelOrOptions === 'string'
+    ? { label: labelOrOptions }
+    : labelOrOptions;
+  const { signal, label = 'operation' } = options;
+
+  if (signal?.aborted) {
+    return Promise.reject(new DOMException('Aborted', 'AbortError'));
+  }
+
+  const internalController = new AbortController();
+
+  let effectiveSignal;
+  let onExternalAbortForCombined;
+  let onInternalAbortForCombined;
+
+  if (signal) {
+    const controller = new AbortController();
+    const combinedSignal = controller.signal;
+
+    onExternalAbortForCombined = () => controller.abort();
+    onInternalAbortForCombined = () => controller.abort();
+
+    signal.addEventListener('abort', onExternalAbortForCombined, { once: true });
+    internalController.signal.addEventListener('abort', onInternalAbortForCombined, { once: true });
+
+    effectiveSignal = combinedSignal;
+  } else {
+    effectiveSignal = internalController.signal;
+  }
+
+  const task = typeof taskOrPromise === 'function'
+    ? taskOrPromise({ signal: effectiveSignal })
+    : taskOrPromise;
+
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    let timeoutId = setTimeout(() => {
+      internalController.abort();
+      const error = new Error(`Timeout after ${ms}ms: ${label}`);
+      error.code = 'ETIMEDOUT';
+      finalizeReject(error);
+    }, ms);
+
+    function cleanup() {
+      clearTimeout(timeoutId);
+      if (signal) {
+        signal.removeEventListener('abort', onExternalAbort);
+        if (onExternalAbortForCombined) signal.removeEventListener('abort', onExternalAbortForCombined);
+      }
+      if (onInternalAbortForCombined) internalController.signal.removeEventListener('abort', onInternalAbortForCombined);
+    }
+
+    function finalizeResolve(value) {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve(value);
+    }
+
+    function finalizeReject(err) {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(err);
+    }
+
+    function onExternalAbort() {
+      internalController.abort();
+      finalizeReject(new DOMException('Aborted', 'AbortError'));
+    }
+    if (signal) {
+      signal.addEventListener('abort', onExternalAbort, { once: true });
+    }
+
+    task
+      .then(result => finalizeResolve(result))
+      .catch(err => finalizeReject(err));
+  });
+}
+
+/**
+ * Create an AbortController for cancellation support
+ * @returns {AbortController}
+ */
+export function createAbortController() {
+  return new AbortController();
 }
 
 /**
@@ -71,15 +151,12 @@ export async function recoverOrphanedTempFiles(baseDir = CONTEXT_SESSION_DIR) {
       const fullPath = path.join(baseDir, entry.name);
 
       if (entry.isDirectory()) {
-        // Recurse into subdirectories
         cleaned += await recoverOrphanedTempFiles(fullPath);
       } else if (entry.name.startsWith('.tmp-')) {
-        // This is a temp file - check its age
         const stats = await fs.stat(fullPath);
         const age = now - stats.mtimeMs;
 
         if (age > MAX_AGE_MS) {
-          // Temp file is older than 5 minutes - likely orphaned
           logger(`[recover] Removing orphaned temp file: ${fullPath} (age: ${Math.round(age / 1000)}s)`);
           await fs.unlink(fullPath);
           deletedFiles.push({ path: fullPath, age: Math.round(age / 1000) });
@@ -88,7 +165,6 @@ export async function recoverOrphanedTempFiles(baseDir = CONTEXT_SESSION_DIR) {
       }
     }
   } catch (error) {
-    // Directory might not exist yet
     if (error.code !== 'ENOENT') {
       logger(`[recover] Error scanning ${baseDir}: ${error.message}`);
     }

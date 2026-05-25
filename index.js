@@ -10,6 +10,7 @@ import { initializeGlobalIntelligence } from './src/utils/globalIntelligence.js'
 import { getRelevantContexts, formatForInjection } from './src/modules/contextInjector.js';
 import { listAvailableContexts, formatContextPreview, interactiveInject } from './src/modules/injectPrompt.js';
 import { syncToRemote, getSyncStatus, initializeRemoteSync } from './src/modules/remoteSync.js';
+import { setDestroyed, init as initLifecycle } from './src/handlers/lifecycle.js';
 import {
   getCurrentSessionId,
   setCurrentSessionId,
@@ -257,6 +258,8 @@ class ContextPlugin {
     this._intelligenceInitialized = false;
     this._globalIntelligenceInitialized = false;
     this._remoteSyncInitialized = false;
+    this._isDestroyed = false;
+    initLifecycle();
 
     logger(`[context-plugin] ContextPlugin instantiated for: ${this.directory}`);
   }
@@ -312,7 +315,41 @@ class ContextPlugin {
     return this._config || getConfig();
   }
 
+  isDestroyed() {
+    return this._isDestroyed;
+  }
+
+  async destroy() {
+    if (this._isDestroyed) {
+      return;
+    }
+
+    this._isDestroyed = true;
+    setDestroyed(true);
+
+    try {
+      const { resetSessionState } = await import('./src/handlers/sessionHandlers.js');
+      await resetSessionState();
+      logger(`[context-plugin] Session state reset on destroy`);
+    } catch (err) {
+      logger(`[context-plugin] Error resetting session state on destroy: ${err.message}`);
+    }
+
+    this._initPromise = null;
+    this._config = null;
+    this._intelligenceInitialized = false;
+    this._globalIntelligenceInitialized = false;
+    this._remoteSyncInitialized = false;
+
+    logger(`[context-plugin] ContextPlugin destroyed`);
+  }
+
   async event(eventInput) {
+    if (this._isDestroyed) {
+      logger(`[context-plugin] Ignoring event - plugin destroyed`);
+      return;
+    }
+
     await this._ensureInitialized();
     logger(`[context-plugin] RAW EVENT received: ${JSON.stringify(eventInput)}`);
     const event = eventInput?.event || eventInput;
@@ -349,6 +386,10 @@ class ContextPlugin {
   }
 
   async "experimental.chat.messages.transform"(transformInput) {
+    if (this._isDestroyed) {
+      return transformInput?.messages || transformInput;
+    }
+
     await this._ensureInitialized();
     const messages = transformInput?.messages || transformInput;
 
@@ -424,7 +465,7 @@ class ContextPlugin {
           const ctxNames = contexts.map(c => path.basename(c.file).replace(/-[0-9]{4}-[0-9]{2}-[0-9]{2}T.*/, '')).join(', ');
           const notification = `\n\n> 📌 **Context Plugin**: Injected ${contexts.length} prior session contexts: ${ctxNames}\n`;
           firstMsg.content = notification + firstMsg.content + injection;
-          setHasInjectedContext(true);
+          await setHasInjectedContext(true);
           logger(`[context-plugin] Injected ${contexts.length} contexts into first message`);
         }
       }
