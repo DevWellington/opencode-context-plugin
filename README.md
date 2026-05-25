@@ -15,7 +15,7 @@ Plugin para OpenCode que salva automaticamente o contexto da sessão em `.openco
 - **Injeção de contexto**: Últimas 5 sessões injetadas na primeira mensagem
 - **Mensagens completas**: Captura conversas de usuário e assistente
 - **Atomic writes**: Previne corrupção de arquivos em caso de crash
-- **Agentes @**: 13 agentes para gerenciar contextos via chat
+- **Agentes @**: 12 agentes para gerenciar contextos via chat
 - **Token Counting**: Contagem precisa de tokens por sessão e agregação
 - **Budget Limits**: Limites de tamanho por nível de relatório
 - **Smart Triggers**: Regeneração inteligente só quando há mudanças significativas
@@ -253,7 +253,7 @@ opencode-context-plugin/
 ├── CHANGELOG.md          # Histórico de versões
 ├── PUBLISH.md            # Guia de publicação
 ├── agents/               # Arquivos de agentes para opencode
-│   └── *.md              # 13 agentes disponíveis
+│   └── *.md              # 12 agentes disponíveis
 ├── scripts/              # Scripts de instalação e CLI
 │   ├── install-agents.js # Auto-instalação pós npm install
 │   └── ocp-agents.js     # CLI para gerenciar agentes
@@ -365,6 +365,12 @@ All public exports are documented with `@public` annotation in source code.
 - **Documentation fixes**: Fixed version mismatch in PUBLISH.md, removed garbled keyword 'door' from keyword filters
 - **CHANGELOG updates**: Added missing entries for version consistency
 - **322 tests passing** - comprehensive test coverage maintained
+
+### v1.6.6 (2026-05-25)
+- **Sync State Module**: `syncState.js` for cross-machine context synchronization
+- **Extractors Module**: New `src/modules/extractors/` with sectionExtractor, patternDetector, bugExtractor, llmEnricher
+- **Intelligence Reform**: Complete refactor with deduplicator and sanitizer
+- **Project Count**: Real names now displayed in project tracking
 
 ### v1.6.0 (2026-04-23)
 - **Source Code Link Intelligence**: `intelligence-learning.md` now links to actual source code locations (`[[src/file.js:line|symptom]]`) instead of summary files

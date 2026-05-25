@@ -4,7 +4,7 @@
 
 **opencode-context-plugin** is an OpenCode plugin that automatically captures, organizes, and re-injects AI coding session context. It transforms ephemeral chat sessions into a persistent, searchable knowledge base that improves future interactions.
 
-**Version:** 1.6.5
+**Version:** 1.6.6
 **License:** MIT
 **Architecture:** Event-driven plugin for OpenCode, using hierarchical file storage with markdown sessions
 

@@ -2,6 +2,27 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.6.6] - 2026-05-25
+
+### Added
+- **Sync State Module**: `syncState.js` for cross-machine context synchronization
+- **Sync Operations**: `syncOperations.js` with `syncSession()`, `syncIntelligenceLearning()`, `syncProjectTemplate()`
+- **Extractors Module**: New `src/modules/extractors/` with `sectionExtractor.js`, `patternDetector.js`, `bugExtractor.js`, `llmEnricher.js`
+- **Intelligence Analyzer**: `src/modules/intelligence/analyzer.js` for pattern analysis
+- **Intelligence Core**: `src/modules/intelligence/core.js` for core intelligence operations
+- **Intelligence Pattern Manager**: `src/modules/intelligence/patternManager.js` for managing patterns
+- **Session Guidance**: `sessionGuidance.js` for agent guidance
+- **Global Intelligence**: `globalIntelligence.js` for cross-project intelligence
+
+### Changed
+- **Intelligence Learning Reform**: Complete refactor of intelligence system with deduplicator and sanitizer
+- **Deduplication Strategy**: Per-session deduplication with path isolation
+
+### Fixed
+- **Project Count**: Real names now displayed in project tracking
+- **Context Injection**: Consistent async state mutation with `await setHasInjectedContext`
+- **Path Isolation**: CACHE_DIR and CONTEXT_SESSION_DIR resolve relative to project baseDir
+
 ## [1.6.5] - 2026-05-02
 
 ## [1.6.4] - 2026-05-02

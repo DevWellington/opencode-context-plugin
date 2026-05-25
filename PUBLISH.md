@@ -3,7 +3,7 @@
 ## Pacote npm
 
 **Pacote:** `@devwellington/opencode-context-plugin`
-**Versão atual:** 1.6.3
+**Versão atual:** 1.6.6
 **NPM:** https://www.npmjs.com/package/@devwellington/opencode-context-plugin
 **GitHub:** https://github.com/DevWellington/opencode-context-plugin
 
