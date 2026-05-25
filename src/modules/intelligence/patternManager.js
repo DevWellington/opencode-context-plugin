@@ -48,45 +48,27 @@ export function formatPinnedPatterns(patterns) {
     return 'No pinned patterns yet (appear in 2+ sessions to pin)\n';
   }
   
-  const byType = {
-    goal_theme: patterns.filter(p => p.type === 'goal_theme'),
-    bug_pattern: patterns.filter(p => p.type === 'bug_pattern'),
-    file_pattern: patterns.filter(p => p.type === 'file_pattern'),
-    general: patterns.filter(p => !['goal_theme', 'bug_pattern', 'file_pattern'].includes(p.type))
-  };
+  const typeConfig = [
+    { key: 'goal_theme', label: 'Pinned Goal Themes' },
+    { key: 'bug_pattern', label: 'Pinned Bug Patterns' },
+    { key: 'file_pattern', label: 'Pinned File Patterns' },
+    { key: 'general', label: 'Other Pinned Patterns', fallback: true }
+  ];
   
   let content = '';
   
-  if (byType.goal_theme.length > 0) {
-    content += '### Pinned Goal Themes\n';
-    for (const p of byType.goal_theme) {
-      content += `- ${p.pattern} (Sessions: ${p.sessionCount}, Last: ${p.lastSeen})\n`;
+  for (const config of typeConfig) {
+    const filtered = config.fallback
+      ? patterns.filter(p => !['goal_theme', 'bug_pattern', 'file_pattern'].includes(p.type))
+      : patterns.filter(p => p.type === config.key);
+    
+    if (filtered.length > 0) {
+      content += `### ${config.label}\n`;
+      for (const p of filtered) {
+        content += `- ${p.pattern} (Sessions: ${p.sessionCount}, Last: ${p.lastSeen})\n`;
+      }
+      content += '\n';
     }
-    content += '\n';
-  }
-  
-  if (byType.bug_pattern.length > 0) {
-    content += '### Pinned Bug Patterns\n';
-    for (const p of byType.bug_pattern) {
-      content += `- ${p.pattern} (Sessions: ${p.sessionCount}, Last: ${p.lastSeen})\n`;
-    }
-    content += '\n';
-  }
-  
-  if (byType.file_pattern.length > 0) {
-    content += '### Pinned File Patterns\n';
-    for (const p of byType.file_pattern) {
-      content += `- ${p.pattern} (Sessions: ${p.sessionCount}, Last: ${p.lastSeen})\n`;
-    }
-    content += '\n';
-  }
-  
-  if (byType.general.length > 0) {
-    content += '### Other Pinned Patterns\n';
-    for (const p of byType.general) {
-      content += `- ${p.pattern} (Sessions: ${p.sessionCount}, Last: ${p.lastSeen})\n`;
-    }
-    content += '\n';
   }
   
   return content;

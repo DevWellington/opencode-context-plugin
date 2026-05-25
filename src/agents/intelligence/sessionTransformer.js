@@ -1,6 +1,5 @@
 import { findPatterns, isValidBugSymptom } from '../../modules/contentExtractor.js';
-import { FAILED_APPROACH_PATTERNS, containsIssuePattern, isLowQualityAccomplishment } from '../intelligencePatterns.js';
-import { isLowQualityPattern } from '../reportExtractor.js';
+import { FAILED_APPROACH_PATTERNS, containsIssuePattern, isLowQualityAccomplishment, isLowQualityPattern } from '../intelligencePatterns.js';
 import { dedupeKnownIssues } from './deduplicator.js';
 import { cleanAccomplishmentText } from './sanitizer.js';
 import { TRUNCATE } from '../../constants.js';

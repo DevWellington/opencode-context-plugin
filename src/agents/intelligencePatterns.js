@@ -1,4 +1,23 @@
-import { isLowQualityPattern } from './reportExtractor.js';
+/**
+ * Filter out low-quality patterns that don't represent actual work
+ */
+export function isLowQualityPattern(pattern) {
+  const lower = pattern.toLowerCase();
+
+  if (/^(no actual|no prior|the user|conversation initiated|this is the beginning)/i.test(lower)) {
+    return true;
+  }
+
+  if (/^(no files|no work|nothing yet|not started)/i.test(lower)) {
+    return true;
+  }
+
+  if (pattern.length < 20) {
+    return true;
+  }
+
+  return false;
+}
 
 /**
  * Issue patterns to detect from discoveries text (multilingual)

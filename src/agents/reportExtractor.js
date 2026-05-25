@@ -5,32 +5,9 @@ import fs from 'fs/promises';
 import { REPORT_PATHS, CONTEXT_SESSION_DIR } from './utils/linkBuilder.js';
 import { getWeek } from 'date-fns';
 import { TRUNCATE } from '../constants.js';
+export { isLowQualityPattern } from './intelligencePatterns.js';
 
 const logger = createDebugLogger('report-extractor');
-
-/**
- * Filter out low-quality patterns that don't represent actual work
- */
-export function isLowQualityPattern(pattern) {
-  const lower = pattern.toLowerCase();
-
-  // Greetings and non-work
-  if (/^(no actual|no prior|the user|conversation initiated|this is the beginning)/i.test(lower)) {
-    return true;
-  }
-
-  // Generic placeholders
-  if (/^(no files|no work|nothing yet|not started)/i.test(lower)) {
-    return true;
-  }
-
-  // Very short patterns
-  if (pattern.length < 20) {
-    return true;
-  }
-
-  return false;
-}
 
 /**
  * Extract structured intelligence from all report levels
@@ -113,15 +90,9 @@ function extractFromReportContent(content, reportType) {
       const completedMatch = line.match(/^[\s]*-[\s]*✅[\s✅]*(.+)/);
       if (completedMatch && completedMatch[1] && !completedMatch[1].includes('PENDENTE')) {
         const item = completedMatch[1].trim();
-        // Filter: must be substantive, not a bug description
         if (item.length > 15 && !isLowQualityPattern(item)) {
-          // Skip bug descriptions (they belong in Failed Approaches, not Successful)
-          // Patterns indicating something was BROKEN/WRONG, not working, not doing something
-          // But allow "was fixed" / "was implemented" / "was completed" type patterns
           const bugPatterns = /\b(was\s+not|wasn't|weren't|not\s+(working|handling|properly|deduplicating)|was\s+(hardcoded|generating|causing|broken)|bug|prefix\s+bug|error|issue|contamination|passing\s+through|inconsistent)\b/i;
-          // Allow patterns like "was fixed", "was implemented", "was completed"
           const fixedPattern = /\b(was\s+(fixed|implemented|completed|added|created|built|resolved|corrected))\b/i;
-          // Allow "X was Y" patterns where Y shows the fix worked (not that it was broken)
           const wasFixed = /(\w+)\s+was\s+(?:corrected|fixed|resolved|implemented|completed|added)/i;
           const hasExplicitFix = fixedPattern.test(item) || wasFixed.test(item);
           const isBugDescription = bugPatterns.test(item) && !hasExplicitFix;

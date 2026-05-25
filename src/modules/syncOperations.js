@@ -155,7 +155,7 @@ export async function syncToRemote(directory) {
     if (!currentProvider) {
       const loaded = await loadSyncState();
       if (!loaded.configured) {
-        return { success: false, error: 'Remote sync not configured' };
+        return { success: false, error: 'Remote sync not configured', uploaded: 0, failed: 0, errors: [] };
       }
       // Try to load from saved config
       try {
@@ -175,7 +175,7 @@ export async function syncToRemote(directory) {
         if (!isExpectedFsError(err)) {
           logger(`[RemoteSync] Failed to load saved config: ${err.message}`);
         }
-        return { success: false, error: 'Failed to load remote sync configuration' };
+        return { success: false, error: 'Failed to load remote sync configuration', uploaded: 0, failed: 0, errors: [] };
       }
     }
 
