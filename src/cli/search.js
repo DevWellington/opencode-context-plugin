@@ -4,6 +4,7 @@
  * Usage: node src/cli/search.js [options] [search query]
  */
 
+import { fileURLToPath } from 'url';
 import { executeSearch, formatSearchResults, parseSearchQuery } from '../modules/searchQuery.js';
 import { buildSearchIndex, getIndexStats } from '../modules/searchIndexer.js';
 import { loadConfig } from '../config.js';
@@ -35,8 +36,7 @@ Inline filters:
   from:2026-04-01 to:2026-04-15 "query"
 `.trim();
 
-async function main() {
-  const args = process.argv.slice(2);
+export async function main(args = process.argv.slice(2)) {
 
   // Show help
   if (args.includes('--help') || args.includes('-h')) {
@@ -114,7 +114,10 @@ async function main() {
   console.log(output);
 }
 
-main().catch(err => {
-  console.error('Search error:', err.message);
-  process.exit(1);
-});
+const isMain = process.argv[1] === fileURLToPath(import.meta.url);
+if (isMain) {
+  main(process.argv.slice(2)).catch(err => {
+    console.error('Search error:', err.message);
+    process.exit(1);
+  });
+}

@@ -258,23 +258,36 @@ function filterGreetingSessions(sessions) {
 }
 
 /**
- * Deduplicates sessions by filepath against existing entries
+ * Builds a dedup key from a session object.
+ * Prefers filepath; falls back to title + firstUserMessage composite.
+ * @param {Object} session
+ * @returns {string}
+ */
+function sessionDedupKey(session) {
+  if (session.filepath) return `path:${session.filepath}`;
+  const title = (session.title || '').trim().toLowerCase();
+  const msg = (session.firstUserMessage || '').trim().toLowerCase();
+  return `composite:${title}|${msg}`;
+}
+
+/**
+ * Deduplicates sessions against existing entries using composite keys.
+ * Uses filepath when available, otherwise title+message composite key.
  * @param {Array} sessions - Array of new session objects
  * @param {Array} existingEntries - Array of existing parsed entries
  * @returns {Array} Deduplicated sessions
  */
 function deduplicateSessions(sessions, existingEntries) {
-  const existingKeys = new Set();
+  const seen = new Set();
   for (const entry of existingEntries) {
     for (const session of (entry.sessions || [])) {
-      const key = session.filepath || `${session.title || ''}|${session.firstUserMessage || ''}`;
-      existingKeys.add(key);
+      seen.add(sessionDedupKey(session));
     }
   }
   return (sessions || []).filter(session => {
-    const key = session.filepath || `${session.title || ''}|${session.firstUserMessage || ''}`;
-    if (existingKeys.has(key)) return false;
-    existingKeys.add(key);
+    const key = sessionDedupKey(session);
+    if (seen.has(key)) return false;
+    seen.add(key);
     return true;
   });
 }
@@ -387,3 +400,5 @@ async function gatherRecentSessionInfo(directory) {
       .slice(0, 5)
   };
 }
+
+export { deduplicateSessions, sessionDedupKey };

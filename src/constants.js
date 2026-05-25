@@ -14,3 +14,8 @@ export const TIMEOUT = {
 export const MS = {
   DAY: 86400000,
 };
+
+export const INJECT = {
+  MAX_CONTEXTS: 50,
+  MAX_TOKENS: 32000,
+};

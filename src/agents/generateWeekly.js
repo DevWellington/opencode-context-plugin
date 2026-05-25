@@ -12,13 +12,7 @@ import path from 'path';
 import fs from 'fs/promises';
 import { buildKeywords, addRelatedLinks, extractKeywordsFromContent, CONTEXT_SESSION_DIR, addKeywordNavigation, generateKeywordLinks } from './utils/linkBuilder.js';
 
-function getWeek(date) {
-  const d = new Date(date);
-  d.setHours(0, 0, 0, 0);
-  d.setDate(d.getDate() + 3 - (d.getDay() + 6) % 7);
-  const week1 = new Date(d.getFullYear(), 0, 4);
-  return 1 + Math.round(((d - week1) / 86400000 - 3 + (week1.getDay() + 6) % 7) / 7);
-}
+import { getWeek } from '../utils/dateUtils.js';
 import { getConfig } from '../config.js';
 import { truncateToBudget } from '../modules/tokenLimit.js';
 import { shouldRegenerate } from '../modules/summaries.js';

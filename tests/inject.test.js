@@ -24,6 +24,126 @@ jest.unstable_mockModule('../src/utils/debug.js', () => ({
   debug: jest.fn()
 }));
 
+describe('handleInjectCommand() - help independência', () => {
+  it('help retorna conteúdo correto independentemente de contexto', async () => {
+    const { handleInjectCommand } = await import('../src/modules/injectHandler.js');
+    const msg = { content: 'prior text /inject --help after text' };
+    const result = await handleInjectCommand(msg, '/tmp');
+    expect(result.content).toContain('/inject Help');
+    expect(result.content).toContain('prior text');
+    expect(result.content).toContain('after text');
+  });
+});
+
+describe('parseInjectCommand()', () => {
+  it('should parse /inject help', async () => {
+    const { parseInjectCommand } = await import('../src/modules/injectHandler.js');
+    const result = parseInjectCommand('/inject help');
+    expect(result.isHelp).toBe(true);
+    expect(result.isAll).toBe(false);
+    expect(result.index).toBeNull();
+  });
+
+  it('should parse /inject -h', async () => {
+    const { parseInjectCommand } = await import('../src/modules/injectHandler.js');
+    const result = parseInjectCommand('/inject -h');
+    expect(result.isHelp).toBe(true);
+  });
+
+  it('should parse /inject --help', async () => {
+    const { parseInjectCommand } = await import('../src/modules/injectHandler.js');
+    const result = parseInjectCommand('/inject --help');
+    expect(result.isHelp).toBe(true);
+  });
+
+  it('should parse /inject 3', async () => {
+    const { parseInjectCommand } = await import('../src/modules/injectHandler.js');
+    const result = parseInjectCommand('/inject 3');
+    expect(result.index).toBe(3);
+    expect(result.isAll).toBe(false);
+    expect(result.isHelp).toBe(false);
+  });
+
+  it('should parse /inject --all', async () => {
+    const { parseInjectCommand } = await import('../src/modules/injectHandler.js');
+    const result = parseInjectCommand('/inject --all');
+    expect(result.isAll).toBe(true);
+    expect(result.isHelp).toBe(false);
+    expect(result.index).toBeNull();
+  });
+
+  it('should preserve text after /inject command', async () => {
+    const { parseInjectCommand } = await import('../src/modules/injectHandler.js');
+    const result = parseInjectCommand('/inject 3 tell me more about this');
+    expect(result.index).toBe(3);
+    expect(result.cleanContent).toBe('tell me more about this');
+  });
+
+  it('should return cleanContent with surrounding text', async () => {
+    const { parseInjectCommand } = await import('../src/modules/injectHandler.js');
+    const result = parseInjectCommand('some text /inject --all more text');
+    expect(result.isAll).toBe(true);
+    expect(result.cleanContent).toBe('some text more text');
+  });
+
+  it('should return default for non-inject content', async () => {
+    const { parseInjectCommand } = await import('../src/modules/injectHandler.js');
+    const result = parseInjectCommand('just a normal message');
+    expect(result.isHelp).toBe(false);
+    expect(result.isAll).toBe(false);
+    expect(result.index).toBeNull();
+    expect(result.cleanContent).toBe('just a normal message');
+  });
+
+  it('should handle multiple spaces before argument', async () => {
+    const { parseInjectCommand } = await import('../src/modules/injectHandler.js');
+    const result = parseInjectCommand('/inject     3');
+    expect(result.index).toBe(3);
+    expect(result.cleanContent).toBe('');
+  });
+
+  it('should handle tab characters', async () => {
+    const { parseInjectCommand } = await import('../src/modules/injectHandler.js');
+    const result = parseInjectCommand('/inject\t--all');
+    expect(result.isAll).toBe(true);
+  });
+
+  it('should not match inject inside a word', async () => {
+    const { parseInjectCommand } = await import('../src/modules/injectHandler.js');
+    const result = parseInjectCommand('reinject');
+    expect(result.index).toBeNull();
+    expect(result.isAll).toBe(false);
+    expect(result.isHelp).toBe(false);
+    expect(result.cleanContent).toBe('reinject');
+  });
+
+  it('should not match /injectable (partial match)', async () => {
+    const { parseInjectCommand } = await import('../src/modules/injectHandler.js');
+    const result = parseInjectCommand('/injectable docs');
+    expect(result.index).toBeNull();
+    expect(result.isAll).toBe(false);
+    expect(result.isHelp).toBe(false);
+    expect(result.cleanContent).toBe('/injectable docs');
+  });
+
+  it('should not match prefix/inject (no boundary before)', async () => {
+    const { parseInjectCommand } = await import('../src/modules/injectHandler.js');
+    const result = parseInjectCommand('prefix/inject');
+    expect(result.index).toBeNull();
+    expect(result.isAll).toBe(false);
+    expect(result.isHelp).toBe(false);
+    expect(result.cleanContent).toBe('prefix/inject');
+  });
+
+  it('should handle /inject with only whitespace', async () => {
+    const { parseInjectCommand } = await import('../src/modules/injectHandler.js');
+    const result = parseInjectCommand('/inject   ');
+    expect(result.index).toBeNull();
+    expect(result.isAll).toBe(false);
+    expect(result.isHelp).toBe(false);
+  });
+});
+
 describe('injectPrompt Module', () => {
   let injectPrompt;
   let contextInjector;

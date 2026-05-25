@@ -43,8 +43,12 @@ export async function handleSessionEnd(directory, client, config) {
   logger(`[context-plugin] Session ending event - lastSession has ${clonedSession?.messages?.length || 0} messages, id: ${clonedSession?.id || clonedSession?.sessionID || 'none'}`);
   if (clonedSession) {
     try {
-      await saveContext(directory, clonedSession, 'exit', client);
-      logger(`[context-plugin] Exit context save completed successfully`);
+      const saveResult = await saveContext(directory, clonedSession, 'exit', client);
+      if (saveResult) {
+        logger(`[context-plugin] Exit context save completed successfully`);
+      } else {
+        logger(`[context-plugin] Exit context save returned null`);
+      }
     } catch (err) {
       logger(`[context-plugin] saveContext failed: ${err.message}`);
     }
@@ -108,7 +112,12 @@ export async function handleSessionCompacted(directory, client) {
   if (isDestroyed()) return;
   const session = await sessionState.getClonedSession();
   if (session) {
-    await saveContext(directory, session, 'compact', client);
+    const compactResult = await saveContext(directory, session, 'compact', client);
+    if (compactResult) {
+      logger(`[context-plugin] Compact save completed`);
+    } else {
+      logger(`[context-plugin] Compact save returned null`);
+    }
   } else {
     logger('[context-plugin] No lastSession available for compact save');
   }

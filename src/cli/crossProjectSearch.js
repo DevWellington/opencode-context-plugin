@@ -10,6 +10,7 @@
  *   opencode context-search --project {name} --session {id}
  */
 
+import { fileURLToPath } from 'url';
 import { parseArgs } from 'node:util';
 import { findRelatedSessions, resolveCrossProjectLink, parseCrossProjectLink, formatCrossProjectLink } from '../utils/crossProjectLinks.js';
 import { extractSessionContent } from '../modules/contentExtractor.js';
@@ -214,8 +215,7 @@ async function getSession(projectName, sessionId) {
 }
 
 // Main CLI entry point
-async function main() {
-  const args = process.argv.slice(2);
+export async function main(args = process.argv.slice(2)) {
   
   if (args.includes('--help') || args.includes('-h') || args.length === 0) {
     console.log(`
@@ -287,4 +287,5 @@ Examples:
   }
 }
 
-main();
+const isMain = process.argv[1] === fileURLToPath(import.meta.url);
+if (isMain) main(process.argv.slice(2));

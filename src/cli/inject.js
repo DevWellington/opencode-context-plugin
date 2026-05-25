@@ -4,11 +4,11 @@
  * Usage: node src/cli/inject.js [--limit 5] [--tokens 8000]
  */
 
+import { fileURLToPath } from 'url';
 import { getRelevantContexts, formatForInjection } from '../modules/contextInjector.js';
 import { loadConfig } from '../config.js';
 
-async function main() {
-  const args = process.argv.slice(2);
+export async function main(args = process.argv.slice(2)) {
   const limitIndex = args.indexOf('--limit');
   const tokensIndex = args.indexOf('--tokens');
 
@@ -40,4 +40,5 @@ async function main() {
   console.log(formatForInjection(scoredContexts));
 }
 
-main().catch(console.error);
+const isMain = process.argv[1] === fileURLToPath(import.meta.url);
+if (isMain) main(process.argv.slice(2)).catch(console.error);

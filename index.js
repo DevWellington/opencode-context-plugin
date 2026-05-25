@@ -8,7 +8,7 @@ import { initializeIntelligenceLearning } from './src/modules/intelligence.js';
 import { getSessionGuidance } from './src/modules/sessionGuidance.js';
 import { initializeGlobalIntelligence } from './src/utils/globalIntelligence.js';
 import { getRelevantContexts, formatForInjection } from './src/modules/contextInjector.js';
-import { listAvailableContexts, formatContextPreview, interactiveInject } from './src/modules/injectPrompt.js';
+import { handleInjectCommand } from './src/modules/injectHandler.js';
 import { syncToRemote, getSyncStatus, initializeRemoteSync } from './src/modules/remoteSync.js';
 import { setDestroyed, init as initLifecycle } from './src/handlers/lifecycle.js';
 import {
@@ -330,57 +330,10 @@ class ContextPlugin {
       return messages;
     }
 
-    // Check if user message contains /inject command
     const lastMsg = messages[messages.length - 1];
     if (lastMsg?.role === 'user' && lastMsg?.content?.includes('/inject')) {
       logger('[context-plugin] /inject command detected');
-
-      // Parse /inject arguments: /inject N or /inject --all or /inject help
-      const injectMatch = lastMsg.content.match(/\/inject(?:\s+(\d+))?(?:\s+--all)?/);
-      const isAllFlag = /\/inject\s+--all/.test(lastMsg.content);
-      const isHelp = /\/inject\s+(?:help|-h|--help)/.test(lastMsg.content);
-
-      const contexts = await listAvailableContexts({ messages }, {
-        maxContexts: 50,
-        maxTokens: 32000,
-        baseDir: this.directory
-      });
-
-      if (contexts.length > 0) {
-        // Replace /inject command with empty string first
-        lastMsg.content = lastMsg.content.replace(/\/inject(?:\s+\d+)?(?:\s+--all)?(?:\s+help|-h|--help)?/, '').trim();
-
-        if (isHelp) {
-          lastMsg.content += '\n\n' +
-            '## /inject Help\n\n' +
-            '- `/inject` - Show available contexts with scores\n' +
-            '- `/inject N` - Inject context #N from the list\n' +
-            '- `/inject --all` - Inject all available contexts\n' +
-            '- `/inject help` - Show this help message\n';
-        } else if (isAllFlag) {
-          const indices = contexts.map((_, i) => i);
-          const injection = await interactiveInject({ messages }, indices, this.directory);
-          lastMsg.content += '\n\n' + injection;
-          logger(`[context-plugin] Injected all ${contexts.length} contexts`);
-        } else if (injectMatch?.[1]) {
-          const idx = parseInt(injectMatch[1]) - 1;
-          if (idx >= 0 && idx < contexts.length) {
-            const injection = await interactiveInject({ messages }, [idx], this.directory);
-            lastMsg.content += '\n\n' + injection;
-            logger(`[context-plugin] Injected context #${injectMatch[1]}`);
-          } else {
-            lastMsg.content += '\n\nInvalid context index. Available: 1-' + contexts.length;
-          }
-        } else {
-          // Show context list for selection
-          const preview = formatContextPreview(contexts);
-          lastMsg.content += '\n\n' + preview + '\n\nUse `/inject N` to inject context #N, or `/inject --all` to get all';
-        }
-      } else {
-        lastMsg.content = lastMsg.content.replace(/\/inject(?:\s+\d+)?(?:\s+--all)?(?:\s+help|-h|--help)?/, '').trim();
-        lastMsg.content += '\n\nNo relevant contexts found.';
-      }
-
+      await handleInjectCommand(lastMsg, this.directory);
       return messages;
     }
 

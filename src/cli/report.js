@@ -14,10 +14,9 @@
  *   --force             Regenerate even if up-to-date
  */
 
+import { fileURLToPath } from 'url';
 import { generateWeeklyReport, generateMonthlyReport, generateActivityReport, saveReport } from '../modules/reportGenerator.js';
 import { loadConfig } from '../config.js';
-
-const args = process.argv.slice(2);
 
 function showHelp() {
   console.log(`
@@ -48,23 +47,20 @@ Examples:
 `);
 }
 
-// Parse arguments
-const command = args[0];
-const options = {
-  save: args.includes('--save'),
-  view: args.includes('--view'),
-  force: args.includes('--force')
-};
+export async function main(args = process.argv.slice(2)) {
+  const command = args[0];
+  const options = {
+    save: args.includes('--save'),
+    view: args.includes('--view'),
+    force: args.includes('--force')
+  };
 
-// Extract date argument
-const dateIndex = args.indexOf('--date');
-const dateArg = dateIndex !== -1 ? args[dateIndex + 1] : null;
+  const dateIndex = args.indexOf('--date');
+  const dateArg = dateIndex !== -1 ? args[dateIndex + 1] : null;
 
-// Extract month argument
-const monthIndex = args.indexOf('--month');
-const monthArg = monthIndex !== -1 ? args[monthIndex + 1] : null;
+  const monthIndex = args.indexOf('--month');
+  const monthArg = monthIndex !== -1 ? args[monthIndex + 1] : null;
 
-async function main() {
   // Load config
   const directory = process.cwd();
   await loadConfig(directory);
@@ -162,12 +158,7 @@ async function main() {
   }
 }
 
-function getWeekNumber(date) {
-  const d = new Date(date);
-  d.setHours(0, 0, 0, 0);
-  d.setDate(d.getDate() + 4 - (d.getDay() || 7));
-  const yearStart = new Date(d.getFullYear(), 0, 1);
-  return Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
-}
+import { getWeek as getWeekNumber } from '../utils/dateUtils.js';
 
-main().catch(console.error);
+const isMain = process.argv[1] === fileURLToPath(import.meta.url);
+if (isMain) main(process.argv.slice(2)).catch(console.error);

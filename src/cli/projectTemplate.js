@@ -222,25 +222,22 @@ async function detectCommand(args) {
 /**
  * Main CLI entry point
  */
-async function main() {
-  const command = process.argv[2];
-  const args = process.argv.slice(3);
+export async function main(args = process.argv.slice(2)) {
+  const command = args[0];
+  const restArgs = args.slice(1);
   
   switch (command) {
     case 'template:generate':
-      await generateCommand(args);
+      await generateCommand(restArgs);
       break;
-      
     case 'template:init':
-      await initCommand(args);
+      await initCommand(restArgs);
       break;
-      
     case 'template:list':
-      await listCommand(args);
+      await listCommand(restArgs);
       break;
-      
     case 'template:detect':
-      await detectCommand(args);
+      await detectCommand(restArgs);
       break;
       
     case 'help':
@@ -252,7 +249,10 @@ async function main() {
   }
 }
 
-main().catch(error => {
-  console.error('Unexpected error:', error.message);
-  process.exit(1);
-});
+const isMain = process.argv[1] === fileURLToPath(import.meta.url);
+if (isMain) {
+  main(process.argv.slice(2)).catch(error => {
+    console.error('Unexpected error:', error.message);
+    process.exit(1);
+  });
+}

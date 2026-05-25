@@ -1,6 +1,6 @@
 {
   "name": "@devwellington/opencode-context-plugin",
-  "version": "1.8.0",
+  "version": "1.8.1",
   "description": "OpenCode plugin that saves session context to .opencode/context-session/ after compaction and session end",
   "main": "index.js",
   "type": "module",
@@ -17,7 +17,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/DevWellington/opencode-context-plugin.git"
+    "url": "git+https://github.com/DevWellington/opencode-context-plugin.git"
   },
   "peerDependencies": {
     "@opencode-ai/plugin": ">=1.4.0"
@@ -46,8 +46,8 @@
     "show-hidden-files": "./.obsidian/plugins/show-hidden-files"
   },
   "bin": {
-    "context-search": "./src/cli/search.js",
-    "ocp-agents": "./scripts/ocp-agents.js"
+    "context-search": "src/cli/search.js",
+    "ocp-agents": "scripts/ocp-agents.js"
   },
   "files": [
     "index.js",

@@ -1,6 +1,7 @@
 import fs from "fs/promises";
 import path from "path";
 import { getConfig, CONTEXT_SESSION_DIR } from '../config.js';
+import { getWeek } from '../utils/dateUtils.js';
 import { createDebugLogger } from '../utils/debug.js';
 import { updateDaySummary } from './summaries.js';
 import { classifySessionPriority } from './contentExtractor.js';
@@ -12,14 +13,6 @@ import { atomicWrite, getTimestamp, recoverOrphanedTempFiles, withTimeout } from
 import { setLastSummarized, addToPendingQueue } from './state.js';
 import { countTokens } from './tokenLimit.js';
 import { validateAfterSave } from './contextValidator.js';
-
-function getWeek(date) {
-  const d = new Date(date);
-  d.setHours(0, 0, 0, 0);
-  d.setDate(d.getDate() + 3 - (d.getDay() + 6) % 7);
-  const week1 = new Date(d.getFullYear(), 0, 4);
-  return 1 + Math.round(((d - week1) / 86400000 - 3 + (week1.getDay() + 6) % 7) / 7);
-}
 
 const logger = createDebugLogger('context-plugin');
 

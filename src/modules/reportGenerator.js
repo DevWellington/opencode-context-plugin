@@ -8,41 +8,11 @@ import fs from 'fs/promises';
 import path from 'path';
 import matter from 'gray-matter';
 import { extractSessionContent, extractBugs, findPatterns, inferMissingFields, extractCrossProjectLinks } from './contentExtractor.js';
+import { getWeek as getWeekNumber, getWeekRange } from '../utils/dateUtils.js';
 import { extractSection } from '../utils/summaryUtils.js';
 import { CONTEXT_SESSION_DIR } from '../config.js';
 
 const REPORTS_DIR = '.opencode/context-session/reports';
-
-/**
- * Get week number in year (ISO week)
- */
-function getWeekNumber(date) {
-  const d = new Date(date);
-  d.setHours(0, 0, 0, 0);
-  d.setDate(d.getDate() + 4 - (d.getDay() || 7));
-  const yearStart = new Date(d.getFullYear(), 0, 1);
-  return Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
-}
-
-/**
- * Get start and end dates for a week
- */
-function getWeekRange(year, week) {
-  const simple = new Date(year, 0, 1 + (week - 1) * 7);
-  const dow = simple.getDay();
-  const isoWeekStart = simple;
-  if (dow <= 4) {
-    isoWeekStart.setDate(simple.getDate() - simple.getDay() + 1);
-  } else {
-    isoWeekStart.setDate(simple.getDate() + 8 - simple.getDay());
-  }
-  const isoWeekEnd = new Date(isoWeekStart);
-  isoWeekEnd.setDate(isoWeekEnd.getDate() + 6);
-  return {
-    start: isoWeekStart.toISOString().split('T')[0],
-    end: isoWeekEnd.toISOString().split('T')[0]
-  };
-}
 
 /**
  * Get start and end dates for a month
