@@ -36,7 +36,8 @@ export async function loadSyncState() {
 export async function saveSyncState(state) {
   try {
     await fs.mkdir(path.dirname(STATE_PATH), { recursive: true });
-    await atomicWrite(STATE_PATH, JSON.stringify(state, null, 2));
+    const syncStateBaseDir = path.dirname(STATE_PATH);
+    await atomicWrite(STATE_PATH, JSON.stringify(state, null, 2), syncStateBaseDir);
     return true;
   } catch (error) {
     logger(`[sync-state] Failed to save state: ${error.message}`);

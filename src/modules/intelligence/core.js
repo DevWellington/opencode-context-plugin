@@ -55,7 +55,7 @@ export async function initializeIntelligenceLearning(baseDir) {
 `;
     
     await fs.mkdir(ctxDir, { recursive: true });
-    await atomicWrite(filePath, content);
+    await atomicWrite(filePath, content, ctxDir);
     logger(`Initialized: ${filePath}`);
     return filePath;
   } catch (error) {

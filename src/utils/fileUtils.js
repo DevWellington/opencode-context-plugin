@@ -10,10 +10,21 @@ export { createDebugLogger, CONTEXT_SESSION_DIR };
 /**
  * Atomic write using temp file + rename pattern for crash safety
  */
-export async function atomicWrite(filePath, content) {
+export async function atomicWrite(filePath, content, allowedBaseDir = null) {
   const dir = path.dirname(filePath);
   const tempFile = path.join(dir, `.tmp-${Date.now()}-${Math.random().toString(36).slice(2)}`);
   logger(`[atomic-write] Starting: ${filePath}`);
+
+  if (allowedBaseDir) {
+    const resolvedFile = path.resolve(filePath);
+    const resolvedBase = path.resolve(allowedBaseDir);
+    if (!resolvedFile.startsWith(resolvedBase + path.sep)) {
+      throw new Error(
+        `[fileUtils] atomicWrite blocked: path "${filePath}" resolves to "${resolvedFile}" ` +
+        `which is outside allowed directory "${allowedBaseDir}"`
+      );
+    }
+  }
   
   try {
     await fs.writeFile(tempFile, content, 'utf-8');
@@ -24,7 +35,10 @@ export async function atomicWrite(filePath, content) {
     logger(`[atomic-write] Error: ${error.message}, cleaning up temp file`);
     try {
       await fs.unlink(tempFile);
-    } catch {}
+    } catch {
+      // ENOENT expected: temp file may not exist if atomicWrite never reached rename step
+      // This is safe to ignore as we're in cleanup path anyway
+    }
     throw error;
   }
 }

@@ -207,8 +207,9 @@ export async function generateMonthlySummary(directory, monthDate) {
     !['week', 'weekly', 'session', 'sessions', 'total', 'day', 'days', 'month', 'monthly'].includes(k.toLowerCase())
   );
 
+  const config = getConfig();
   const keywords = buildKeywords({
-    projectName: 'opencode-context-plugin',
+    projectName: config.projectName || 'opencode-context-plugin',
     module: 'generateMonthly',
     keywords: filteredKeywords
   });

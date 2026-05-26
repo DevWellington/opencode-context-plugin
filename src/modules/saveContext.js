@@ -40,7 +40,8 @@ function determineSessionType(type) {
  * @param {string} content - Markdown content to save
  */
 async function performSave(directory, filepath, content) {
-  await atomicWrite(filepath, content);
+  const safeBase = path.join(directory, CONTEXT_SESSION_DIR);
+  await atomicWrite(filepath, content, safeBase);
   logger(`[context-plugin] Saved context to: ${filepath}`);
   logger(`[context-plugin] Context saved: ${path.basename(filepath)}`);
 

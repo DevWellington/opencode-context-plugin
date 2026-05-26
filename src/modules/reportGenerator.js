@@ -10,6 +10,7 @@ import matter from 'gray-matter';
 import { extractSessionContent, extractBugs, findPatterns, inferMissingFields, extractCrossProjectLinks } from './contentExtractor.js';
 import { getWeek as getWeekNumber, getWeekRange } from '../utils/dateUtils.js';
 import { extractSection } from '../utils/summaryUtils.js';
+import { atomicWrite } from '../utils/fileUtils.js';
 import { CONTEXT_SESSION_DIR } from '../config.js';
 
 const REPORTS_DIR = '.opencode/context-session/reports';
@@ -839,7 +840,7 @@ export async function saveReport(directory, report, filename) {
   await fs.mkdir(reportsDir, { recursive: true });
 
   const reportPath = path.join(reportsDir, filename);
-  await fs.writeFile(reportPath, report, 'utf-8');
+  await atomicWrite(reportPath, report, reportsDir);
 
   return reportPath;
 }

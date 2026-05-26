@@ -91,7 +91,8 @@ export async function configureRemoteSync(provider, config, deps = {}) {
     try {
       const dir = path.dirname(CONFIG_PATH);
       await fs.mkdir(dir, { recursive: true });
-      await atomicWrite(CONFIG_PATH, JSON.stringify(configToSave, null, 2));
+      const configBaseDir = path.dirname(CONFIG_PATH);
+      await atomicWrite(CONFIG_PATH, JSON.stringify(configToSave, null, 2), configBaseDir);
     } catch (error) {
       logger(`[RemoteSync] Failed to save config: ${error.message}`);
       throw error;

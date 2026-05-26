@@ -77,7 +77,7 @@ async function updateDailySummaryImpl(baseDir, sessionInfo) {
         finalContent += `**Compacts:** ${compactCount} | **Exits:** ${exitCount}\n\n`;
         finalContent += existingEntries.join('\n') + '\n';
 
-        await atomicWrite(summaryPath, finalContent);
+        await atomicWrite(summaryPath, finalContent, path.dirname(summaryPath));
         logger(`[context-plugin] Updated daily summary: ${summaryPath}`);
       }
     })();
@@ -100,7 +100,7 @@ async function updateDaySummary(dirPath, sessionInfo) {
     const content = formatDayContent(dateStr, sessionsData, sessionInfo.year, sessionInfo.month, sessionInfo.week, allContent);
 
     const summaryPath = path.join(dirPath, 'day-summary.md');
-    await atomicWrite(summaryPath, content);
+    await atomicWrite(summaryPath, content, path.dirname(summaryPath));
     logger(`[context-plugin] Updated day summary with content extraction: ${summaryPath}`);
   } catch (error) {
     logger(`[context-plugin] Error updating day summary: ${error.message}`);
@@ -307,7 +307,7 @@ async function updateWeekSummaryImpl(baseDir, year, month, week) {
     const { totalCompacts, totalExits } = computeWeekStats(daySummaries);
     const content = await formatWeekContent(daySummaries, totalCompacts, totalExits, year, month, week, baseDir);
 
-    await atomicWrite(summaryPath, content);
+    await atomicWrite(summaryPath, content, path.dirname(summaryPath));
     logger(`[context-plugin] Updated week summary from day summaries: ${summaryPath}`);
   } catch (error) {
     logger(`[context-plugin] Error updating week summary: ${error.message}`);

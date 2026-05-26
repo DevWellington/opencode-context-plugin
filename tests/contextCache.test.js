@@ -68,7 +68,7 @@ describe('contextCache', () => {
         .catch(() => false);
       expect(dirExists).toBe(true);
 
-      expect(atomicWrite).toHaveBeenCalledWith(indexPath(tempDir), expect.any(String));
+      expect(atomicWrite).toHaveBeenCalledWith(indexPath(tempDir), expect.any(String), cacheDir(tempDir));
 
       const saved = await getCachedContexts(tempDir);
       expect(saved).toEqual(contexts);

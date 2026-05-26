@@ -100,16 +100,39 @@ export function countSessionTokens(messages) {
  * @param {number} maxTokens - Maximum tokens allowed
  * @returns {string} - Truncated content
  */
-export function truncateToTokenLimit(content, maxTokens) {
-  const estimated = estimateTokens(content);
-  if (estimated <= maxTokens) return content;
-  
-  // Rough: take maxTokens * 4 characters
-  // This slightly over-estimates tokens but is safe
-  const maxChars = maxTokens * 4;
-  const truncated = content.slice(0, maxChars);
-  
-  logger(`[token-limit] Truncated ${estimated} tokens to ${maxTokens} (${content.length} -> ${maxChars} chars)`);
+export function truncateToTokenLimit(content, maxTokens, isCode = null) {
+  if (!content || content.length === 0) return content;
+
+  const contentIsCode = isCode !== null ? isCode : isCodeContent(content);
+  const encoding = contentIsCode ? 'code' : 'prose';
+  const ratio = contentIsCode ? 3 : 4;
+
+  let truncated = content;
+  const roughMaxChars = Math.floor(maxTokens * ratio);
+  if (truncated.length > roughMaxChars) {
+    truncated = truncated.slice(0, roughMaxChars);
+  }
+
+  let actualTokens = countTokens(truncated, encoding);
+
+  if (actualTokens > maxTokens) {
+    let low = 0;
+    let high = truncated.length;
+    while (low < high && (high - low) > 10) {
+      const mid = Math.floor((low + high) / 2);
+      const testContent = truncated.slice(0, mid);
+      const testTokens = countTokens(testContent, encoding);
+      if (testTokens <= maxTokens) {
+        low = mid;
+      } else {
+        high = mid;
+      }
+    }
+    truncated = truncated.slice(0, low);
+    actualTokens = countTokens(truncated, encoding);
+  }
+
+  logger(`[token-limit] Truncated ${actualTokens} tokens to ${maxTokens} (${content.length} -> ${truncated.length} chars)`);
   return truncated;
 }
 
@@ -125,28 +148,6 @@ export function truncateToBudget(content, maxChars) {
   const cleanContent = content.replace(/\*\(truncated\)\*/g, '').replace(/\s*\[truncated\]\s*$/g, '').trim();
   const truncated = cleanContent.slice(0, maxChars);
   return truncated + ' [truncated]';
-}
-
-/**
- * Calculate token budget distribution across contexts
- * @param {number} totalBudget - Total token budget
- * @param {number} contextCount - Number of contexts to distribute
- * @returns {object} - { perContext: number[], currentSession: number }
- */
-function calculateTokenBudget(totalBudget, contextCount) {
-  const config = getConfig();
-  const maxPerContext = config.injection?.maxContexts 
-    ? Math.floor(totalBudget / Math.min(contextCount + 1, config.injection.maxContexts))
-    : Math.floor(totalBudget / (contextCount + 1));
-  
-  const currentSessionBudget = Math.floor(totalBudget * 0.2); // 20% for current
-  const historicalBudget = totalBudget - currentSessionBudget;
-  const perContext = Math.floor(historicalBudget / Math.min(contextCount, config.injection?.maxContexts || 5));
-  
-  return {
-    perContext,
-    currentSession: currentSessionBudget
-  };
 }
 
 /**

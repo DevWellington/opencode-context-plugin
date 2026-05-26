@@ -200,9 +200,10 @@ export async function generateWeeklySummary(directory, weekDate) {
   const bodyContent = formatWeeklyContent(year, month, weekStr, daySummaries);
 
   // Extract keywords from content
+  const config = getConfig();
   const contentKeywords = extractKeywordsFromContent(bodyContent, 20);
   const keywords = buildKeywords({
-    projectName: 'opencode-context-plugin',
+    projectName: config.projectName || 'opencode-context-plugin',
     module: 'generateWeekly',
     keywords: contentKeywords
   });

@@ -4,6 +4,7 @@ import { dedupeKnownIssues } from './deduplicator.js';
 import { cleanAccomplishmentText } from './sanitizer.js';
 import { TRUNCATE } from '../../constants.js';
 import { createDebugLogger } from '../../utils/debug.js';
+import { getConfig } from '../../config.js';
 
 const logger = createDebugLogger('intelligence:transformer');
 
@@ -227,10 +228,13 @@ function mergeReportIntelligence(reportIntelligence, failedApproaches, successfu
  * @returns {Object} Reference schema: { projectState, knownIssues, successfulApproaches, failedApproaches, recentPatterns }
  */
 export function transformToReferenceSchema(allEntries, reportIntelligence = null) {
+  const config = getConfig();
+  const projectName = config.projectName || 'opencode-context-plugin';
+
   if (!Array.isArray(allEntries) || allEntries.length === 0) {
     const timestamp = new Date().toISOString().split('T')[0];
     return {
-      projectState: { projectName: 'opencode-context-plugin', lastUpdated: timestamp, sessionsTracked: 0, activePhase: 'active-development' },
+      projectState: { projectName, lastUpdated: timestamp, sessionsTracked: 0, activePhase: 'active-development' },
       knownIssues: [],
       successfulApproaches: [],
       failedApproaches: [],
@@ -242,7 +246,7 @@ export function transformToReferenceSchema(allEntries, reportIntelligence = null
   const allSessions = allEntries.flatMap(e => e?.sessions || []);
 
   const projectState = {
-    projectName: 'opencode-context-plugin',
+    projectName,
     lastUpdated: timestamp,
     sessionsTracked: allEntries.reduce((sum, e) => sum + (e?.sessionCount || 0), 0),
     activePhase: inferActivePhase(reportIntelligence, allSessions)

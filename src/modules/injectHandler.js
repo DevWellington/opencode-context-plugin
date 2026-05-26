@@ -60,7 +60,12 @@ export async function handleInjectCommand(lastMsg, directory) {
     const injection = await interactiveInject({ messages: [lastMsg] }, indices, directory);
     lastMsg.content += '\n\n' + injection;
   } else if (index !== null) {
-    const idx = index - 1;
+    const parsedIndex = parseInt(index, 10);
+    if (!Number.isInteger(parsedIndex) || parsedIndex < 1 || parsedIndex > contexts.length) {
+      lastMsg.content += '\n\nInvalid context index. Available: 1-' + contexts.length;
+      return lastMsg;
+    }
+    const idx = parsedIndex - 1;
     if (idx >= 0 && idx < contexts.length) {
       const injection = await interactiveInject({ messages: [lastMsg] }, [idx], directory);
       lastMsg.content += '\n\n' + injection;

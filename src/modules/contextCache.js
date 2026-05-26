@@ -73,7 +73,7 @@ export async function saveToCache(contexts, baseDir) {
   // Ensure cache directory exists
   await fs.mkdir(getCacheDir(baseDir), { recursive: true });
   
-  await atomicWrite(indexPath, JSON.stringify(index, null, 2));
+  await atomicWrite(indexPath, JSON.stringify(index, null, 2), getCacheDir(baseDir));
   logger(`[context-cache] Saved ${contexts.length} contexts to cache`);
 }
 
@@ -98,10 +98,19 @@ export async function invalidateCache(baseDir) {
 export async function getCacheStats(baseDir) {
   const contexts = await getCachedContexts(baseDir);
   const totalTokens = contexts.reduce((sum, c) => sum + (c.tokens || 0), 0);
+
+  if (contexts.length === 0) {
+    return { count: 0, totalTokens, oldest: null, newest: null };
+  }
+
+  const sorted = [...contexts].sort((a, b) =>
+    new Date(a.cachedAt) - new Date(b.cachedAt)
+  );
+
   return {
     count: contexts.length,
     totalTokens,
-    oldest: contexts.length > 0 ? contexts[0].cachedAt : null,
-    newest: contexts.length > 0 ? contexts[contexts.length - 1].cachedAt : null
+    oldest: sorted[0].cachedAt,
+    newest: sorted[sorted.length - 1].cachedAt
   };
 }

@@ -93,7 +93,8 @@ export async function initializeGlobalIntelligence() {
 
   try {
     await ensureOpencodeDir();
-    await atomicWrite(filePath, content);
+    const intelBaseDir = path.dirname(filePath);
+    await atomicWrite(filePath, content, intelBaseDir);
     logger(`[context-plugin] Global intelligence file initialized at ${filePath}`);
   } catch (error) {
     logger(`[GlobalIntelligence] Error initializing global intelligence: ${error.message}`);
@@ -244,7 +245,8 @@ export async function updateGlobalIntelligence(projectName, sessionInfo) {
       }
       
       // Atomic write
-      await atomicWrite(filePath, content);
+    const intelBaseDir = path.dirname(filePath);
+    await atomicWrite(filePath, content, intelBaseDir);
       logger(`[GlobalIntelligence] Updated global intelligence file`);
     } catch (error) {
       logger(`[GlobalIntelligence] Error updating global intelligence: ${error.message}`);

@@ -37,9 +37,11 @@ function calculateRecencyScore(contextPath) {
   const match = filename.match(/exit-(\d{4}-\d{2}-\d{2})T(\d{2}-\d{2}-\d{2})/);
   
   if (!match) return 0.3;
-  
+
   const [, dateStr, timeStr] = match;
-  const fileDate = new Date(`${dateStr}T${timeStr.replace(/-/g, ':')}`);
+  const [year, month, day] = dateStr.split('-');
+  const [hour, minute, second] = timeStr.split('-');
+  const fileDate = new Date(`${year}-${month}-${day}T${hour}:${minute}:${second}`);
   const now = new Date();
   const ageInHours = (now - fileDate) / (1000 * 60 * 60);
   

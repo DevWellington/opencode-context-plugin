@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect } from '@jest/globals';
-import { countTokens, isCodeContent, countSessionTokens, truncateToBudget } from '../src/modules/tokenLimit.js';
+import { countTokens, isCodeContent, countSessionTokens, truncateToBudget, truncateToTokenLimit } from '../src/modules/tokenLimit.js';
 
 describe('isCodeContent', () => {
   it('detects JavaScript code', () => {
@@ -95,6 +95,43 @@ describe('countSessionTokens', () => {
     expect(result.byMessage[0]).toHaveProperty('role', 'user');
     expect(result.byMessage[0]).toHaveProperty('tokens');
     expect(result.byMessage[0]).toHaveProperty('preview', 'Test');
+  });
+});
+
+describe('truncateToTokenLimit', () => {
+  it('should accurately limit to maxTokens for prose', () => {
+    const longContent = 'A'.repeat(1000);
+    const result = truncateToTokenLimit(longContent, 100, false);
+    expect(countTokens(result, 'prose')).toBeLessThanOrEqual(100);
+  });
+
+  it('should accurately limit to maxTokens for code', () => {
+    const longContent = 'function '.repeat(500);
+    const result = truncateToTokenLimit(longContent, 100, true);
+    expect(countTokens(result, 'code')).toBeLessThanOrEqual(100);
+  });
+
+  it('should handle unicode content', () => {
+    const unicode = '中文日本語한국어'.repeat(100);
+    const result = truncateToTokenLimit(unicode, 50);
+    expect(countTokens(result, 'prose')).toBeLessThanOrEqual(50);
+  });
+
+  it('should handle very small token limits', () => {
+    const content = 'Hello world this is a test';
+    const result = truncateToTokenLimit(content, 2);
+    expect(countTokens(result, 'prose')).toBeLessThanOrEqual(2);
+  });
+
+  it('should return empty string for empty content', () => {
+    expect(truncateToTokenLimit('', 100)).toBe('');
+    expect(truncateToTokenLimit(null, 100)).toBeNull();
+  });
+
+  it('should return original content if within limit', () => {
+    const content = 'short';
+    const result = truncateToTokenLimit(content, 1000);
+    expect(result).toBe(content);
   });
 });
 

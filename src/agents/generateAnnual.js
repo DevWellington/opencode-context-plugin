@@ -230,8 +230,9 @@ export async function generateAnnualSummary(directory, targetYear) {
     !['annual', 'year', 'session', 'sessions', 'total', 'month', 'months', 'week', 'weeks', 'quarter'].includes(k.toLowerCase())
   );
 
+  const config = getConfig();
   const keywords = buildKeywords({
-    projectName: 'opencode-context-plugin',
+    projectName: config.projectName || 'opencode-context-plugin',
     module: 'generateAnnual',
     keywords: filteredKeywords
   });

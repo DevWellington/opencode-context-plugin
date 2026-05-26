@@ -104,6 +104,12 @@ export async function main(args = process.argv.slice(2)) {
           process.exit(1);
         }
 
+        const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+        if (!dateRegex.test(startDate) || !dateRegex.test(endDate)) {
+          console.error('Error: Invalid date format. Use YYYY-MM-DD');
+          process.exit(1);
+        }
+
         report = await generateActivityReport(directory, { startDate, endDate });
         filename = `range-${startDate}-${endDate}.md`;
         break;
@@ -141,12 +147,41 @@ export async function main(args = process.argv.slice(2)) {
     // Open in editor if requested
     if (options.view && process.env.EDITOR) {
       const reportPath = await saveReport(directory, report, filename);
-      const { exec } = await import('child_process');
-      exec(`${process.env.EDITOR} "${reportPath}"`, (err) => {
-        if (err) {
-          console.error('Error opening editor:', err.message);
+      const { spawn } = await import('child_process');
+
+      const parseEditorCommand = (raw) => {
+        const args = [];
+        let current = '';
+        let inSingle = false;
+        let inDouble = false;
+
+        for (let i = 0; i < raw.length; i++) {
+          const ch = raw[i];
+          if (inSingle) {
+            if (ch === "'") { inSingle = false; }
+            else { current += ch; }
+          } else if (inDouble) {
+            if (ch === '"') { inDouble = false; }
+            else { current += ch; }
+          } else if (ch === ' ') {
+            if (current) { args.push(current); current = ''; }
+          } else if (ch === "'") {
+            inSingle = true;
+          } else if (ch === '"') {
+            inDouble = true;
+          } else {
+            current += ch;
+          }
         }
-      });
+        if (current) args.push(current);
+        return args;
+      };
+
+      const editorParts = parseEditorCommand(process.env.EDITOR);
+      const editorBin = editorParts[0];
+      const editorArgs = [...editorParts.slice(1), reportPath];
+
+      spawn(editorBin, editorArgs, { detached: true, stdio: 'ignore' }).unref();
     }
 
   } catch (error) {

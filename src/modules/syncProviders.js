@@ -244,6 +244,25 @@ export class CustomSyncProvider extends RemoteSyncProvider {
     this.headers = config.headers || {};
     this.credentials = config.credentials;
     this._fetch = deps.fetch || globalThis.fetch;
+
+    if (this.endpoint) {
+      this._validateEndpoint(this.endpoint);
+    }
+  }
+
+  _validateEndpoint(endpoint) {
+    try {
+      const url = new URL(endpoint);
+      if (url.protocol !== 'https:') {
+        throw new Error(`Custom sync endpoint must use HTTPS. Got: ${url.protocol}`);
+      }
+      return true;
+    } catch (err) {
+      if (err.code === 'ERR_INVALID_URL') {
+        throw new Error(`Invalid endpoint URL: ${endpoint}`);
+      }
+      throw err;
+    }
   }
 
   getProviderConfig(credentials) {

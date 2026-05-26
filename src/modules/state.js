@@ -90,7 +90,8 @@ export async function saveState(baseDir, state, expectedVersion = null) {
 
   await fs.mkdir(path.dirname(statePath), { recursive: true });
 
-  await atomicWrite(statePath, JSON.stringify(state, null, 2));
+  const stateBaseDir = path.join(baseDir, '.opencode/context-session');
+  await atomicWrite(statePath, JSON.stringify(state, null, 2), stateBaseDir);
   logger(`[state] Saved state to ${statePath} (version ${state.version})`);
 }
 
